@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: ztemizinden-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:55432/ztemizinden}
+    username: ${DB_USERNAME:ztemizinden}
+    password: ${DB_PASSWORD:ztemizinden}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/ztemizinden}
+
+app:
+  security:
+    enabled: ${APP_SECURITY_ENABLED:true}
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+  upload:
+    root-dir: ${APP_UPLOAD_DIR:uploads}
+
+server:
+  port: ${SERVER_PORT:8080}

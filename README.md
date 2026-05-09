@@ -1,73 +1,57 @@
-# React + TypeScript + Vite
+# Ztemizinden V1
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Kapali beta hedefli bakim ve servis pazaryeri uygulamasi.
 
-Currently, two official plugins are available:
+## Local Frontend
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Varsayilan adresler:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8080/api`
+- Keycloak: `http://localhost:8081`
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Frontend env:
+
+```bash
+VITE_API_URL=http://localhost:8080/api
+VITE_KEYCLOAK_URL=http://localhost:8081
+VITE_KEYCLOAK_REALM=ztemizinden
+VITE_KEYCLOAK_CLIENT_ID=ztemizinden-frontend
+```
+
+## Backend
+
+Backend proje klasoru: `Ztemizinden-Backend`.
+
+```bash
+cd Ztemizinden-Backend
+docker compose up -d
+./mvnw spring-boot:run
+```
+
+Local Keycloak kullanicilari:
+
+- `customer@demo.com / demo123`
+- `service@demo.com / demo123`
+- `admin@demo.com / demo123`
+
+## V1 Notlari
+
+- API security varsayilan olarak acik: `APP_SECURITY_ENABLED=true`.
+- Demo ticket/asset/provider sunum verisi V7 migration ile temizlenir; ekranlar kullanicinin ekledigi gercek backend verisiyle baslar.
+- Upload dosyalari backend local diskte `APP_UPLOAD_DIR` altinda tutulur, varsayilan `uploads`.
+- Vercel frontend kullanilacaksa `VITE_API_URL` ngrok backend adresine set edilir.
+- CORS icin backend env: `APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://your-vercel-domain.vercel.app,https://*.ngrok-free.app`
+
+## Dogrulama
+
+```bash
+npm run lint
+npm run build
+cd Ztemizinden-Backend && ./mvnw test
 ```

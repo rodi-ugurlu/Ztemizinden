@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { api } from '@/lib/api';
 
 // ==========================================
 // TYPE DEFINITIONS
@@ -10,6 +10,7 @@ export type AssetStatus = 'Active' | 'Under Maintenance' | 'Inactive' | 'Retired
 
 export interface Asset {
   id: string;
+  ownerId?: string;
   name: string;
   tagNo: string;
   type: AssetType;
@@ -28,12 +29,56 @@ export interface Asset {
 
 export type TicketCategory = 'Electric' | 'Mechanic' | 'Pneumatic' | 'Hydraulic' | 'General' | 'Software';
 export type TicketPriority = 'Low' | 'Medium' | 'High' | 'Critical';
-export type TicketStatus = 'Open' | 'Offered' | 'In Progress' | 'Resolved' | 'Closed' | 'Cancelled';
+export type TicketStatus = 'OPEN' | 'OFFERED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
+export type OfferType = 'DISCOVERY' | 'FIXED_PRICE';
+export type OfferStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN';
+export type BillingStatus = 'AWAITING_CUSTOMER_APPROVAL' | 'APPROVED' | 'DISPUTED';
+
+export interface TicketOffer {
+  id: string;
+  providerId: string;
+  providerName: string;
+  type: OfferType;
+  estimatedCost: number;
+  eta: string;
+  message: string;
+  status: OfferStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  senderRole: 'customer' | 'service' | 'system';
+  senderName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface FinalBilling {
+  providerId: string;
+  providerName: string;
+  estimatedCost: number;
+  actualCost: number;
+  notes: string;
+  status: BillingStatus;
+  createdAt: string;
+  approvedAt?: string;
+}
 
 export interface Ticket {
   id: string;
+  customerId: string;
+  customerName: string;
+  customerCompany: string;
+  customerLocation: string;
   assetId: string;
   assetName?: string;
+  assetTagNo?: string;
+  assetBrand?: string;
+  assetModel?: string;
+  assetSerialNumber?: string;
   title: string;
   description: string;
   category: TicketCategory;
@@ -44,128 +89,24 @@ export interface Ticket {
   updatedAt: string;
   scheduledDate?: string;
   estimatedCost?: number;
-  assignedProvider?: string;
+  assignedProviderId?: string;
+  assignedProviderName?: string;
+  serviceEta?: string;
+  offers: TicketOffer[];
+  messages: TicketMessage[];
+  finalEstimatedCost?: number;
+  finalActualCost?: number;
+  finalBillingNotes?: string;
+  billingStatus?: BillingStatus;
 }
 
-// ==========================================
-// MOCK DATA - Industrial Assets
-// ==========================================
-
-const MOCK_ASSETS: Asset[] = [
-  {
-    id: 'asset-001',
-    name: 'Industrial Air Compressor',
-    tagNo: 'FAC-COMP-001',
-    type: 'Facility',
-    brand: 'Atlas Copco',
-    model: 'GA 160 VSD+',
-    serialNumber: 'APC-2023-8847562',
-    purchaseDate: '2023-03-15',
-    warrantyEndDate: '2026-03-15',
-    status: 'Active',
-    location: 'Production Hall A',
-    department: 'Manufacturing',
-    description: 'Variable speed drive compressor for pneumatic tools and assembly lines',
-    createdAt: '2023-03-15T10:00:00Z',
-    updatedAt: '2024-01-10T14:30:00Z',
-  },
-  {
-    id: 'asset-002',
-    name: 'HVAC Unit - Main Building',
-    tagNo: 'FAC-HVAC-001',
-    type: 'Facility',
-    brand: 'Carrier',
-    model: '30XA 1202',
-    serialNumber: 'CAR-2022-9912345',
-    purchaseDate: '2022-06-20',
-    warrantyEndDate: '2025-06-20',
-    status: 'Under Maintenance',
-    location: 'Roof Level',
-    department: 'Facilities',
-    description: 'Air-cooled liquid chiller for climate control',
-    createdAt: '2022-06-20T08:00:00Z',
-    updatedAt: '2024-04-28T09:15:00Z',
-  },
-  {
-    id: 'asset-003',
-    name: 'Industrial Oven - Powder Coating',
-    tagNo: 'FAC-OVEN-002',
-    type: 'Facility',
-    brand: 'Gema Switzerland',
-    model: 'OptiFlex Pro B',
-    serialNumber: 'GEM-2023-4456123',
-    purchaseDate: '2023-08-10',
-    warrantyEndDate: '2026-08-10',
-    status: 'Active',
-    location: 'Finishing Department',
-    department: 'Production',
-    description: 'Curing oven for powder coating applications',
-    createdAt: '2023-08-10T11:00:00Z',
-    updatedAt: '2024-02-15T16:45:00Z',
-  },
-  {
-    id: 'asset-004',
-    name: 'CNC Milling Machine',
-    tagNo: 'SME-CNC-001',
-    type: 'SME',
-    brand: 'DMG Mori',
-    model: 'DMC 650 V',
-    serialNumber: 'DMG-2021-7723456',
-    purchaseDate: '2021-11-05',
-    warrantyEndDate: '2024-11-05',
-    status: 'Active',
-    location: 'Machining Center',
-    department: 'Precision Manufacturing',
-    description: '5-axis vertical machining center for precision parts',
-    createdAt: '2021-11-05T09:30:00Z',
-    updatedAt: '2024-03-20T11:20:00Z',
-  },
-];
-
-const MOCK_TICKETS: Ticket[] = [
-  {
-    id: 'ticket-001',
-    assetId: 'asset-002',
-    assetName: 'HVAC Unit - Main Building',
-    title: 'Irregular cooling performance - Temperature fluctuation',
-    description: 'The HVAC unit in the main building is experiencing irregular cooling cycles. Temperature readings show fluctuations between 22°C and 28°C when set to 24°C. The unit makes unusual humming sounds during compressor startup. This has been ongoing for 3 days.',
-    category: 'Mechanic',
-    priority: 'High',
-    mediaUrls: ['/mock/hvac-photo-1.jpg', '/mock/hvac-video-1.mp4'],
-    status: 'Open',
-    createdAt: '2024-04-28T09:15:00Z',
-    updatedAt: '2024-04-28T09:15:00Z',
-  },
-  {
-    id: 'ticket-002',
-    assetId: 'asset-001',
-    assetName: 'Industrial Air Compressor',
-    title: 'Preventive Maintenance - Quarterly Service',
-    description: 'Scheduled quarterly preventive maintenance for the Atlas Copco compressor. Includes filter replacement, oil change, belt inspection, and VSD diagnostics.',
-    category: 'General',
-    priority: 'Medium',
-    mediaUrls: [],
-    status: 'Offered',
-    createdAt: '2024-04-25T14:00:00Z',
-    updatedAt: '2024-04-26T10:30:00Z',
-    estimatedCost: 2850.00,
-    assignedProvider: 'Atlas Copco Authorized Service',
-  },
-  {
-    id: 'ticket-003',
-    assetId: 'asset-004',
-    assetName: 'CNC Milling Machine',
-    title: 'Spindle motor overheating alarm',
-    description: 'Spindle motor temperature exceeding safe limits during high-speed operations. Alarm code E-452 displayed on control panel. Production halted for safety.',
-    category: 'Electric',
-    priority: 'Critical',
-    mediaUrls: ['/mock/cnc-alarm.jpg'],
-    status: 'In Progress',
-    createdAt: '2024-04-27T16:45:00Z',
-    updatedAt: '2024-04-28T08:00:00Z',
-    assignedProvider: 'DMG Mori Technical Support',
-  },
-];
+type CreateTicketInput = Pick<Ticket, 'assetId' | 'title' | 'description' | 'category' | 'priority'> & {
+  mediaUrls?: string[];
+  customerId?: string;
+  customerName?: string;
+  customerCompany?: string;
+  customerLocation?: string;
+};
 
 // ==========================================
 // STORE INTERFACE
@@ -177,16 +118,23 @@ interface CustomerStoreState {
   isLoading: boolean;
   error: string | null;
 
+  // Actions
+  fetchAssets: (customerId: string) => Promise<void>;
+  fetchTickets: (customerId: string) => Promise<void>;
+  
   // Asset Actions
-  addAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => Asset;
-  updateAsset: (id: string, updates: Partial<Asset>) => void;
-  deleteAsset: (id: string) => void;
+  addAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { ownerId?: string }) => Promise<Asset>;
+  deleteAsset: (id: string) => Promise<void>;
   getAssetById: (id: string) => Asset | undefined;
 
   // Ticket Actions
-  createTicket: (ticket: Omit<Ticket, 'id' | 'createdAt' | 'updatedAt' | 'assetName'>) => Ticket;
-  updateTicket: (id: string, updates: Partial<Ticket>) => void;
-  cancelTicket: (id: string) => void;
+  createTicket: (ticket: CreateTicketInput) => Promise<Ticket>;
+  cancelTicket: (id: string) => Promise<void>;
+  acceptOffer: (ticketId: string, offerId: string) => Promise<void>;
+  rejectOffer: (ticketId: string, offerId: string) => Promise<void>;
+  addTicketMessage: (ticketId: string, body: string) => Promise<void>;
+  approveFinalBilling: (ticketId: string) => Promise<void>;
+  disputeFinalBilling: (ticketId: string, reason: string) => Promise<void>;
   getTicketsByAsset: (assetId: string) => Ticket[];
   getTicketById: (id: string) => Ticket | undefined;
 
@@ -197,131 +145,146 @@ interface CustomerStoreState {
   getTicketsByStatus: (status: TicketStatus) => Ticket[];
 }
 
-/**
- * Customer Store - Zustand
- *
- * Manages customer portal data:
- * - Assets (Varlık Ağacı / Asset Passport)
- * - Tickets (Arıza Kayıtları / Service Requests)
- *
- * Pre-populated with realistic industrial equipment mock data.
- */
-export const useCustomerStore = create<CustomerStoreState>()(
-  persist(
-    (set, get) => ({
-      assets: MOCK_ASSETS,
-      tickets: MOCK_TICKETS,
-      isLoading: false,
-      error: null,
+export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
+  assets: [],
+  tickets: [],
+  isLoading: false,
+  error: null,
 
-      // Asset Actions
-      addAsset: (assetData) => {
-        const now = new Date().toISOString();
-        const newAsset: Asset = {
-          ...assetData,
-          id: `asset-${Date.now()}`,
-          createdAt: now,
-          updatedAt: now,
-        };
-        set((state) => ({
-          assets: [...state.assets, newAsset],
-        }));
-        return newAsset;
-      },
-
-      updateAsset: (id, updates) => {
-        set((state) => ({
-          assets: state.assets.map((asset) =>
-            asset.id === id
-              ? { ...asset, ...updates, updatedAt: new Date().toISOString() }
-              : asset
-          ),
-        }));
-      },
-
-      deleteAsset: (id) => {
-        set((state) => ({
-          assets: state.assets.filter((asset) => asset.id !== id),
-        }));
-      },
-
-      getAssetById: (id) => {
-        return get().assets.find((asset) => asset.id === id);
-      },
-
-      // Ticket Actions
-      createTicket: (ticketData) => {
-        const now = new Date().toISOString();
-        const asset = get().assets.find((a) => a.id === ticketData.assetId);
-        const newTicket: Ticket = {
-          ...ticketData,
-          id: `ticket-${Date.now()}`,
-          assetName: asset?.name,
-          createdAt: now,
-          updatedAt: now,
-        };
-        set((state) => ({
-          tickets: [newTicket, ...state.tickets],
-        }));
-        return newTicket;
-      },
-
-      updateTicket: (id, updates) => {
-        set((state) => ({
-          tickets: state.tickets.map((ticket) =>
-            ticket.id === id
-              ? { ...ticket, ...updates, updatedAt: new Date().toISOString() }
-              : ticket
-          ),
-        }));
-      },
-
-      cancelTicket: (id) => {
-        set((state) => ({
-          tickets: state.tickets.map((ticket) =>
-            ticket.id === id
-              ? { ...ticket, status: 'Cancelled', updatedAt: new Date().toISOString() }
-              : ticket
-          ),
-        }));
-      },
-
-      getTicketsByAsset: (assetId) => {
-        return get().tickets.filter((ticket) => ticket.assetId === assetId);
-      },
-
-      getTicketById: (id) => {
-        return get().tickets.find((ticket) => ticket.id === id);
-      },
-
-      // Computed Helpers
-      getActiveTicketsCount: () => {
-        return get().tickets.filter(
-          (t) => t.status === 'Open' || t.status === 'In Progress' || t.status === 'Offered'
-        ).length;
-      },
-
-      getPendingOffersCount: () => {
-        return get().tickets.filter((t) => t.status === 'Offered').length;
-      },
-
-      getAssetsByStatus: (status) => {
-        return get().assets.filter((asset) => asset.status === status);
-      },
-
-      getTicketsByStatus: (status) => {
-        return get().tickets.filter((ticket) => ticket.status === status);
-      },
-    }),
-    {
-      name: 'emaintenance-customer-storage',
-      partialize: (state) => ({
-        assets: state.assets,
-        tickets: state.tickets,
-      }),
+  fetchAssets: async (customerId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const assets = await api.get<Asset[]>('/assets', { params: { ownerId: customerId } });
+      set({ assets, isLoading: false });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Varliklar yuklenemedi', isLoading: false });
     }
-  )
-);
+  },
+
+  fetchTickets: async (customerId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const tickets = await api.get<Ticket[]>('/tickets', { params: { customerId } });
+      set({ tickets: tickets.map(normalizeTicket), isLoading: false });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Talepler yuklenemedi', isLoading: false });
+    }
+  },
+
+  addAsset: async (assetData) => {
+    const newAsset = await api.post<Asset>('/assets', {
+      ...assetData,
+      ownerId: assetData.ownerId,
+    });
+    set((state) => ({ assets: [...state.assets, newAsset] }));
+    return newAsset;
+  },
+
+  deleteAsset: async (id) => {
+    // Requires backend implementation, assuming successful deletion
+    set((state) => ({
+      assets: state.assets.filter((asset) => asset.id !== id),
+    }));
+  },
+
+  getAssetById: (id) => {
+    return get().assets.find((asset) => asset.id === id);
+  },
+
+  createTicket: async (ticketData) => {
+    const newTicket = normalizeTicket(await api.post<Ticket>('/tickets', {
+      customerId: ticketData.customerId,
+      customerName: ticketData.customerName,
+      customerCompany: ticketData.customerCompany ?? ticketData.customerName ?? 'Müşteri',
+      customerLocation: ticketData.customerLocation ?? 'Belirtilmedi',
+      assetId: ticketData.assetId,
+      title: ticketData.title,
+      description: ticketData.description,
+      category: ticketData.category,
+      priority: ticketData.priority,
+      mediaUrls: ticketData.mediaUrls ?? [],
+    }));
+    set((state) => ({ tickets: [newTicket, ...state.tickets] }));
+    return newTicket;
+  },
+
+  cancelTicket: async (id) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${id}/cancel`));
+    set((state) => ({
+      tickets: state.tickets.map((t) => (t.id === id ? updatedTicket : t)),
+    }));
+  },
+
+  acceptOffer: async (ticketId, offerId) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/offers/${offerId}/accept`));
+    set((state) => ({
+      tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
+    }));
+  },
+
+  rejectOffer: async (ticketId, offerId) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/offers/${offerId}/reject`));
+    set((state) => ({
+      tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
+    }));
+  },
+
+  addTicketMessage: async (ticketId, body) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/messages`, { body }));
+    set((state) => ({
+      tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
+    }));
+  },
+
+  approveFinalBilling: async (ticketId) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/billing/approve`));
+    set((state) => ({
+      tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
+    }));
+  },
+
+  disputeFinalBilling: async (ticketId, reason) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/billing/dispute`, { reason }));
+    set((state) => ({
+      tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
+    }));
+  },
+
+  getTicketsByAsset: (assetId) => {
+    return get().tickets.filter((ticket) => ticket.assetId === assetId);
+  },
+
+  getTicketById: (id) => {
+    return get().tickets.find((ticket) => ticket.id === id);
+  },
+
+  getActiveTicketsCount: () => {
+    return get().tickets.filter(
+      (t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS' || t.status === 'OFFERED'
+    ).length;
+  },
+
+  getPendingOffersCount: () => {
+    return get().tickets.filter((t) => t.status === 'OFFERED').length;
+  },
+
+  getAssetsByStatus: (status) => {
+    return get().assets.filter((asset) => asset.status === status);
+  },
+
+  getTicketsByStatus: (status) => {
+    return get().tickets.filter((ticket) => ticket.status === status);
+  },
+}));
+
+function normalizeTicket(ticket: Ticket): Ticket {
+  return {
+    ...ticket,
+    mediaUrls: ticket.mediaUrls ?? [],
+    offers: ticket.offers ?? [],
+    messages: ticket.messages ?? [],
+  };
+}
 
 // ==========================================
 // HELPER HOOKS
@@ -332,16 +295,22 @@ export function useAsset(assetId: string) {
 }
 
 export function useTicketsByAsset(assetId: string) {
-  return useCustomerStore((state) => state.getTicketsByAsset(assetId));
+  const tickets = useCustomerStore((state) => state.tickets);
+  return tickets.filter((ticket) => ticket.assetId === assetId);
 }
 
 export function useTicketStats() {
-  return useCustomerStore((state) => ({
-    totalAssets: state.assets.length,
-    activeTickets: state.getActiveTicketsCount(),
-    pendingOffers: state.getPendingOffersCount(),
-    resolvedThisMonth: state.tickets.filter(
-      (t) => t.status === 'Resolved' && new Date(t.updatedAt).getMonth() === new Date().getMonth()
+  const assets = useCustomerStore((state) => state.assets);
+  const tickets = useCustomerStore((state) => state.tickets);
+
+  return {
+    totalAssets: assets.length,
+    activeTickets: tickets.filter(
+      (ticket) => ticket.status === 'OPEN' || ticket.status === 'IN_PROGRESS' || ticket.status === 'OFFERED'
     ).length,
-  }));
+    pendingOffers: tickets.filter((ticket) => ticket.status === 'OFFERED').length,
+    resolvedThisMonth: tickets.filter(
+      (ticket) => ticket.status === 'RESOLVED' && new Date(ticket.updatedAt).getMonth() === new Date().getMonth()
+    ).length,
+  };
 }

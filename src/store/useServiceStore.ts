@@ -1,405 +1,247 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { TicketCategory, TicketPriority, TicketStatus } from '@/store/useCustomerStore';
+import { api } from '@/lib/api';
+import type { Ticket, TicketOffer, OfferType } from '@/store/useCustomerStore';
+import type { ServiceProvider } from '@/store/useAdminStore';
+import type { User } from '@/store/useAuthStore';
 
-// ==========================================
-// TYPE DEFINITIONS
-// ==========================================
-
-export type ProposalType = 'Discovery' | 'Fixed Price';
-export type ProposalStatus = 'Pending' | 'Accepted' | 'Rejected' | 'Withdrawn';
-
-export interface Proposal {
-  id: string;
-  ticketId: string;
-  serviceProviderId: string;
-  serviceProviderName: string;
-  type: ProposalType;
-  estimatedCost: number;
-  actualCost?: number;
-  message: string;
-  status: ProposalStatus;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ServiceTicket {
-  id: string;
-  customerId: string;
-  customerName: string;
-  customerCompany: string;
-  customerLocation: string;
-  assetId: string;
-  assetName: string;
-  assetTagNo: string;
-  assetBrand: string;
-  assetModel: string;
-  assetSerialNumber: string;
-  title: string;
-  description: string;
-  category: TicketCategory;
-  priority: TicketPriority;
-  mediaUrls: string[];
-  status: TicketStatus;
-  proposals: Proposal[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-// ==========================================
-// MOCK DATA - Service Provider Tickets
-// ==========================================
-
-const MOCK_SERVICE_TICKETS: ServiceTicket[] = [
-  {
-    id: 'st-001',
-    customerId: 'cust-001',
-    customerName: 'Mehmet Akman',
-    customerCompany: 'Akman Kimya Sanayi',
-    customerLocation: 'İzmir, Torbalı OSB',
-    assetId: 'asset-ak-001',
-    assetName: 'Endüstriyel Soğutma Ünitesi',
-    assetTagNo: 'AKM-CH-001',
-    assetBrand: 'Carrier',
-    assetModel: '30XA 1402',
-    assetSerialNumber: 'CAR-2021-7782341',
-    title: 'Soğutma performansında düşüş - Sıcaklık tutarsızlığı',
-    description: 'Soğutma ünitesi istenen sıcaklığı tutturamıyor. Sıcaklık 18°C ile 24°C arasında dalgalanıyor. Kompresör sık sık devreye girip çıkıyor. Son 1 haftadır bu şekilde çalışıyor. Üretim hattında sıcaklık kontrolü kritik öneme sahip.',
-    category: 'Mechanic',
-    priority: 'High',
-    mediaUrls: ['/mock/cooling-unit.jpg'],
-    status: 'Open',
-    proposals: [],
-    createdAt: '2024-04-28T08:30:00Z',
-    updatedAt: '2024-04-28T08:30:00Z',
-  },
-  {
-    id: 'st-002',
-    customerId: 'cust-002',
-    customerName: 'Ayşe Yıldız',
-    customerCompany: 'Star Rezidans Yönetimi',
-    customerLocation: 'İstanbul, Ataşehir',
-    assetId: 'asset-star-001',
-    assetName: 'Bina Kompresörü - Hidrofor',
-    assetTagNo: 'STR-CMP-003',
-    assetBrand: 'Kadıoğlu',
-    assetModel: 'KDK-2000',
-    assetSerialNumber: 'KDK-2023-1123456',
-    title: 'Kompresör basınç şalteri arızası',
-    description: 'Hidrofor kompresörü basınç şalterine basmıyor ve sürekli çalışıyor. Manuel reset yapıldığında kısa süreli düzeliyor sonra tekrar aynı sorun. Bina sakinleri su kesintisi yaşıyor.',
-    category: 'Electric',
-    priority: 'Critical',
-    mediaUrls: ['/mock/compressor-alarm.jpg', '/mock/pressure-gauge.mp4'],
-    status: 'Open',
-    proposals: [],
-    createdAt: '2024-04-27T14:15:00Z',
-    updatedAt: '2024-04-27T14:15:00Z',
-  },
-  {
-    id: 'st-003',
-    customerId: 'cust-003',
-    customerName: 'Hasan Çınar',
-    customerCompany: 'Çınar Otomotiv Servis',
-    customerLocation: 'Ankara, Ostim',
-    assetId: 'asset-cn-001',
-    assetName: 'Pnomatik Kaldırma Sistemi',
-    assetTagNo: 'CNR-PN-002',
-    assetBrand: 'Festo',
-    assetModel: 'EFSD-80-2000',
-    assetSerialNumber: 'FES-2022-5544332',
-    title: 'Pnomatik silindir sızıntısı ve yavaş hareket',
-    description: 'Kaldırma sisteminin ana silindiri yukarı harekette yavaşlıyor ve piston sızdırıyor. Haftada 3-4 kez yağlama yapılmasına rağmen sorun devam ediyor. Üretim verimliliği %20 düştü.',
-    category: 'Pneumatic',
-    priority: 'Medium',
-    mediaUrls: ['/mock/pneumatic-cylinder.jpg'],
-    status: 'Open',
-    proposals: [],
-    createdAt: '2024-04-26T09:00:00Z',
-    updatedAt: '2024-04-26T09:00:00Z',
-  },
-  {
-    id: 'st-004',
-    customerId: 'cust-004',
-    customerName: 'Zeynep Demir',
-    customerCompany: 'Demir Tekstil',
-    customerLocation: 'Bursa, Nilüfer',
-    assetId: 'asset-dm-001',
-    assetName: 'Hidrolik Pres Makinesi',
-    assetTagNo: 'DMR-PR-005',
-    assetBrand: 'Bosch Rexroth',
-    assetModel: 'CytroPac 700',
-    assetSerialNumber: 'BRX-2023-9988776',
-    title: 'Hidrolik pompa gürültülü çalışıyor',
-    description: 'Pres makinesinin hidrolik ünitesi normalden daha gürültülü çalışmaya başladı. Basınç düşüklüğü mevcut ve bazen emniyet kilidi devreye giriyor. Keşif gerektiren bir durum.',
-    category: 'Hydraulic',
-    priority: 'High',
-    mediaUrls: [],
-    status: 'Offered',
-    proposals: [
-      {
-        id: 'prop-001',
-        ticketId: 'st-004',
-        serviceProviderId: 'sp-001',
-        serviceProviderName: 'Kaya Hidrolik Servis',
-        type: 'Discovery',
-        estimatedCost: 1500,
-        message: 'Keşif ücreti 1.500 TL + KDV. Keşif sonrası net fiyat verilecektir. Keşif süresi yaklaşık 2 saat. Gerekirse hidrolik yağ analizi yapılacaktır.',
-        status: 'Pending',
-        createdAt: '2024-04-26T11:30:00Z',
-        updatedAt: '2024-04-26T11:30:00Z',
-      },
-    ],
-    createdAt: '2024-04-25T16:45:00Z',
-    updatedAt: '2024-04-26T11:30:00Z',
-  },
-  {
-    id: 'st-005',
-    customerId: 'cust-005',
-    customerName: 'Murat Aksu',
-    customerCompany: 'Aksu Klima ve Soğutma',
-    customerLocation: 'İzmir, Bornova',
-    assetId: 'asset-ak-002',
-    assetName: 'Chiller Ünitesi Bakımı',
-    assetTagNo: 'AKS-CH-008',
-    assetBrand: 'Trane',
-    assetModel: 'RTAF 280',
-    assetSerialNumber: 'TRN-2021-6677890',
-    title: 'Yıllık periyodik bakım ve kompresör kontrol',
-    description: 'Chiller ünitesinin yıllık periyodik bakımı. Kompresör yağ değişimi, filtre temizliği, elektrik bağlantı kontrolü ve soğutucu gaz basınç kontrolü.',
-    category: 'General',
-    priority: 'Low',
-    mediaUrls: [],
-    status: 'In Progress',
-    proposals: [
-      {
-        id: 'prop-002',
-        ticketId: 'st-005',
-        serviceProviderId: 'sp-001',
-        serviceProviderName: 'Kaya Hidrolik Servis',
-        type: 'Fixed Price',
-        estimatedCost: 8500,
-        actualCost: 8750,
-        message: 'Yıllık bakım paketi: Kompresör yağ değişimi, filtre değişimi, elektrik kontrolü, basınç testi ve genel kontrol. İşçilik + malzeme dahil.',
-        status: 'Accepted',
-        createdAt: '2024-04-20T10:00:00Z',
-        updatedAt: '2024-04-22T08:00:00Z',
-      },
-    ],
-    createdAt: '2024-04-20T09:00:00Z',
-    updatedAt: '2024-04-22T08:00:00Z',
-  },
-];
+export type ServiceTicket = Ticket;
 
 // ==========================================
 // STORE INTERFACE
 // ==========================================
 
 interface ServiceStoreState {
-  tickets: ServiceTicket[];
+  opportunities: Ticket[];
+  myJobs: Ticket[];
   currentProviderId: string;
   currentProviderName: string;
+  providerProfile: ServiceProvider | null;
+  isLoading: boolean;
+  error: string | null;
 
-  // Ticket Actions
+  // Actions
+  setProvider: (id: string, name: string) => void;
+  resolveProviderSession: (user: User | null) => Promise<void>;
+  fetchOpportunities: () => Promise<void>;
+  fetchMyJobs: () => Promise<void>;
+  fetchProviderProfile: () => Promise<void>;
+  
   submitProposal: (
     ticketId: string,
-    proposal: Omit<Proposal, 'id' | 'ticketId' | 'serviceProviderId' | 'serviceProviderName' | 'status' | 'createdAt' | 'updatedAt'>
-  ) => Proposal;
-  updateProposal: (ticketId: string, proposalId: string, updates: Partial<Proposal>) => void;
-  withdrawProposal: (ticketId: string, proposalId: string) => void;
-  completeJob: (ticketId: string, actualCost: number) => void;
+    proposal: { type: OfferType; estimatedCost: number; eta?: string; message: string }
+  ) => Promise<TicketOffer>;
 
-  // Getters
-  getNewOpportunities: () => ServiceTicket[];
-  getMyProposals: () => ServiceTicket[];
-  getActiveJobs: () => ServiceTicket[];
-  getTicketById: (id: string) => ServiceTicket | undefined;
-  getMyProposalForTicket: (ticketId: string) => Proposal | undefined;
+  completeJob: (
+    ticketId: string,
+    billing: { actualCost?: number; notes: string; laborCost?: number; partsCost?: number; extraCost?: number; partsSummary?: string }
+  ) => Promise<void>;
+  addTicketMessage: (ticketId: string, body: string) => Promise<void>;
+  resetDemoData: () => void;
+  getNewOpportunities: () => Ticket[];
+  getMyProposals: () => Ticket[];
+  getActiveJobs: () => Ticket[];
+  getTicketById: (id: string) => Ticket | undefined;
+  getMyProposalForTicket: (ticketId: string) => TicketOffer | undefined;
 }
 
-/**
- * Service Provider Store - Zustand
- *
- * Manages service provider portal data:
- * - Incoming service tickets from customers
- * - Proposals (Teklifler) submitted by this provider
- * - Active jobs and billing
- */
-export const useServiceStore = create<ServiceStoreState>()(
-  persist(
-    (set, get) => ({
-      tickets: MOCK_SERVICE_TICKETS,
-      currentProviderId: 'sp-001',
-      currentProviderName: 'Kaya Hidrolik Servis',
+export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
+  opportunities: [],
+  myJobs: [],
+  currentProviderId: '',
+  currentProviderName: '',
+  providerProfile: null,
+  isLoading: false,
+  error: null,
 
-      // Submit a new proposal for a ticket
-      submitProposal: (ticketId, proposalData) => {
-        const now = new Date().toISOString();
-        const newProposal: Proposal = {
-          ...proposalData,
-          id: `prop-${Date.now()}`,
-          ticketId,
-          serviceProviderId: get().currentProviderId,
-          serviceProviderName: get().currentProviderName,
-          status: 'Pending',
-          createdAt: now,
-          updatedAt: now,
-        };
+  setProvider: (id, name) => {
+    set({ currentProviderId: id, currentProviderName: name });
+  },
 
-        set((state) => ({
-          tickets: state.tickets.map((ticket) =>
-            ticket.id === ticketId
-              ? {
-                  ...ticket,
-                  proposals: [...ticket.proposals, newProposal],
-                  status: ticket.status === 'Open' ? 'Offered' : ticket.status,
-                  updatedAt: now,
-                }
-              : ticket
-          ),
-        }));
-
-        return newProposal;
-      },
-
-      // Update an existing proposal
-      updateProposal: (ticketId, proposalId, updates) => {
-        const now = new Date().toISOString();
-        set((state) => ({
-          tickets: state.tickets.map((ticket) =>
-            ticket.id === ticketId
-              ? {
-                  ...ticket,
-                  proposals: ticket.proposals.map((p) =>
-                    p.id === proposalId ? { ...p, ...updates, updatedAt: now } : p
-                  ),
-                  updatedAt: now,
-                }
-              : ticket
-          ),
-        }));
-      },
-
-      // Withdraw a proposal
-      withdrawProposal: (ticketId, proposalId) => {
-        const now = new Date().toISOString();
-        set((state) => ({
-          tickets: state.tickets.map((ticket) =>
-            ticket.id === ticketId
-              ? {
-                  ...ticket,
-                  proposals: ticket.proposals.map((p) =>
-                    p.id === proposalId ? { ...p, status: 'Withdrawn', updatedAt: now } : p
-                  ),
-                  updatedAt: now,
-                }
-              : ticket
-          ),
-        }));
-      },
-
-      // Complete a job and set actual cost (Hakediş)
-      completeJob: (ticketId, actualCost) => {
-        const now = new Date().toISOString();
-        set((state) => ({
-          tickets: state.tickets.map((ticket) => {
-            if (ticket.id !== ticketId) return ticket;
-
-            // Update the accepted proposal with actual cost
-            const updatedProposals = ticket.proposals.map((p) =>
-              p.serviceProviderId === state.currentProviderId && p.status === 'Accepted'
-                ? { ...p, actualCost, updatedAt: now }
-                : p
-            );
-
-            return {
-              ...ticket,
-              proposals: updatedProposals,
-              status: 'Resolved',
-              updatedAt: now,
-            };
-          }),
-        }));
-      },
-
-      // Getters
-      getNewOpportunities: () => {
-        return get().tickets.filter(
-          (ticket) =>
-            ticket.status === 'Open' ||
-            (ticket.status === 'Offered' &&
-              !ticket.proposals.some((p) => p.serviceProviderId === get().currentProviderId))
-        );
-      },
-
-      getMyProposals: () => {
-        return get().tickets.filter((ticket) =>
-          ticket.proposals.some(
-            (p) =>
-              p.serviceProviderId === get().currentProviderId &&
-              (p.status === 'Pending' || p.status === 'Accepted' || p.status === 'Rejected')
-          )
-        );
-      },
-
-      getActiveJobs: () => {
-        return get().tickets.filter(
-          (ticket) =>
-            ticket.status === 'In Progress' &&
-            ticket.proposals.some(
-              (p) => p.serviceProviderId === get().currentProviderId && p.status === 'Accepted'
-            )
-        );
-      },
-
-      getTicketById: (id) => {
-        return get().tickets.find((ticket) => ticket.id === id);
-      },
-
-      getMyProposalForTicket: (ticketId) => {
-        const ticket = get().tickets.find((t) => t.id === ticketId);
-        return ticket?.proposals.find((p) => p.serviceProviderId === get().currentProviderId);
-      },
-    }),
-    {
-      name: 'emaintenance-service-storage',
-      partialize: (state) => ({
-        tickets: state.tickets,
-      }),
+  resolveProviderSession: async (user) => {
+    if (!user) {
+      set({ currentProviderId: '', currentProviderName: '', providerProfile: null });
+      return;
     }
-  )
-);
+
+    try {
+      const provider = await api.get<ServiceProvider>('/providers/me');
+      set({
+        currentProviderId: provider.id,
+        currentProviderName: provider.name,
+        providerProfile: provider,
+      });
+    } catch {
+      set({
+        currentProviderId: user.id,
+        currentProviderName: user.name,
+        providerProfile: null,
+      });
+    }
+  },
+
+  fetchOpportunities: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const tickets = await api.get<Ticket[]>('/tickets/opportunities', { params: { providerId: get().currentProviderId } });
+      set({ opportunities: tickets.map(normalizeServiceTicket), isLoading: false });
+    } catch (error: any) {
+      set({ error: error instanceof Error ? error.message : 'Firsatlar yuklenemedi', isLoading: false });
+    }
+  },
+
+  fetchMyJobs: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const tickets = await api.get<Ticket[]>('/tickets/provider', { params: { providerId: get().currentProviderId } });
+      set({ myJobs: tickets.map(normalizeServiceTicket), isLoading: false });
+    } catch (error: any) {
+      set({ error: error instanceof Error ? error.message : 'Isler yuklenemedi', isLoading: false });
+    }
+  },
+
+  fetchProviderProfile: async () => {
+    try {
+      const provider = await api.get<ServiceProvider>('/providers/me');
+      set({
+        providerProfile: provider,
+        currentProviderId: provider.id,
+        currentProviderName: provider.name,
+      });
+    } catch {
+      if (!get().currentProviderId) return;
+      try {
+        const providers = await api.get<ServiceProvider[]>('/providers');
+        const provider = providers.find((item) => item.id === get().currentProviderId) ?? null;
+        set({ providerProfile: provider });
+      } catch (error) {
+        set({ error: error instanceof Error ? error.message : 'Servis profili yuklenemedi' });
+      }
+    }
+  },
+
+  submitProposal: async (ticketId, proposalData) => {
+    const newOffer = await api.post<TicketOffer>(`/tickets/${ticketId}/offers`, {
+      providerId: get().currentProviderId,
+      providerName: get().currentProviderName,
+      ...proposalData,
+      eta: proposalData.eta ?? 'Bugün içinde',
+    });
+    // Refresh opportunities to reflect the new state (e.g. ticket moved out of opportunities if offered by us)
+    await get().fetchOpportunities();
+    await get().fetchMyJobs();
+    return newOffer;
+  },
+
+  completeJob: async (ticketId, billing) => {
+    const actualCost =
+      billing.actualCost ??
+      (billing.laborCost ?? 0) + (billing.partsCost ?? 0) + (billing.extraCost ?? 0);
+    const notes = billing.partsSummary ? `${billing.notes}\nParça/Malzeme: ${billing.partsSummary}` : billing.notes;
+    await api.post<Ticket>(`/tickets/${ticketId}/billing`, { actualCost, notes });
+    await get().fetchMyJobs();
+  },
+
+  addTicketMessage: async (ticketId, body) => {
+    // We can assume the API is the same for customer and provider.
+    // The backend TicketService will handle adding the message.
+    await api.post(`/tickets/${ticketId}/messages`, { body });
+    // Refresh jobs to get new message
+    await get().fetchMyJobs();
+    await get().fetchOpportunities();
+  },
+
+  resetDemoData: () => {
+    void get().fetchOpportunities();
+    void get().fetchMyJobs();
+  },
+
+  getNewOpportunities: () => {
+    return get().opportunities;
+  },
+
+  getMyProposals: () => {
+    // Combine opportunities (where we might have an offer) and myJobs
+    const allTickets = [...get().opportunities, ...get().myJobs];
+    return allTickets.filter((ticket) =>
+      ticket.offers?.some(
+        (p) =>
+          p.providerId === get().currentProviderId &&
+          (p.status === 'PENDING' || p.status === 'ACCEPTED' || p.status === 'REJECTED')
+      )
+    );
+  },
+
+  getActiveJobs: () => {
+    return get().myJobs.filter(
+      (ticket) =>
+        ticket.status === 'IN_PROGRESS'
+    );
+  },
+
+  getTicketById: (id) => {
+    return get().opportunities.find((t) => t.id === id) || get().myJobs.find((t) => t.id === id);
+  },
+
+  getMyProposalForTicket: (ticketId) => {
+    const ticket = get().getTicketById(ticketId);
+    return ticket?.offers?.find((p) => p.providerId === get().currentProviderId);
+  },
+}));
+
+function normalizeServiceTicket(ticket: Ticket): Ticket {
+  return {
+    ...ticket,
+    mediaUrls: ticket.mediaUrls ?? [],
+    offers: ticket.offers ?? [],
+    messages: ticket.messages ?? [],
+  };
+}
 
 // ==========================================
 // HELPER HOOKS
 // ==========================================
 
 export function useTicketStats() {
-  return useServiceStore((state) => ({
-    newOpportunities: state.getNewOpportunities().length,
-    myProposals: state.getMyProposals().filter((t) =>
-      t.proposals.some(
-        (p) =>
-          p.serviceProviderId === state.currentProviderId &&
-          (p.status === 'Pending' || p.status === 'Accepted')
-      )
-    ).length,
-    activeJobs: state.getActiveJobs().length,
-    completedJobs: state.tickets.filter(
-      (t) =>
-        t.status === 'Resolved' &&
-        t.proposals.some((p) => p.serviceProviderId === state.currentProviderId && p.actualCost)
-    ).length,
-  }));
+  const newOpportunities = useServiceStore((state) => state.opportunities);
+  const myJobs = useServiceStore((state) => state.myJobs);
+  const currentProviderId = useServiceStore((state) => state.currentProviderId);
+  const allTickets = [...newOpportunities, ...myJobs];
+  const myProposals = allTickets.filter((ticket) =>
+    ticket.offers?.some(
+      (offer) =>
+        offer.providerId === currentProviderId &&
+        (offer.status === 'PENDING' || offer.status === 'ACCEPTED' || offer.status === 'REJECTED')
+    )
+  );
+  const activeJobs = myJobs.filter((ticket) => ticket.status === 'IN_PROGRESS');
+
+  return {
+    newOpportunities: newOpportunities.length,
+    myProposals: myProposals.length,
+    activeJobs: activeJobs.length,
+    completedJobs: useServiceStore((state) => state.myJobs).filter((t) => t.status === 'RESOLVED' || t.status === 'CLOSED').length,
+  };
 }
 
 export function useNewOpportunities() {
-  return useServiceStore((state) => state.getNewOpportunities());
+  return useServiceStore((state) => state.opportunities);
 }
 
 export function useMyProposals() {
-  return useServiceStore((state) => state.getMyProposals());
+  const opportunities = useServiceStore((state) => state.opportunities);
+  const myJobs = useServiceStore((state) => state.myJobs);
+  const currentProviderId = useServiceStore((state) => state.currentProviderId);
+
+  return [...opportunities, ...myJobs].filter((ticket) =>
+    ticket.offers?.some(
+      (offer) =>
+        offer.providerId === currentProviderId &&
+        (offer.status === 'PENDING' || offer.status === 'ACCEPTED' || offer.status === 'REJECTED')
+    )
+  );
 }
 
 export function useActiveJobs() {
-  return useServiceStore((state) => state.getActiveJobs());
+  const myJobs = useServiceStore((state) => state.myJobs);
+  return myJobs.filter((ticket) => ticket.status === 'IN_PROGRESS');
 }

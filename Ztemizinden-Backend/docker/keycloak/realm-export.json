@@ -1,0 +1,76 @@
+{
+  "realm": "ztemizinden",
+  "enabled": true,
+  "roles": {
+    "realm": [
+      { "name": "CUSTOMER" },
+      { "name": "SERVICE" },
+      { "name": "ADMIN" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "ztemizinden-frontend",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+      ],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true
+    },
+    {
+      "clientId": "ztemizinden-backend",
+      "enabled": true,
+      "bearerOnly": true,
+      "protocol": "openid-connect"
+    }
+  ],
+  "users": [
+    {
+      "id": "cust-001",
+      "username": "customer@demo.com",
+      "email": "customer@demo.com",
+      "firstName": "Demo",
+      "lastName": "Customer",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "demo123", "temporary": false }
+      ],
+      "realmRoles": ["CUSTOMER"]
+    },
+    {
+      "id": "sp-001",
+      "username": "service@demo.com",
+      "email": "service@demo.com",
+      "firstName": "Demo",
+      "lastName": "Service",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "demo123", "temporary": false }
+      ],
+      "realmRoles": ["SERVICE"]
+    },
+    {
+      "id": "admin-001",
+      "username": "admin@demo.com",
+      "email": "admin@demo.com",
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "demo123", "temporary": false }
+      ],
+      "realmRoles": ["ADMIN"]
+    }
+  ]
+}

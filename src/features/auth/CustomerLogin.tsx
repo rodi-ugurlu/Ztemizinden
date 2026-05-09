@@ -3,20 +3,24 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, ArrowRight } from 'lucide-react';
 
 export default function CustomerLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const login = useAuthStore((state) => state.login);
+  const { loginWithPassword, isLoading, error } = useAuthStore();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    login('customer', { email });
-    navigate('/customer/dashboard');
+    try {
+      await loginWithPassword('customer', email, password);
+      navigate(dashboardPathForEmail(email, 'customer'));
+    } catch {
+      // Store error is rendered below the form.
+    }
   };
 
   return (
@@ -41,15 +45,15 @@ export default function CustomerLogin() {
 
           <div className="space-y-4">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-6 h-6 text-red-500 flex-shrink-0" />
+              <CheckCircle2 className="w-6 h-6 text-red-600 flex-shrink-0" />
               <p className="text-slate-700">Servis talepleriniz için gerçek zamanlı durum güncellemeleri</p>
             </div>
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-6 h-6 text-red-500 flex-shrink-0" />
+              <CheckCircle2 className="w-6 h-6 text-red-600 flex-shrink-0" />
               <p className="text-slate-700">Sertifikalı teknik servislerle doğrudan iletişim</p>
             </div>
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-6 h-6 text-red-500 flex-shrink-0" />
+              <CheckCircle2 className="w-6 h-6 text-red-600 flex-shrink-0" />
               <p className="text-slate-700">Tam geçmiş ve garanti takibi</p>
             </div>
           </div>
@@ -99,7 +103,7 @@ export default function CustomerLogin() {
                     <label className="text-sm font-medium leading-none text-slate-700" htmlFor="password">
                       Şifre
                     </label>
-                    <a href="#" className="text-sm text-red-600 hover:text-red-500 font-medium">
+                    <a href="#" className="text-sm text-red-600 hover:text-red-600 font-medium">
                       Şifremi unuttum?
                     </a>
                   </div>
@@ -113,9 +117,10 @@ export default function CustomerLogin() {
                   />
                 </div>
                 <Button type="submit" className="w-full bg-red-600 hover:bg-red-700 h-11 text-base">
-                  Giriş Yap
+                  {isLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
                 </Button>
               </form>
+              {error && <p className="mt-3 text-sm text-red-600 text-center">{error}</p>}
 
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
@@ -146,6 +151,13 @@ export default function CustomerLogin() {
                   Microsoft
                 </Button>
               </div>
+
+              <div className="mt-6 text-center text-sm text-slate-500">
+                Servis sağlayıcı mısınız?{' '}
+                <Link to="/service/login" className="text-red-600 hover:underline font-medium">
+                  Servis Portalı'na geçiş yapın
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -153,4 +165,14 @@ export default function CustomerLogin() {
       </div>
     </div>
   );
+}
+
+function dashboardPathForEmail(email: string, fallbackRole: 'customer' | 'service' | 'admin') {
+  const roleByEmail: Record<string, 'customer' | 'service' | 'admin'> = {
+    'customer@demo.com': 'customer',
+    'service@demo.com': 'service',
+    'admin@demo.com': 'admin',
+  };
+  const role = roleByEmail[email.trim().toLowerCase()] ?? fallbackRole;
+  return `/${role}/dashboard`;
 }

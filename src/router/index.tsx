@@ -1,30 +1,50 @@
+/* eslint-disable react-refresh/only-export-components */
+import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { ProtectedRoute, PublicRoute } from './ProtectedRoute';
 
 // Layouts
-import CustomerLayout from '@/layouts/CustomerLayout';
-import ServiceLayout from '@/layouts/ServiceLayout';
-import AdminLayout from '@/layouts/AdminLayout';
+const CustomerLayout = lazy(() => import('@/layouts/CustomerLayout'));
+const ServiceLayout = lazy(() => import('@/layouts/ServiceLayout'));
+const AdminLayout = lazy(() => import('@/layouts/AdminLayout'));
 
 // Auth Pages
-import CustomerLogin from '@/features/auth/CustomerLogin';
-import CustomerRegister from '@/features/auth/CustomerRegister';
-import ServiceLogin from '@/features/auth/ServiceLogin';
-import ServiceRegister from '@/features/auth/ServiceRegister';
-import AdminLogin from '@/features/auth/AdminLogin';
+const CustomerLogin = lazy(() => import('@/features/auth/CustomerLogin'));
+const CustomerRegister = lazy(() => import('@/features/auth/CustomerRegister'));
+const ServiceLogin = lazy(() => import('@/features/auth/ServiceLogin'));
+const ServiceRegister = lazy(() => import('@/features/auth/ServiceRegister'));
+const AdminLogin = lazy(() => import('@/features/auth/AdminLogin'));
 
-// Customer Portal Pages (Phase 2)
-import CustomerDashboard from '@/features/customer/CustomerDashboard';
-import AssetsPage from '@/features/customer/AssetsPage';
-import CreateTicketPage from '@/features/customer/CreateTicketPage';
+// Customer Portal Pages
+const CustomerDashboard = lazy(() => import('@/features/customer/CustomerDashboard'));
+const AssetsPage = lazy(() => import('@/features/customer/AssetsPage'));
+const CreateTicketPage = lazy(() => import('@/features/customer/CreateTicketPage'));
+const RequestsPage = lazy(() => import('@/features/customer/RequestsPage'));
 
-// Other Portal Dashboards
-import ServiceDashboard from '@/features/service/ServiceDashboard';
+// Service Portal Pages
+const ServiceDashboard = lazy(() => import('@/features/service/ServiceDashboard'));
+const ServiceTicketsPage = lazy(() => import('@/features/service/ServiceTicketsPage'));
+const ServiceTeamPage = lazy(() => import('@/features/service/ServiceTeamPage'));
 
-// Admin Portal Pages (Phase 4)
-import AdminDashboard from '@/features/admin/AdminDashboard';
-import ProviderManagement from '@/features/admin/ProviderManagement';
-import DispatchPage from '@/features/admin/DispatchPage';
+// Admin Portal Pages
+const AdminDashboard = lazy(() => import('@/features/admin/AdminDashboard'));
+const ProviderManagement = lazy(() => import('@/features/admin/ProviderManagement'));
+const DispatchPage = lazy(() => import('@/features/admin/DispatchPage'));
+
+function withPageLoader(element: ReactNode) {
+  return <Suspense fallback={<RouteLoading />}>{element}</Suspense>;
+}
+
+function RouteLoading() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="text-center">
+        <div className="mx-auto mb-4 h-10 w-10 rounded-full border-2 border-slate-700 border-t-indigo-400 animate-spin" />
+        <p className="text-sm text-slate-400">Ekran hazırlanıyor...</p>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Temizinden Router Configuration
@@ -48,11 +68,11 @@ export const router = createBrowserRouter([
   // ==========================================
   {
     path: '/customer',
-    element: <CustomerLayout />,
+    element: withPageLoader(<CustomerLayout />),
     children: [
       {
         path: 'login',
-        element: (
+        element: withPageLoader(
           <PublicRoute role="customer">
             <CustomerLogin />
           </PublicRoute>
@@ -60,7 +80,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'register',
-        element: (
+        element: withPageLoader(
           <PublicRoute role="customer">
             <CustomerRegister />
           </PublicRoute>
@@ -68,7 +88,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'dashboard',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="customer">
             <CustomerDashboard />
           </ProtectedRoute>
@@ -76,7 +96,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'assets',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="customer">
             <AssetsPage />
           </ProtectedRoute>
@@ -84,7 +104,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'tickets/create',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="customer">
             <CreateTicketPage />
           </ProtectedRoute>
@@ -92,9 +112,9 @@ export const router = createBrowserRouter([
       },
       {
         path: 'requests',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="customer">
-            <div className="p-8">Service History (Phase 3)</div>
+            <RequestsPage />
           </ProtectedRoute>
         ),
       },
@@ -106,11 +126,11 @@ export const router = createBrowserRouter([
   // ==========================================
   {
     path: '/service',
-    element: <ServiceLayout />,
+    element: withPageLoader(<ServiceLayout />),
     children: [
       {
         path: 'login',
-        element: (
+        element: withPageLoader(
           <PublicRoute role="service">
             <ServiceLogin />
           </PublicRoute>
@@ -118,7 +138,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'register',
-        element: (
+        element: withPageLoader(
           <PublicRoute role="service">
             <ServiceRegister />
           </PublicRoute>
@@ -126,7 +146,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'dashboard',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="service">
             <ServiceDashboard />
           </ProtectedRoute>
@@ -134,17 +154,17 @@ export const router = createBrowserRouter([
       },
       {
         path: 'tickets',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="service">
-            <div className="p-8">Service Tickets (Phase 2)</div>
+            <ServiceTicketsPage />
           </ProtectedRoute>
         ),
       },
       {
         path: 'team',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="service">
-            <div className="p-8">Team Management (Phase 2)</div>
+            <ServiceTeamPage />
           </ProtectedRoute>
         ),
       },
@@ -156,11 +176,11 @@ export const router = createBrowserRouter([
   // ==========================================
   {
     path: '/admin',
-    element: <AdminLayout />,
+    element: withPageLoader(<AdminLayout />),
     children: [
       {
         path: 'login',
-        element: (
+        element: withPageLoader(
           <PublicRoute role="admin">
             <AdminLogin />
           </PublicRoute>
@@ -168,7 +188,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'dashboard',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="admin">
             <AdminDashboard />
           </ProtectedRoute>
@@ -176,7 +196,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'providers',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="admin">
             <ProviderManagement />
           </ProtectedRoute>
@@ -184,7 +204,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'dispatch',
-        element: (
+        element: withPageLoader(
           <ProtectedRoute requiredRole="admin">
             <DispatchPage />
           </ProtectedRoute>

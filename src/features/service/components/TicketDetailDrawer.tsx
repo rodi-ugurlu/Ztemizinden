@@ -14,13 +14,11 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useServiceStore,
-  type ServiceTicket,
-  type ProposalType,
 } from '@/store/useServiceStore';
+import type { Ticket, OfferType } from '@/store/useCustomerStore';
 import {
   Building2,
   MapPin,
-  Tag,
   Wrench,
   Zap,
   Droplets,
@@ -28,7 +26,6 @@ import {
   Package,
   ImageIcon,
   Video,
-  AlertCircle,
   Clock,
   CheckCircle2,
   XCircle,
@@ -36,14 +33,16 @@ import {
   MessageSquare,
   DollarSign,
   Search,
-  FileText,
+  Send,
 } from 'lucide-react';
 
 interface TicketDetailDrawerProps {
-  ticket: ServiceTicket | null;
+  ticket: Ticket | null;
   isOpen: boolean;
   onClose: () => void;
 }
+
+const API_MEDIA_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api').replace(/\/api\/?$/, '');
 
 /**
  * TicketDetailDrawer Component
@@ -56,122 +55,162 @@ export default function TicketDetailDrawer({
   isOpen,
   onClose,
 }: TicketDetailDrawerProps) {
-  const { submitProposal, currentProviderName, getMyProposalForTicket } = useServiceStore();
+  const { submitProposal, getMyProposalForTicket, addTicketMessage, currentProviderId } = useServiceStore();
+  const liveTicket = useServiceStore((state) => (ticket ? state.getTicketById(ticket.id) : undefined));
   const [activeTab, setActiveTab] = useState('details');
 
   // Proposal form state
-  const [proposalType, setProposalType] = useState<ProposalType>('Discovery');
+  const [proposalType, setProposalType] = useState<OfferType>('DISCOVERY');
   const [estimatedCost, setEstimatedCost] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [isMessageSending, setIsMessageSending] = useState(false);
 
   if (!ticket) return null;
 
-  const myProposal = getMyProposalForTicket(ticket.id);
+  const activeTicket = liveTicket ?? ticket;
+  const mediaUrls = activeTicket.mediaUrls ?? [];
+  const messages = activeTicket.messages ?? [];
+  const canMessage =
+    !!activeTicket.assignedProviderId &&
+    (!currentProviderId || activeTicket.assignedProviderId === currentProviderId) &&
+    activeTicket.status !== 'CLOSED' &&
+    activeTicket.status !== 'CANCELLED';
+  const ticketCode = (activeTicket.id.split('-')[1] ?? activeTicket.id).toUpperCase();
+  const myProposal = getMyProposalForTicket(activeTicket.id);
   const hasSubmitted = !!myProposal;
 
   const handleSubmitProposal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ticket) return;
 
     setIsSubmitting(true);
 
     // Simulate API delay
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    submitProposal(ticket.id, {
-      type: proposalType,
-      estimatedCost: proposalType === 'Fixed Price' ? parseFloat(estimatedCost) || 0 : 0,
-      message,
-    });
-
-    setIsSubmitting(false);
-    setActiveTab('my-proposal');
-  };
-
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'Electric':
-        return Zap;
-      case 'Mechanic':
-        return Settings;
-      case 'Pneumatic':
-        return Droplets;
-      case 'Hydraulic':
-        return Droplets;
-      default:
-        return Wrench;
+    try {
+      await submitProposal(ticket.id, {
+        type: proposalType,
+        estimatedCost: proposalType === 'FIXED_PRICE' ? parseFloat(estimatedCost) || 0 : 0,
+        eta: 'Bugün içinde',
+        message,
+      });
+      setActiveTab('my-proposal');
+    } catch (e) {
+      console.error('Failed to submit proposal:', e);
+      alert('Teklif gönderilemedi. Lütfen tekrar deneyin.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const CategoryIcon = getCategoryIcon(ticket.category);
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const body = chatMessage.trim();
+    if (!body || !canMessage) return;
+
+    setIsMessageSending(true);
+    setChatError(null);
+    try {
+      await addTicketMessage(activeTicket.id, body);
+      setChatMessage('');
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : 'Mesaj gönderilemedi');
+    } finally {
+      setIsMessageSending(false);
+    }
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'Critical':
-        return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+        return 'bg-red-50 text-red-600 border-red-200/30';
       case 'High':
-        return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+        return 'bg-orange-50 text-orange-600 border-orange-200/30';
       case 'Medium':
-        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+        return 'bg-amber-50 text-amber-600 border-amber-200/30';
       default:
-        return 'bg-neutral-700 text-neutral-300 border-neutral-600';
+        return 'bg-slate-100 text-slate-700 border-slate-200';
     }
+  };
+
+  const priorityLabel = (priority: string) => {
+    const labels: Record<string, string> = { Critical: 'Kritik', High: 'Yüksek', Medium: 'Orta', Low: 'Düşük' };
+    return labels[priority] || priority;
+  };
+
+  const statusLabel = (status: string) => {
+    const labels: Record<string, string> = { OPEN: 'Açık', OFFERED: 'Teklif Verildi', IN_PROGRESS: 'Devam Ediyor', RESOLVED: 'Çözüldü', CLOSED: 'Kapandı', CANCELLED: 'İptal' };
+    return labels[status] || status;
   };
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-xl bg-neutral-900 border-neutral-800 text-neutral-100 overflow-y-auto"
+        className="w-full sm:max-w-xl bg-white border-slate-200 text-slate-900 overflow-y-auto"
       >
-        <SheetHeader className="space-y-4 pb-6 border-b border-neutral-800">
+        <SheetHeader className="space-y-4 pb-6 border-b border-slate-200">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-mono text-neutral-500">
-                  #{ticket.id.split('-')[1].toUpperCase()}
+                <span className="text-xs font-mono text-slate-500">
+                  #{ticketCode}
                 </span>
                 <Badge
                   variant="outline"
-                  className={`${getPriorityColor(ticket.priority)} text-xs`}
+                  className={`${getPriorityColor(activeTicket.priority)} text-xs`}
                 >
-                  {ticket.priority}
+                  {priorityLabel(activeTicket.priority)}
                 </Badge>
               </div>
-              <SheetTitle className="text-xl font-bold text-white">
-                {ticket.title}
+              <SheetTitle className="text-xl font-bold text-slate-900">
+                {activeTicket.title}
               </SheetTitle>
             </div>
             <Badge
               variant="secondary"
-              className="bg-neutral-800 text-neutral-300"
+              className="bg-slate-50 text-slate-700"
             >
-              {ticket.status}
+              {statusLabel(activeTicket.status)}
             </Badge>
           </div>
-          <SheetDescription className="text-neutral-400">
-            {ticket.description}
+          <SheetDescription className="text-slate-400">
+            {activeTicket.description}
           </SheetDescription>
         </SheetHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
-          <TabsList className="grid w-full grid-cols-3 bg-neutral-800">
+          <TabsList className="grid w-full grid-cols-5 bg-slate-50">
             <TabsTrigger
               value="details"
-              className="text-neutral-400 data-[state=active]:bg-neutral-700 data-[state=active]:text-white"
+              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
             >
               Detaylar
             </TabsTrigger>
             <TabsTrigger
+              value="work-order"
+              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
+            >
+              İş Emri
+            </TabsTrigger>
+            <TabsTrigger
               value="asset"
-              className="text-neutral-400 data-[state=active]:bg-neutral-700 data-[state=active]:text-white"
+              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
             >
               Varlık
             </TabsTrigger>
             <TabsTrigger
+              value="messages"
+              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
+            >
+              Mesajlar
+            </TabsTrigger>
+            <TabsTrigger
               value={hasSubmitted ? 'my-proposal' : 'proposal'}
-              className="text-neutral-400 data-[state=active]:bg-neutral-700 data-[state=active]:text-white"
+              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
             >
               {hasSubmitted ? 'Teklifim' : 'Teklif Ver'}
             </TabsTrigger>
@@ -179,46 +218,56 @@ export default function TicketDetailDrawer({
 
           {/* Details Tab */}
           <TabsContent value="details" className="space-y-6 mt-6">
+            {mediaUrls.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4" />
+                  Arıza Ekleri
+                </h3>
+                <MediaPreviewGrid mediaUrls={mediaUrls} />
+              </div>
+            )}
+
             {/* Customer Info */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-amber-500 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
                 Müşteri Bilgileri
               </h3>
-              <div className="bg-neutral-800/50 rounded-lg p-4 space-y-3 border border-neutral-800">
+              <div className="bg-slate-50/50 rounded-lg p-4 space-y-3 border border-slate-200">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-neutral-700 rounded-full flex items-center justify-center">
-                    <span className="text-lg font-bold text-neutral-400">
-                      {ticket.customerName.charAt(0)}
+                  <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center">
+                    <span className="text-lg font-bold text-slate-400">
+                      {activeTicket.customerName.charAt(0)}
                     </span>
                   </div>
                   <div>
-                    <p className="font-medium text-white">{ticket.customerName}</p>
-                    <p className="text-sm text-neutral-400">{ticket.customerCompany}</p>
+                    <p className="font-medium text-slate-900">{activeTicket.customerName}</p>
+                    <p className="text-sm text-slate-400">{activeTicket.customerCompany}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-neutral-500">
+                <div className="flex items-center gap-2 text-sm text-slate-500">
                   <MapPin className="w-4 h-4" />
-                  {ticket.customerLocation}
+                  {activeTicket.customerLocation}
                 </div>
               </div>
             </div>
 
             {/* Issue Category */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-amber-500 uppercase tracking-wider flex items-center gap-2">
-                <CategoryIcon className="w-4 h-4" />
+              <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider flex items-center gap-2">
+                <ServiceCategoryIcon category={activeTicket.category} className="w-4 h-4" />
                 Arıza Kategorisi
               </h3>
-              <div className="bg-neutral-800/50 rounded-lg p-4 border border-neutral-800">
+              <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-neutral-700 rounded-lg flex items-center justify-center">
-                    <CategoryIcon className="w-6 h-6 text-amber-500" />
+                  <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
+                    <ServiceCategoryIcon category={activeTicket.category} className="w-6 h-6 text-red-600" />
                   </div>
                   <div>
-                    <p className="font-medium text-white">{ticket.category}</p>
-                    <p className="text-sm text-neutral-500">
-                      {getCategoryDescription(ticket.category)}
+                    <p className="font-medium text-slate-900">{activeTicket.category}</p>
+                    <p className="text-sm text-slate-500">
+                      {getCategoryDescription(activeTicket.category)}
                     </p>
                   </div>
                 </div>
@@ -227,62 +276,66 @@ export default function TicketDetailDrawer({
 
             {/* Timeline */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-amber-500 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider flex items-center gap-2">
                 <Clock className="w-4 h-4" />
                 Zaman Çizelgesi
               </h3>
               <div className="space-y-3">
                 <TimelineItem
                   icon={Clock4}
-                  time={ticket.createdAt}
+                  time={activeTicket.createdAt}
                   text="Arıza kaydı oluşturuldu"
                 />
-                {ticket.proposals.length > 0 && (
+                {activeTicket.offers.length > 0 && (
                   <TimelineItem
                     icon={MessageSquare}
-                    time={ticket.proposals[0].createdAt}
-                    text={`${ticket.proposals[0].serviceProviderName} teklif verdi`}
+                    time={activeTicket.offers[0].createdAt}
+                    text={`${activeTicket.offers[0].providerName} teklif verdi`}
                   />
                 )}
               </div>
             </div>
           </TabsContent>
 
+          <TabsContent value="work-order" className="space-y-6 mt-6">
+            <WorkOrderPanel ticket={activeTicket} />
+          </TabsContent>
+
           {/* Asset Tab */}
           <TabsContent value="asset" className="space-y-6 mt-6">
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-amber-500 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider flex items-center gap-2">
                 <Package className="w-4 h-4" />
                 Varlık Bilgileri
               </h3>
-              <div className="bg-neutral-800/50 rounded-lg p-4 space-y-4 border border-neutral-800">
+              <div className="bg-slate-50/50 rounded-lg p-4 space-y-4 border border-slate-200">
                 <div>
-                  <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
                     Varlık Adı
                   </p>
-                  <p className="font-medium text-white text-lg">{ticket.assetName}</p>
+                  <p className="font-medium text-slate-900 text-lg">{activeTicket.assetName}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
                       Tag No
                     </p>
-                    <p className="font-mono text-neutral-300">{ticket.assetTagNo}</p>
+                    <p className="font-mono text-slate-700">{activeTicket.assetTagNo}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
                       Marka / Model
                     </p>
-                    <p className="text-neutral-300">
-                      {ticket.assetBrand} / {ticket.assetModel}
+                    <p className="text-slate-700">
+                      {activeTicket.assetBrand} / {activeTicket.assetModel}
                     </p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
                     Seri No
                   </p>
-                  <p className="font-mono text-sm text-neutral-400">{ticket.assetSerialNumber}</p>
+                  <p className="font-mono text-sm text-slate-400">{activeTicket.assetSerialNumber}</p>
                 </div>
               </div>
             </div>
@@ -290,26 +343,74 @@ export default function TicketDetailDrawer({
             {/* Media */}
             {ticket.mediaUrls.length > 0 && (
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-amber-500 uppercase tracking-wider flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider flex items-center gap-2">
                   <ImageIcon className="w-4 h-4" />
                   Ekler
                 </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {ticket.mediaUrls.map((url, index) => (
-                    <div
-                      key={index}
-                      className="aspect-video bg-neutral-800 rounded-lg flex items-center justify-center border border-neutral-700"
-                    >
-                      {url.endsWith('.mp4') ? (
-                        <Video className="w-8 h-8 text-neutral-600" />
-                      ) : (
-                        <ImageIcon className="w-8 h-8 text-neutral-600" />
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <MediaPreviewGrid mediaUrls={ticket.mediaUrls} />
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="messages" className="space-y-4 mt-6">
+            <div className="space-y-3">
+              {messages.length > 0 ? (
+                messages.map((item) => {
+                  const isMine = item.senderRole === 'service';
+                  const isSystem = item.senderRole === 'system';
+
+                  if (isSystem) {
+                    return (
+                      <div key={item.id} className="rounded-lg bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
+                        {item.body}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={item.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`max-w-[82%] rounded-lg border px-3 py-2 ${
+                          isMine
+                            ? 'border-red-200 bg-red-50 text-slate-900'
+                            : 'border-slate-200 bg-white text-slate-800'
+                        }`}
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-3 text-[11px] text-slate-500">
+                          <span className="font-medium">{item.senderName}</span>
+                          <span>{formatMessageTime(item.createdAt)}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{item.body}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-sm text-slate-500">
+                  Henüz mesaj yok.
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSendMessage} className="space-y-3 border-t border-slate-200 pt-4">
+              <Textarea
+                value={chatMessage}
+                onChange={(event) => setChatMessage(event.target.value)}
+                rows={4}
+                disabled={!canMessage || isMessageSending}
+                placeholder={canMessage ? 'Müşteriye mesaj yaz...' : 'Mesajlaşma iş atandıktan sonra açılır'}
+                className="resize-none bg-slate-50 border-slate-200 text-slate-900"
+              />
+              {chatError && <p className="text-sm text-red-600">{chatError}</p>}
+              <Button
+                type="submit"
+                disabled={!canMessage || isMessageSending || !chatMessage.trim()}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                {isMessageSending ? 'Gönderiliyor...' : 'Mesaj Gönder'}
+              </Button>
+            </form>
           </TabsContent>
 
           {/* Proposal / My Proposal Tab */}
@@ -319,84 +420,84 @@ export default function TicketDetailDrawer({
           >
             {hasSubmitted && myProposal ? (
               <div className="space-y-6">
-                <div className="bg-neutral-800/50 rounded-lg p-4 border border-neutral-800">
+                <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-semibold text-white">Teklif Detayları</h3>
+                    <h3 className="text-sm font-semibold text-slate-900">Teklif Detayları</h3>
                     <Badge
                       variant="outline"
                       className={
-                        myProposal.status === 'Accepted'
-                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                          : myProposal.status === 'Rejected'
-                          ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-                          : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        myProposal.status === 'ACCEPTED'
+                          ? 'bg-emerald-50 text-emerald-600 border-emerald-200/30'
+                          : myProposal.status === 'REJECTED'
+                          ? 'bg-red-50 text-red-600 border-red-200/30'
+                          : 'bg-amber-50 text-amber-600 border-amber-200/30'
                       }
                     >
-                      {myProposal.status === 'Pending' && 'Beklemede'}
-                      {myProposal.status === 'Accepted' && 'Kabul Edildi'}
-                      {myProposal.status === 'Rejected' && 'Reddedildi'}
+                      {myProposal.status === 'PENDING' && 'Beklemede'}
+                      {myProposal.status === 'ACCEPTED' && 'Kabul Edildi'}
+                      {myProposal.status === 'REJECTED' && 'Reddedildi'}
                     </Badge>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center">
-                        {myProposal.type === 'Discovery' ? (
-                          <Search className="w-5 h-5 text-amber-500" />
+                      <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
+                        {myProposal.type === 'DISCOVERY' ? (
+                          <Search className="w-5 h-5 text-red-600" />
                         ) : (
-                          <DollarSign className="w-5 h-5 text-amber-500" />
+                          <DollarSign className="w-5 h-5 text-red-600" />
                         )}
                       </div>
                       <div>
-                        <p className="text-sm text-neutral-500">Teklif Tipi</p>
-                        <p className="font-medium text-white">
-                          {myProposal.type === 'Discovery' ? 'Keşif' : 'Net Fiyat'}
+                        <p className="text-sm text-slate-500">Teklif Tipi</p>
+                        <p className="font-medium text-slate-900">
+                          {myProposal.type === 'DISCOVERY' ? 'Keşif' : 'Net Fiyat'}
                         </p>
                       </div>
                     </div>
 
                     {myProposal.estimatedCost > 0 && (
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center">
-                          <DollarSign className="w-5 h-5 text-emerald-500" />
+                        <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
+                          <DollarSign className="w-5 h-5 text-red-600" />
                         </div>
                         <div>
-                          <p className="text-sm text-neutral-500">Tahmini Maliyet</p>
-                          <p className="font-medium text-white text-lg">
+                          <p className="text-sm text-slate-500">Tahmini Maliyet</p>
+                          <p className="font-medium text-slate-900 text-lg">
                             {myProposal.estimatedCost.toLocaleString('tr-TR')} TL
                           </p>
                         </div>
                       </div>
                     )}
 
-                    <div className="bg-neutral-900 rounded-lg p-4 border border-neutral-800">
-                      <p className="text-sm text-neutral-500 mb-2">Mesajınız</p>
-                      <p className="text-neutral-300 text-sm leading-relaxed">
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <p className="text-sm text-slate-500 mb-2">Mesajınız</p>
+                      <p className="text-slate-700 text-sm leading-relaxed">
                         {myProposal.message}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {myProposal.status === 'Accepted' && (
-                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-emerald-400 mb-2">
+                {myProposal.status === 'ACCEPTED' && (
+                  <div className="bg-emerald-50 border border-emerald-200/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-emerald-600 mb-2">
                       <CheckCircle2 className="w-5 h-5" />
                       <span className="font-medium">Teklif Kabul Edildi!</span>
                     </div>
-                    <p className="text-sm text-emerald-300/80">
+                    <p className="text-sm text-emerald-700/70">
                       Müşteri teklifinizi kabul etti. İşe başlayabilirsiniz.
                     </p>
                   </div>
                 )}
 
-                {myProposal.status === 'Rejected' && (
-                  <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-rose-400 mb-2">
+                {myProposal.status === 'REJECTED' && (
+                  <div className="bg-red-50 border border-red-200/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-red-600 mb-2">
                       <XCircle className="w-5 h-5" />
                       <span className="font-medium">Teklif Reddedildi</span>
                     </div>
-                    <p className="text-sm text-rose-300/80">
+                    <p className="text-sm text-red-700/70">
                       Müşteri farklı bir servis sağlayıcı seçti.
                     </p>
                   </div>
@@ -406,70 +507,70 @@ export default function TicketDetailDrawer({
               <form onSubmit={handleSubmitProposal} className="space-y-6">
                 {/* Proposal Type Toggle */}
                 <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-amber-500 uppercase tracking-wider">
+                  <Label className="text-sm font-semibold text-red-600 uppercase tracking-wider">
                     Teklif Tipi
                   </Label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setProposalType('Discovery')}
+                      onClick={() => setProposalType('DISCOVERY')}
                       className={`p-4 rounded-lg border text-left transition-all ${
-                        proposalType === 'Discovery'
-                          ? 'border-amber-500 bg-amber-500/10'
-                          : 'border-neutral-700 hover:border-neutral-600'
+                        proposalType === 'DISCOVERY'
+                          ? 'border-red-200 bg-red-50'
+                          : 'border-slate-200 hover:border-slate-600'
                       }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <Search
                           className={`w-5 h-5 ${
-                            proposalType === 'Discovery'
-                              ? 'text-amber-500'
-                              : 'text-neutral-500'
+                            proposalType === 'DISCOVERY'
+                              ? 'text-red-600'
+                              : 'text-slate-500'
                           }`}
                         />
                         <span
                           className={`font-medium ${
-                            proposalType === 'Discovery'
-                              ? 'text-white'
-                              : 'text-neutral-400'
+                            proposalType === 'DISCOVERY'
+                              ? 'text-slate-900'
+                              : 'text-slate-400'
                           }`}
                         >
                           Keşif
                         </span>
                       </div>
-                      <p className="text-xs text-neutral-500">
+                      <p className="text-xs text-slate-500">
                         Yerinde inceleme sonrası net fiyat
                       </p>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setProposalType('Fixed Price')}
+                      onClick={() => setProposalType('FIXED_PRICE')}
                       className={`p-4 rounded-lg border text-left transition-all ${
-                        proposalType === 'Fixed Price'
-                          ? 'border-amber-500 bg-amber-500/10'
-                          : 'border-neutral-700 hover:border-neutral-600'
+                        proposalType === 'FIXED_PRICE'
+                          ? 'border-red-200 bg-red-50'
+                          : 'border-slate-200 hover:border-slate-600'
                       }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <DollarSign
                           className={`w-5 h-5 ${
-                            proposalType === 'Fixed Price'
-                              ? 'text-amber-500'
-                              : 'text-neutral-500'
+                            proposalType === 'FIXED_PRICE'
+                              ? 'text-red-600'
+                              : 'text-slate-500'
                           }`}
                         />
                         <span
                           className={`font-medium ${
-                            proposalType === 'Fixed Price'
-                              ? 'text-white'
-                              : 'text-neutral-400'
+                            proposalType === 'FIXED_PRICE'
+                              ? 'text-slate-900'
+                              : 'text-slate-400'
                           }`}
                         >
                           Net Fiyat
                         </span>
                       </div>
-                      <p className="text-xs text-neutral-500">
+                      <p className="text-xs text-slate-500">
                         Sabit fiyat garantisi
                       </p>
                     </button>
@@ -477,27 +578,27 @@ export default function TicketDetailDrawer({
                 </div>
 
                 {/* Estimated Cost (only for Fixed Price) */}
-                {proposalType === 'Fixed Price' && (
+                {proposalType === 'FIXED_PRICE' && (
                   <div className="space-y-2">
                     <Label
                       htmlFor="estimatedCost"
-                      className="text-sm font-semibold text-amber-500 uppercase tracking-wider"
+                      className="text-sm font-semibold text-red-600 uppercase tracking-wider"
                     >
                       Tahmini Maliyet (TL)
                     </Label>
                     <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                       <Input
                         id="estimatedCost"
                         type="number"
                         placeholder="0.00"
                         value={estimatedCost}
                         onChange={(e) => setEstimatedCost(e.target.value)}
-                        className="pl-10 bg-neutral-800 border-neutral-700 text-white"
-                        required={proposalType === 'Fixed Price'}
+                        className="pl-10 bg-slate-50 border-slate-200 text-slate-900"
+                        required={proposalType === 'FIXED_PRICE'}
                       />
                     </div>
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-slate-500">
                       İşçilik ve malzeme dahil toplam tahmini maliyet
                     </p>
                   </div>
@@ -507,7 +608,7 @@ export default function TicketDetailDrawer({
                 <div className="space-y-2">
                   <Label
                     htmlFor="message"
-                    className="text-sm font-semibold text-amber-500 uppercase tracking-wider"
+                    className="text-sm font-semibold text-red-600 uppercase tracking-wider"
                   >
                     Teklif Mesajı
                   </Label>
@@ -517,27 +618,27 @@ export default function TicketDetailDrawer({
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     rows={5}
-                    className="bg-neutral-800 border-neutral-700 text-white resize-none"
+                    className="bg-slate-50 border-slate-200 text-slate-900 resize-none"
                   />
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-slate-500">
                     Müşteriye iletilecek detaylı açıklama
                   </p>
                 </div>
 
                 {/* Submit Button */}
-                <div className="flex gap-3 pt-4 border-t border-neutral-800">
+                <div className="flex gap-3 pt-4 border-t border-slate-200">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={onClose}
-                    className="flex-1 bg-transparent border-neutral-700 text-neutral-300 hover:bg-neutral-800"
+                    className="flex-1 bg-transparent border-slate-200 text-slate-700 hover:bg-red-50"
                   >
                     İptal
                   </Button>
                   <Button
                     type="submit"
                     disabled={isSubmitting || !message.trim()}
-                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-neutral-950 font-semibold"
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold"
                   >
                     {isSubmitting ? 'Gönderiliyor...' : 'Teklif Gönder'}
                   </Button>
@@ -554,6 +655,104 @@ export default function TicketDetailDrawer({
 // ==========================================
 // HELPER COMPONENTS
 // ==========================================
+
+function MediaPreviewGrid({ mediaUrls }: { mediaUrls: string[] }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {mediaUrls.map((url, index) => {
+        const source = resolveMediaUrl(url);
+
+        return (
+          <div
+            key={`${url}-${index}`}
+            className="aspect-video overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+          >
+            {isVideoMedia(url) ? (
+              <video
+                src={source}
+                controls
+                preload="metadata"
+                className="h-full w-full bg-black object-contain"
+              >
+                <Video className="h-8 w-8 text-slate-600" />
+              </video>
+            ) : (
+              <img
+                src={source}
+                alt={`Arıza eki ${index + 1}`}
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function resolveMediaUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+  return url.startsWith('/') ? `${API_MEDIA_ORIGIN}${url}` : `${API_MEDIA_ORIGIN}/${url}`;
+}
+
+function isVideoMedia(url: string): boolean {
+  const cleanUrl = url.split('?')[0].toLowerCase();
+  return ['.mp4', '.webm', '.ogg', '.mov', '.m4v'].some((extension) => cleanUrl.endsWith(extension));
+}
+
+function formatMessageTime(value: string): string {
+  return new Date(value).toLocaleDateString('tr-TR', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function ServiceCategoryIcon({ category, className }: { category: string; className: string }) {
+  switch (category) {
+    case 'Electric':
+      return <Zap className={className} />;
+    case 'Mechanic':
+      return <Settings className={className} />;
+    case 'Pneumatic':
+    case 'Hydraulic':
+      return <Droplets className={className} />;
+    default:
+      return <Wrench className={className} />;
+  }
+}
+
+function WorkOrderPanel({ ticket }: { ticket: Ticket }) {
+  const acceptedProposal = ticket.offers.find((proposal) => proposal.status === 'ACCEPTED');
+  const estimatedCost = acceptedProposal?.estimatedCost ?? 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200 space-y-4">
+        <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider">İş Özeti</h3>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <InfoCell label="Müşteri" value={ticket.customerCompany} />
+          <InfoCell label="Konum" value={ticket.customerLocation} />
+          <InfoCell label="Varlık" value={ticket.assetName || ''} />
+          <InfoCell label="Tahmini Tutar" value={`${estimatedCost.toLocaleString('tr-TR')} TL`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoCell({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">{label}</p>
+      <p className={`text-slate-700 ${mono ? 'font-mono text-xs' : ''}`}>{value}</p>
+    </div>
+  );
+}
 
 function TimelineItem({
   icon: Icon,
@@ -575,14 +774,14 @@ function TimelineItem({
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
-        <div className="w-8 h-8 bg-neutral-800 rounded-full flex items-center justify-center border border-neutral-700">
-          <Icon className="w-4 h-4 text-amber-500" />
+        <div className="w-8 h-8 bg-slate-50 rounded-full flex items-center justify-center border border-slate-200">
+          <Icon className="w-4 h-4 text-red-600" />
         </div>
-        <div className="w-px flex-1 bg-neutral-800 my-1" />
+        <div className="w-px flex-1 bg-slate-50 my-1" />
       </div>
       <div className="pb-4">
-        <p className="text-sm text-neutral-300">{text}</p>
-        <p className="text-xs text-neutral-500">{formattedDate}</p>
+        <p className="text-sm text-slate-700">{text}</p>
+        <p className="text-xs text-slate-500">{formattedDate}</p>
       </div>
     </div>
   );

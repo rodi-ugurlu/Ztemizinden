@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ import {
   Thermometer,
   Info,
 } from 'lucide-react';
+import { api } from '@/lib/api';
 
 const SERVICE_CATEGORIES = [
   { value: 'electric', label: 'Elektrik', icon: Zap },
@@ -47,6 +48,7 @@ const CITIES = [
 ];
 
 interface UploadedFile {
+  file: File;
   name: string;
   size: string;
   type: string;
@@ -75,6 +77,7 @@ export default function ServiceRegister() {
   });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -96,14 +99,19 @@ export default function ServiceRegister() {
     }
   };
 
-  const handleFileSelect = (docType: string) => {
-    // Mock file upload - in real app this would use input type="file"
-    const mockFile: UploadedFile = {
-      name: `${docType}_document.pdf`,
-      size: '2.4 MB',
-      type: 'application/pdf',
-    };
-    setUploadedFiles((prev) => ({ ...prev, [docType]: mockFile }));
+  const handleFileSelect = (docType: string, file: File) => {
+    setUploadedFiles((prev) => ({
+      ...prev,
+      [docType]: {
+        file,
+        name: file.name,
+        size: formatFileSize(file.size),
+        type: file.type,
+      },
+    }));
+    if (errors[docType]) {
+      setErrors((prev) => ({ ...prev, [docType]: '' }));
+    }
   };
 
   const removeFile = (docType: string) => {
@@ -195,12 +203,35 @@ export default function ServiceRegister() {
     setStep((prev) => prev - 1);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (validateStep3()) {
-      // TODO: API call to submit service provider application
-      console.log('Submitting service provider application:', { formData, uploadedFiles });
-      navigate('/service/login');
+      setIsSubmitting(true);
+      try {
+        const provider = await api.post<{ id: string }>('/providers', {
+          name: formData.companyName,
+          contactName: formData.contactName,
+          email: formData.email,
+          phone: formData.phone,
+          city: formData.city,
+          specialties: formData.categories.map(toBackendSpecialty),
+        });
+
+        await Promise.all(
+          Object.entries(uploadedFiles)
+            .filter(([, file]) => file)
+            .map(([docType, file]) => uploadProviderDocument(provider.id, docType, file as UploadedFile))
+        );
+
+        navigate('/service/login');
+      } catch (error) {
+        setErrors((prev) => ({
+          ...prev,
+          submit: error instanceof Error ? error.message : 'Başvuru gönderilemedi',
+        }));
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -218,41 +249,41 @@ export default function ServiceRegister() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-neutral-950 flex">
+    <div className="min-h-screen w-full bg-slate-50 flex">
       {/* Left Side - Image & Branding */}
-      <div className="hidden lg:flex w-1/2 relative bg-neutral-900 overflow-hidden border-r border-neutral-800">
+      <div className="hidden lg:flex w-1/2 relative bg-white overflow-hidden border-r border-slate-200">
         <div className="absolute inset-0 z-0">
           <img
             src="https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?q=80&w=2070&auto=format&fit=crop"
             alt="Industrial Maintenance"
-            className="w-full h-full object-cover opacity-40 mix-blend-luminosity"
+            className="w-full h-full object-cover opacity-15"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/60 to-transparent" />
+          <div className="absolute inset-0 bg-white/75" />
         </div>
 
         <div className="relative z-10 flex flex-col justify-end p-12 w-full">
-          <div className="inline-flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 text-amber-500 px-4 py-2 rounded-sm mb-6 w-fit">
+          <div className="inline-flex items-center gap-3 bg-red-50 border border-red-200/20 text-red-600 px-4 py-2 rounded-sm mb-6 w-fit">
             <ShieldAlert className="w-5 h-5" />
             <span className="font-bold tracking-wider text-sm uppercase">Servis Sağlayıcı Başvurusu</span>
           </div>
-          <h1 className="text-5xl font-black text-white tracking-tighter uppercase leading-[1.1]">
+          <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase leading-[1.1]">
             Temizinden
             <br />
-            <span className="text-amber-500">PRO AĞI</span>
+            <span className="text-red-600">PRO AĞI</span>
           </h1>
-          <p className="mt-6 text-neutral-400 text-lg max-w-lg border-l-2 border-amber-500 pl-4">
+          <p className="mt-6 text-slate-400 text-lg max-w-lg border-l-2 border-red-200 pl-4">
             Türkiye&apos;nin en büyük endüstriyel servis ağına katılın. Müşterilerle doğrudan bağlantı kurun ve
             işletmenizi büyütün.
           </p>
 
           <div className="mt-8 grid grid-cols-2 gap-4 max-w-md">
-            <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 p-4 rounded-sm">
-              <p className="text-2xl font-bold text-amber-500">500+</p>
-              <p className="text-sm text-neutral-400">Aktif Müşteri</p>
+            <div className="bg-white/80 backdrop-blur border border-slate-200 p-4 rounded-sm">
+              <p className="text-2xl font-bold text-red-600">500+</p>
+              <p className="text-sm text-slate-400">Aktif Müşteri</p>
             </div>
-            <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 p-4 rounded-sm">
-              <p className="text-2xl font-bold text-amber-500">10K+</p>
-              <p className="text-sm text-neutral-400">Yıllık Servis Talebi</p>
+            <div className="bg-white/80 backdrop-blur border border-slate-200 p-4 rounded-sm">
+              <p className="text-2xl font-bold text-red-600">10K+</p>
+              <p className="text-sm text-slate-400">Yıllık Servis Talebi</p>
             </div>
           </div>
         </div>
@@ -264,7 +295,7 @@ export default function ServiceRegister() {
           <Link to="/service/login">
             <Button
               variant="ghost"
-              className="text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-sm"
+              className="text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-sm"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Girişe Dön
@@ -276,11 +307,11 @@ export default function ServiceRegister() {
           <div className="w-full max-w-lg space-y-6">
             {/* Mobile Logo */}
             <div className="lg:hidden flex items-center gap-2 mb-4 justify-center">
-              <div className="w-8 h-8 bg-amber-500 rounded-sm flex items-center justify-center font-bold text-neutral-950 text-xs">
+              <div className="w-8 h-8 bg-red-600 rounded-sm flex items-center justify-center font-bold text-white text-xs">
                 TZ
               </div>
-              <span className="font-bold text-white tracking-tight text-xl">
-                Temizinden <span className="text-amber-500">PRO</span>
+              <span className="font-bold text-slate-900 tracking-tight text-xl">
+                Temizinden <span className="text-red-600">PRO</span>
               </span>
             </div>
 
@@ -291,29 +322,29 @@ export default function ServiceRegister() {
                   <div
                     className={`w-8 h-8 rounded-sm flex items-center justify-center text-sm font-bold ${
                       s === step
-                        ? 'bg-amber-500 text-neutral-950'
+                        ? 'bg-red-600 text-white'
                         : s < step
-                        ? 'bg-emerald-500 text-white'
-                        : 'bg-neutral-800 text-neutral-500'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-slate-50 text-slate-500'
                     }`}
                   >
                     {s < step ? <CheckCircle2 className="w-4 h-4" /> : s}
                   </div>
                   {s < 3 && (
                     <div
-                      className={`w-12 h-0.5 ${s < step ? 'bg-emerald-500' : 'bg-neutral-800'}`}
+                      className={`w-12 h-0.5 ${s < step ? 'bg-red-500' : 'bg-slate-50'}`}
                     />
                   )}
                 </div>
               ))}
             </div>
 
-            <Card className="bg-neutral-900/50 border-neutral-800 rounded-sm">
+            <Card className="bg-white/50 border-slate-200 rounded-sm">
               <CardHeader className="space-y-1">
-                <CardTitle className="text-2xl font-bold text-white tracking-tight">
+                <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight">
                   {getStepTitle()}
                 </CardTitle>
-                <CardDescription className="text-neutral-400">
+                <CardDescription className="text-slate-400">
                   Adım {step} / 3 - Servis sağlayıcı başvurunuzu tamamlayın
                 </CardDescription>
               </CardHeader>
@@ -322,7 +353,7 @@ export default function ServiceRegister() {
                   <div className="space-y-4">
                     {/* Company Name */}
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                      <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs flex items-center gap-2">
                         <Building2 className="w-4 h-4" />
                         Firma Adı
                       </label>
@@ -331,16 +362,16 @@ export default function ServiceRegister() {
                         placeholder="Örn: Kaya Hidrolik Servis"
                         value={formData.companyName}
                         onChange={handleChange}
-                        className="bg-neutral-950 border-neutral-800 text-white focus-visible:ring-amber-500 rounded-sm h-11"
+                        className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 rounded-sm h-11"
                       />
                       {errors.companyName && (
-                        <p className="text-xs text-rose-500">{errors.companyName}</p>
+                        <p className="text-xs text-red-600">{errors.companyName}</p>
                       )}
                     </div>
 
                     {/* Contact Name */}
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                      <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs flex items-center gap-2">
                         <User className="w-4 h-4" />
                         Yetkili Kişi
                       </label>
@@ -349,17 +380,17 @@ export default function ServiceRegister() {
                         placeholder="Ahmet Kaya"
                         value={formData.contactName}
                         onChange={handleChange}
-                        className="bg-neutral-950 border-neutral-800 text-white focus-visible:ring-amber-500 rounded-sm h-11"
+                        className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 rounded-sm h-11"
                       />
                       {errors.contactName && (
-                        <p className="text-xs text-rose-500">{errors.contactName}</p>
+                        <p className="text-xs text-red-600">{errors.contactName}</p>
                       )}
                     </div>
 
                     {/* Email & Phone */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                        <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs flex items-center gap-2">
                           <Mail className="w-4 h-4" />
                           E-posta
                         </label>
@@ -369,14 +400,14 @@ export default function ServiceRegister() {
                           placeholder="info@firma.com"
                           value={formData.email}
                           onChange={handleChange}
-                          className="bg-neutral-950 border-neutral-800 text-white focus-visible:ring-amber-500 rounded-sm h-11"
+                          className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 rounded-sm h-11"
                         />
                         {errors.email && (
-                          <p className="text-xs text-rose-500">{errors.email}</p>
+                          <p className="text-xs text-red-600">{errors.email}</p>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                        <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs flex items-center gap-2">
                           <Phone className="w-4 h-4" />
                           Telefon
                         </label>
@@ -386,10 +417,10 @@ export default function ServiceRegister() {
                           placeholder="+90 532 123 4567"
                           value={formData.phone}
                           onChange={handleChange}
-                          className="bg-neutral-950 border-neutral-800 text-white focus-visible:ring-amber-500 rounded-sm h-11"
+                          className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 rounded-sm h-11"
                         />
                         {errors.phone && (
-                          <p className="text-xs text-rose-500">{errors.phone}</p>
+                          <p className="text-xs text-red-600">{errors.phone}</p>
                         )}
                       </div>
                     </div>
@@ -397,7 +428,7 @@ export default function ServiceRegister() {
                     {/* City & District */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                        <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs flex items-center gap-2">
                           <MapPin className="w-4 h-4" />
                           Şehir
                         </label>
@@ -408,25 +439,25 @@ export default function ServiceRegister() {
                             if (errors.city) setErrors((prev) => ({ ...prev, city: '' }));
                           }}
                         >
-                          <SelectTrigger className="bg-neutral-950 border-neutral-800 text-white focus:ring-amber-500 rounded-sm h-11">
+                          <SelectTrigger className="bg-slate-50 border-slate-200 text-slate-900 focus:ring-red-600 rounded-sm h-11">
                             <SelectValue placeholder="Şehir seçin" />
                           </SelectTrigger>
-                          <SelectContent className="bg-neutral-900 border-neutral-800 max-h-60">
+                          <SelectContent className="bg-white border-slate-200 max-h-60">
                             {CITIES.map((city) => (
                               <SelectItem
                                 key={city}
                                 value={city}
-                                className="text-white hover:bg-neutral-800"
+                                className="text-slate-900 hover:bg-red-50"
                               >
                                 {city}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        {errors.city && <p className="text-xs text-rose-500">{errors.city}</p>}
+                        {errors.city && <p className="text-xs text-red-600">{errors.city}</p>}
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs">
+                        <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs">
                           İlçe
                         </label>
                         <Input
@@ -434,14 +465,14 @@ export default function ServiceRegister() {
                           placeholder="Merkez"
                           value={formData.district}
                           onChange={handleChange}
-                          className="bg-neutral-950 border-neutral-800 text-white focus-visible:ring-amber-500 rounded-sm h-11"
+                          className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 rounded-sm h-11"
                         />
                       </div>
                     </div>
 
                     {/* Address */}
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs">
+                      <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs">
                         Adres
                       </label>
                       <Input
@@ -449,13 +480,13 @@ export default function ServiceRegister() {
                         placeholder="OSB 1234. Sokak No:56"
                         value={formData.address}
                         onChange={handleChange}
-                        className="bg-neutral-950 border-neutral-800 text-white focus-visible:ring-amber-500 rounded-sm h-11"
+                        className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 rounded-sm h-11"
                       />
                     </div>
 
                     <Button
                       onClick={handleNext}
-                      className="w-full bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold uppercase tracking-wider rounded-sm h-12"
+                      className="w-full bg-red-600 hover:bg-red-700 text-white font-bold uppercase tracking-wider rounded-sm h-12"
                     >
                       Devam Et
                     </Button>
@@ -466,11 +497,11 @@ export default function ServiceRegister() {
                   <div className="space-y-4">
                     {/* Service Categories */}
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs flex items-center gap-2">
+                      <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs flex items-center gap-2">
                         <Wrench className="w-4 h-4" />
                         Hizmet Kategorileri
                       </label>
-                      <p className="text-xs text-neutral-500 mb-2">
+                      <p className="text-xs text-slate-500 mb-2">
                         Sunduğunuz hizmetleri seçin (birden fazla seçebilirsiniz)
                       </p>
                       <div className="grid grid-cols-2 gap-2">
@@ -484,8 +515,8 @@ export default function ServiceRegister() {
                               onClick={() => handleCategoryToggle(category.value)}
                               className={`flex items-center gap-2 p-3 rounded-sm border transition-all text-left ${
                                 isSelected
-                                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
-                                  : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                                  ? 'bg-red-50 border-red-200/50 text-red-600'
+                                  : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-200'
                               }`}
                             >
                               <Icon className="w-4 h-4" />
@@ -495,13 +526,13 @@ export default function ServiceRegister() {
                         })}
                       </div>
                       {errors.categories && (
-                        <p className="text-xs text-rose-500">{errors.categories}</p>
+                        <p className="text-xs text-red-600">{errors.categories}</p>
                       )}
                     </div>
 
                     {/* Password */}
-                    <div className="space-y-2 pt-4 border-t border-neutral-800">
-                      <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs">
+                    <div className="space-y-2 pt-4 border-t border-slate-200">
+                      <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs">
                         Şifre
                       </label>
                       <Input
@@ -510,17 +541,17 @@ export default function ServiceRegister() {
                         placeholder="••••••••"
                         value={formData.password}
                         onChange={handleChange}
-                        className="bg-neutral-950 border-neutral-800 text-white focus-visible:ring-amber-500 rounded-sm h-11"
+                        className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 rounded-sm h-11"
                       />
                       {errors.password && (
-                        <p className="text-xs text-rose-500">{errors.password}</p>
+                        <p className="text-xs text-red-600">{errors.password}</p>
                       )}
-                      <p className="text-xs text-neutral-500">En az 8 karakter olmalıdır</p>
+                      <p className="text-xs text-slate-500">En az 8 karakter olmalıdır</p>
                     </div>
 
                     {/* Confirm Password */}
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-neutral-300 uppercase tracking-wider text-xs">
+                      <label className="text-sm font-medium text-slate-700 uppercase tracking-wider text-xs">
                         Şifre Tekrar
                       </label>
                       <Input
@@ -529,10 +560,10 @@ export default function ServiceRegister() {
                         placeholder="••••••••"
                         value={formData.confirmPassword}
                         onChange={handleChange}
-                        className="bg-neutral-950 border-neutral-800 text-white focus-visible:ring-amber-500 rounded-sm h-11"
+                        className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 rounded-sm h-11"
                       />
                       {errors.confirmPassword && (
-                        <p className="text-xs text-rose-500">{errors.confirmPassword}</p>
+                        <p className="text-xs text-red-600">{errors.confirmPassword}</p>
                       )}
                     </div>
 
@@ -541,13 +572,13 @@ export default function ServiceRegister() {
                       <Button
                         variant="outline"
                         onClick={handleBack}
-                        className="flex-1 bg-transparent border-neutral-700 text-neutral-300 hover:bg-neutral-800 rounded-sm h-12"
+                        className="flex-1 bg-transparent border-slate-200 text-slate-700 hover:bg-red-50 rounded-sm h-12"
                       >
                         Geri
                       </Button>
                       <Button
                         onClick={handleNext}
-                        className="flex-1 bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold uppercase tracking-wider rounded-sm h-12"
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold uppercase tracking-wider rounded-sm h-12"
                       >
                         Devam Et
                       </Button>
@@ -558,11 +589,11 @@ export default function ServiceRegister() {
                 {step === 3 && (
                   <form onSubmit={handleSubmit} className="space-y-4">
                     {/* Info Banner */}
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-sm p-4 flex items-start gap-3">
-                      <Info className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div className="bg-red-50 border border-red-200/20 rounded-sm p-4 flex items-start gap-3">
+                      <Info className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-sm text-amber-400 font-medium">Gerekli Belgeler</p>
-                        <p className="text-xs text-neutral-400 mt-1">
+                        <p className="text-sm text-red-600 font-medium">Gerekli Belgeler</p>
+                        <p className="text-xs text-slate-400 mt-1">
                           Başvurunuzun onaylanması için aşağıdaki belgeleri yüklemeniz gerekmektedir.
                           Belgeler inceleme süreci 2-3 iş günü sürebilir.
                         </p>
@@ -577,7 +608,7 @@ export default function ServiceRegister() {
                         description="Güncel vergi levhası fotokopisi"
                         required
                         file={uploadedFiles.taxCertificate}
-                        onSelect={() => handleFileSelect('taxCertificate')}
+                        onSelect={(file) => handleFileSelect('taxCertificate', file)}
                         onRemove={() => removeFile('taxCertificate')}
                         error={errors.taxCertificate}
                       />
@@ -588,7 +619,7 @@ export default function ServiceRegister() {
                         description="Mesleki sorumluluk sigortası"
                         required
                         file={uploadedFiles.insurance}
-                        onSelect={() => handleFileSelect('insurance')}
+                        onSelect={(file) => handleFileSelect('insurance', file)}
                         onRemove={() => removeFile('insurance')}
                         error={errors.insurance}
                       />
@@ -599,7 +630,7 @@ export default function ServiceRegister() {
                         description="Yetki belgesi / Teknik lisans"
                         required
                         file={uploadedFiles.technicalLicense}
-                        onSelect={() => handleFileSelect('technicalLicense')}
+                        onSelect={(file) => handleFileSelect('technicalLicense', file)}
                         onRemove={() => removeFile('technicalLicense')}
                         error={errors.technicalLicense}
                       />
@@ -609,13 +640,13 @@ export default function ServiceRegister() {
                         label="ISO Sertifikası (İsteğe Bağlı)"
                         description="ISO 9001 vb. kalite sertifikaları"
                         file={uploadedFiles.isoCertificate}
-                        onSelect={() => handleFileSelect('isoCertificate')}
+                        onSelect={(file) => handleFileSelect('isoCertificate', file)}
                         onRemove={() => removeFile('isoCertificate')}
                       />
                     </div>
 
                     {/* Terms Checkbox */}
-                    <div className="space-y-2 pt-4 border-t border-neutral-800">
+                    <div className="space-y-2 pt-4 border-t border-slate-200">
                       <div className="flex items-start gap-2">
                         <Checkbox
                           id="terms"
@@ -626,15 +657,15 @@ export default function ServiceRegister() {
                               setErrors((prev) => ({ ...prev, terms: '' }));
                             }
                           }}
-                          className="mt-1 border-neutral-700 data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                          className="mt-1 border-slate-200 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-200"
                         />
-                        <label htmlFor="terms" className="text-sm text-neutral-400 leading-tight cursor-pointer">
-                          <span className="text-neutral-200 font-medium">Servis Sağlayıcı Sözleşmesi</span> ve{' '}
-                          <span className="text-neutral-200 font-medium">Gizlilik Politikası</span>&apos;nı okudum ve
+                        <label htmlFor="terms" className="text-sm text-slate-400 leading-tight cursor-pointer">
+                          <span className="text-slate-900 font-medium">Servis Sağlayıcı Sözleşmesi</span> ve{' '}
+                          <span className="text-slate-900 font-medium">Gizlilik Politikası</span>&apos;nı okudum ve
                           kabul ediyorum. Sağladığım bilgilerin doğruluğunu onaylıyorum.
                         </label>
                       </div>
-                      {errors.terms && <p className="text-xs text-rose-500">{errors.terms}</p>}
+                      {errors.terms && <p className="text-xs text-red-600">{errors.terms}</p>}
                     </div>
 
                     {/* Navigation Buttons */}
@@ -643,17 +674,19 @@ export default function ServiceRegister() {
                         type="button"
                         variant="outline"
                         onClick={handleBack}
-                        className="flex-1 bg-transparent border-neutral-700 text-neutral-300 hover:bg-neutral-800 rounded-sm h-12"
+                        className="flex-1 bg-transparent border-slate-200 text-slate-700 hover:bg-red-50 rounded-sm h-12"
                       >
                         Geri
                       </Button>
                       <Button
                         type="submit"
-                        className="flex-1 bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold uppercase tracking-wider rounded-sm h-12"
+                        disabled={isSubmitting}
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold uppercase tracking-wider rounded-sm h-12"
                       >
-                        Başvuruyu Gönder
+                        {isSubmitting ? 'Gönderiliyor...' : 'Başvuruyu Gönder'}
                       </Button>
                     </div>
+                    {errors.submit && <p className="text-xs text-red-600 text-center">{errors.submit}</p>}
                   </form>
                 )}
               </CardContent>
@@ -671,7 +704,7 @@ interface DocumentUploadZoneProps {
   description: string;
   required?: boolean;
   file: UploadedFile | null;
-  onSelect: () => void;
+  onSelect: (file: File) => void;
   onRemove: () => void;
   error?: string;
 }
@@ -685,52 +718,105 @@ function DocumentUploadZone({
   onRemove,
   error,
 }: DocumentUploadZoneProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
-    <div className={`border rounded-sm p-4 ${error ? 'border-rose-500/50' : 'border-neutral-800'}`}>
+    <div className={`border rounded-sm p-4 ${error ? 'border-red-200/50' : 'border-slate-200'}`}>
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 bg-neutral-800 rounded-sm flex items-center justify-center flex-shrink-0">
-            <FileText className="w-5 h-5 text-neutral-400" />
+          <div className="w-10 h-10 bg-slate-50 rounded-sm flex items-center justify-center flex-shrink-0">
+            <FileText className="w-5 h-5 text-slate-400" />
           </div>
           <div>
-            <p className="text-sm font-medium text-neutral-200 flex items-center gap-2">
+            <p className="text-sm font-medium text-slate-900 flex items-center gap-2">
               {label}
-              {required && <span className="text-rose-500 text-xs">* Zorunlu</span>}
+              {required && <span className="text-red-600 text-xs">* Zorunlu</span>}
             </p>
-            <p className="text-xs text-neutral-500">{description}</p>
+            <p className="text-xs text-slate-500">{description}</p>
           </div>
         </div>
       </div>
 
       {file ? (
-        <div className="mt-3 bg-emerald-500/10 border border-emerald-500/30 rounded-sm p-3 flex items-center justify-between">
+        <div className="mt-3 bg-red-50 border border-red-200/30 rounded-sm p-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            <span className="text-sm text-emerald-400">{file.name}</span>
-            <span className="text-xs text-neutral-500">({file.size})</span>
+            <CheckCircle2 className="w-4 h-4 text-red-600" />
+            <span className="text-sm text-red-600">{file.name}</span>
+            <span className="text-xs text-slate-500">({file.size})</span>
           </div>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={onRemove}
-            className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 h-7 px-2"
+            className="text-red-600 hover:text-red-300 hover:bg-red-50 h-7 px-2"
           >
             Kaldır
           </Button>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={onSelect}
-          className="mt-3 w-full border-2 border-dashed border-neutral-700 hover:border-amber-500/50 rounded-sm p-4 flex flex-col items-center justify-center gap-2 transition-colors"
-        >
-          <Upload className="w-5 h-5 text-neutral-500" />
-          <span className="text-sm text-neutral-400">Yüklemek için tıklayın</span>
-          <span className="text-xs text-neutral-600">PDF, JPG, PNG (max 10MB)</span>
-        </button>
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf,image/jpeg,image/png"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onSelect(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="mt-3 w-full border-2 border-dashed border-slate-200 hover:border-red-200/50 rounded-sm p-4 flex flex-col items-center justify-center gap-2 transition-colors"
+          >
+            <Upload className="w-5 h-5 text-slate-500" />
+            <span className="text-sm text-slate-400">Yüklemek için tıklayın</span>
+            <span className="text-xs text-slate-600">PDF, JPG, PNG (max 10MB)</span>
+          </button>
+        </>
       )}
-      {error && <p className="text-xs text-rose-500 mt-2">{error}</p>}
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
     </div>
   );
+}
+
+function toBackendSpecialty(value: string) {
+  const map: Record<string, string> = {
+    electric: 'Electric',
+    mechanic: 'Mechanic',
+    pneumatic: 'Pneumatic',
+    hydraulic: 'Hydraulic',
+    software: 'Software',
+    general: 'General',
+    hvac: 'General',
+  };
+  return map[value] ?? 'General';
+}
+
+function documentLabel(value: string) {
+  const map: Record<string, string> = {
+    taxCertificate: 'Vergi Levhası',
+    insurance: 'Sigorta Belgesi',
+    technicalLicense: 'Teknik Lisans',
+    isoCertificate: 'ISO Sertifikası',
+  };
+  return map[value] ?? value;
+}
+
+async function uploadProviderDocument(providerId: string, docType: string, uploadedFile: UploadedFile) {
+  const formData = new FormData();
+  formData.append('file', uploadedFile.file);
+  formData.append('type', documentLabel(docType));
+  formData.append('providerId', providerId);
+  await api.upload('/uploads/provider-documents', formData);
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }

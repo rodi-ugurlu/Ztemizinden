@@ -18,7 +18,7 @@ export default function AdminLogin() {
   const [password, setPassword] = useState('');
   const [step, setStep] = useState<1 | 2>(1);
   const [token, setToken] = useState('');
-  const login = useAuthStore((state) => state.login);
+  const { loginWithPassword, isLoading, error } = useAuthStore();
   const navigate = useNavigate();
 
   const handleCredentials = (e: React.FormEvent) => {
@@ -26,21 +26,24 @@ export default function AdminLogin() {
     setStep(2); // Move to 2FA step
   };
 
-  const handle2FA = (e: React.FormEvent) => {
+  const handle2FA = async (e: React.FormEvent) => {
     e.preventDefault();
-    login('admin', { email });
-    navigate('/admin/dashboard');
+    try {
+      await loginWithPassword('admin', email, password);
+      navigate(dashboardPathForEmail(email, 'admin'));
+    } catch {
+      // Store error is rendered below the form.
+    }
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden text-slate-300 font-sans">
+    <div className="min-h-screen w-full bg-slate-50 flex flex-col items-center justify-center p-4 relative overflow-hidden text-slate-700 font-sans">
       
       {/* Background Tech Elements */}
-      <div className="absolute inset-0 z-0 pointer-events-none opacity-20">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/40 via-slate-950 to-slate-950"></div>
-        <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950"></div>
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-40">
+        <div className="absolute inset-0 bg-red-50"></div>
         {/* Fake grid/data lines */}
-        <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+        <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(220,38,38,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(220,38,38,0.08) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
       </div>
 
       <div className="w-full max-w-5xl z-10 grid grid-cols-1 lg:grid-cols-5 gap-8 items-center">
@@ -48,50 +51,50 @@ export default function AdminLogin() {
         {/* Left Side - Info Panel */}
         <div className="lg:col-span-2 hidden lg:flex flex-col gap-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center shadow-[0_0_15px_rgba(79,70,229,0.5)]">
+            <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center shadow-[0_0_15px_rgba(79,70,229,0.5)]">
               <Activity className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">OPS CENTER</h2>
-              <p className="text-xs text-indigo-400 font-mono tracking-widest uppercase">System Control</p>
+              <h2 className="text-xl font-bold text-slate-900 tracking-tight">OPS MERKEZİ</h2>
+              <p className="text-xs text-red-600 font-mono tracking-widest uppercase">Sistem Kontrol</p>
             </div>
           </div>
 
-          <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-5 backdrop-blur-sm shadow-xl">
-            <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" /> Security Status
+          <div className="bg-white/50 border border-slate-200 rounded-lg p-5 backdrop-blur-sm shadow-xl">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-red-600" /> Güvenlik Durumu
             </h3>
             <div className="space-y-3 font-mono text-xs text-slate-400">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                <span>Encryption</span>
-                <span className="text-emerald-500">AES-256 Active</span>
+              <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                <span>Şifreleme</span>
+                <span className="text-red-600">AES-256 Aktif</span>
               </div>
-              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                <span>Network</span>
-                <span className="text-emerald-500">Secure/Private</span>
+              <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                <span>Ağ</span>
+                <span className="text-red-600">Güvenli/Özel</span>
               </div>
               <div className="flex justify-between items-center">
-                <span>Access Logs</span>
-                <span className="text-blue-400">Monitoring</span>
+                <span>Erişim Logları</span>
+                <span className="text-red-600">İzleniyor</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-5 backdrop-blur-sm shadow-xl">
-             <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
-              <Database className="w-4 h-4 text-blue-500" /> System Metrics
+          <div className="bg-white/50 border border-slate-200 rounded-lg p-5 backdrop-blur-sm shadow-xl">
+             <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <Database className="w-4 h-4 text-red-600" /> Sistem Metrikleri
             </h3>
             <div className="space-y-4">
               <div>
-                <div className="flex justify-between text-xs mb-1 font-mono"><span>Cluster Alpha</span> <span className="text-slate-300">98%</span></div>
-                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 w-[98%]"></div>
+                <div className="flex justify-between text-xs mb-1 font-mono"><span>Sunucu Kümesi</span> <span className="text-slate-700">98%</span></div>
+                <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
+                  <div className="h-full bg-red-500 w-[98%]"></div>
                 </div>
               </div>
               <div>
-                <div className="flex justify-between text-xs mb-1 font-mono"><span>API Gateway</span> <span className="text-slate-300">42ms</span></div>
-                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 w-[20%]"></div>
+                <div className="flex justify-between text-xs mb-1 font-mono"><span>API Gateway</span> <span className="text-slate-700">42ms</span></div>
+                <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
+                  <div className="h-full bg-red-500 w-[20%]"></div>
                 </div>
               </div>
             </div>
@@ -100,14 +103,14 @@ export default function AdminLogin() {
 
         {/* Right Side - Login Form */}
         <div className="lg:col-span-3 flex justify-center">
-          <Card className="w-full max-w-md bg-slate-900/80 border-slate-800 backdrop-blur-md shadow-2xl rounded-xl">
+          <Card className="w-full max-w-md bg-white/80 border-slate-200 backdrop-blur-md shadow-2xl rounded-xl">
             <CardHeader className="space-y-1 pt-8 px-8">
-              <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center mb-4 border border-slate-700">
-                <Lock className="w-6 h-6 text-indigo-400" />
+              <div className="w-12 h-12 bg-slate-50 rounded-lg flex items-center justify-center mb-4 border border-slate-200">
+                <Lock className="w-6 h-6 text-red-600" />
               </div>
-              <CardTitle className="text-2xl font-semibold text-white tracking-tight">Administrative Access</CardTitle>
+              <CardTitle className="text-2xl font-semibold text-slate-900 tracking-tight">Yönetici Erişimi</CardTitle>
               <CardDescription className="text-slate-400">
-                Authenticate to access the operations center.
+                Operasyon merkezine erişmek için kimlik doğrulaması yapın.
               </CardDescription>
             </CardHeader>
             <CardContent className="px-8 pb-8">
@@ -115,71 +118,72 @@ export default function AdminLogin() {
                 <form onSubmit={handleCredentials} className="space-y-5">
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Corporate Email
+                      Kurumsal E-posta
                     </label>
                     <Input 
                       type="email" 
                       required 
-                      className="bg-slate-950 border-slate-800 text-slate-100 focus-visible:ring-indigo-500 h-11"
-                      placeholder="admin@corp.com"
+                      className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 h-11"
+                      placeholder="admin@demo.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Password
+                      Şifre
                     </label>
                     <Input 
                       type="password" 
                       required 
-                      className="bg-slate-950 border-slate-800 text-slate-100 focus-visible:ring-indigo-500 h-11"
+                      className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 h-11"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
-                  <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white h-11 mt-4">
-                    Verify Credentials
+                  <Button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white h-11 mt-4">
+                    Kimlik Doğrula
                   </Button>
                 </form>
               ) : (
                 <form onSubmit={handle2FA} className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div className="flex items-center gap-4 mb-6 p-4 bg-indigo-950/30 border border-indigo-900/50 rounded-lg">
-                    <Fingerprint className="w-8 h-8 text-indigo-400 flex-shrink-0" />
+                  <div className="flex items-center gap-4 mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <Fingerprint className="w-8 h-8 text-red-600 flex-shrink-0" />
                     <div>
-                      <h4 className="text-sm font-medium text-slate-200">Two-Factor Authentication</h4>
-                      <p className="text-xs text-slate-400">Enter the 6-digit code from your authenticator app.</p>
+                      <h4 className="text-sm font-medium text-slate-900">İki Faktörlü Doğrulama</h4>
+                      <p className="text-xs text-slate-400">Doğrulayıcı uygulamanızdaki 6 haneli kodu girin.</p>
                     </div>
                   </div>
                   
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Security Token
+                      Güvenlik Kodu
                     </label>
                     <Input 
                       type="text" 
                       required 
                       maxLength={6}
-                      className="bg-slate-950 border-slate-800 text-center text-2xl tracking-[0.5em] text-slate-100 focus-visible:ring-indigo-500 h-14 font-mono"
+                      className="bg-slate-50 border-slate-200 text-center text-2xl tracking-[0.5em] text-slate-900 focus-visible:ring-red-600 h-14 font-mono"
                       placeholder="••••••"
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
                     />
                   </div>
                   <div className="flex gap-3 mt-6">
-                    <Button type="button" variant="outline" className="flex-1 bg-transparent border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white" onClick={() => setStep(1)}>
-                      Back
+                    <Button type="button" variant="outline" className="flex-1 bg-transparent border-slate-200 text-slate-700 hover:bg-red-50 hover:text-red-600" onClick={() => setStep(1)}>
+                      Geri
                     </Button>
-                    <Button type="submit" className="flex-[2] bg-indigo-600 hover:bg-indigo-500 text-white h-11">
-                      Authorize
+                    <Button type="submit" className="flex-[2] bg-red-600 hover:bg-red-700 text-white h-11">
+                      {isLoading ? 'Giriş yapılıyor...' : 'Yetkilendir'}
                     </Button>
                   </div>
                 </form>
               )}
+              {error && <p className="mt-3 text-sm text-red-600 text-center">{error}</p>}
             </CardContent>
-            <CardFooter className="px-8 pb-8 pt-0 border-t border-slate-800/50 mt-4 flex justify-between items-center text-xs text-slate-500">
-              <span>Restricted System.</span>
-              <a href="#" className="hover:text-slate-300 transition-colors">IT Support</a>
+            <CardFooter className="px-8 pb-8 pt-0 border-t border-slate-200/50 mt-4 flex justify-between items-center text-xs text-slate-500">
+              <span>Yetkili Erişim Gerekli</span>
+              <a href="#" className="hover:text-red-600 transition-colors">BT Destek</a>
             </CardFooter>
           </Card>
         </div>
@@ -187,4 +191,14 @@ export default function AdminLogin() {
       </div>
     </div>
   );
+}
+
+function dashboardPathForEmail(email: string, fallbackRole: 'customer' | 'service' | 'admin') {
+  const roleByEmail: Record<string, 'customer' | 'service' | 'admin'> = {
+    'customer@demo.com': 'customer',
+    'service@demo.com': 'service',
+    'admin@demo.com': 'admin',
+  };
+  const role = roleByEmail[email.trim().toLowerCase()] ?? fallbackRole;
+  return `/${role}/dashboard`;
 }

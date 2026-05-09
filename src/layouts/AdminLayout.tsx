@@ -1,13 +1,12 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
-import { Activity, LogOut, BarChart3, Users, Settings, AlertTriangle } from 'lucide-react';
+import { Activity, LogOut, BarChart3, Users } from 'lucide-react';
 
 /**
  * AdminLayout Component
  *
- * Data-heavy, dense, analytical design for operations center.
- * Dark theme with indigo accents - professional and security-focused.
+ * Standard white and red portal shell for operations.
  */
 export default function AdminLayout() {
   const { isAuthenticated, logout, user } = useAuthStore();
@@ -19,25 +18,25 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col text-slate-200">
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center shadow-indigo-500/30 shadow-sm">
+    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900">
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sticky top-0 z-50 shadow-sm">
+        <div className="flex items-center gap-3 w-full lg:w-auto">
+          <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center shadow-sm">
             <Activity className="w-4 h-4 text-white" />
           </div>
           <div>
-            <span className="font-semibold text-slate-100 text-sm tracking-wide">Temizinden <span className="text-slate-500 font-normal">OPS MERKEZİ</span></span>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Sistem Yönetimi</p>
+            <span className="font-bold text-slate-900 text-lg tracking-tight">Temizinden</span>
+            <p className="text-xs text-slate-500">Operasyon Portalı</p>
           </div>
         </div>
 
         {isAuthenticated && (
-          <nav className="flex items-center gap-6">
+          <nav className="w-full lg:w-auto flex items-center gap-3 sm:gap-6 overflow-x-auto pb-1 lg:pb-0">
             <NavLink
               to="/admin/dashboard"
               className={({ isActive }) =>
                 `flex items-center gap-2 text-xs font-medium transition-colors uppercase tracking-wider ${
-                  isActive ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
+                  isActive ? 'text-red-600' : 'text-slate-600 hover:text-slate-900'
                 }`
               }
             >
@@ -47,7 +46,7 @@ export default function AdminLayout() {
               to="/admin/providers"
               className={({ isActive }) =>
                 `flex items-center gap-2 text-xs font-medium transition-colors uppercase tracking-wider ${
-                  isActive ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
+                  isActive ? 'text-red-600' : 'text-slate-600 hover:text-slate-900'
                 }`
               }
             >
@@ -57,19 +56,19 @@ export default function AdminLayout() {
               to="/admin/dispatch"
               className={({ isActive }) =>
                 `flex items-center gap-2 text-xs font-medium transition-colors uppercase tracking-wider ${
-                  isActive ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
+                  isActive ? 'text-red-600' : 'text-slate-600 hover:text-slate-900'
                 }`
               }
             >
               <Activity className="w-4 h-4" /> Sevk
             </NavLink>
 
-            <div className="flex items-center gap-4 ml-4 border-l border-slate-800 pl-6">
-              <div className="text-right">
-                <p className="text-xs font-medium text-slate-200">{user?.name}</p>
-                <p className="text-[10px] text-slate-500 uppercase">{user?.role}</p>
+            <div className="flex items-center gap-2 sm:gap-4 ml-auto lg:ml-4 border-l border-slate-200 pl-3 sm:pl-6">
+              <div className="hidden md:block text-right">
+                <p className="text-sm font-medium text-slate-900">{user?.name}</p>
+                <p className="text-xs text-slate-500">{user?.email}</p>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-400 hover:text-white">
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-500 hover:text-slate-900 shrink-0">
                 <LogOut className="w-4 h-4" />
               </Button>
             </div>
@@ -77,7 +76,7 @@ export default function AdminLayout() {
         )}
 
         {!isAuthenticated && (
-          <nav className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+          <nav className="text-sm font-medium text-slate-600">
             Sistem Yöneticisi
           </nav>
         )}
@@ -87,8 +86,8 @@ export default function AdminLayout() {
         <Outlet />
       </main>
 
-      <footer className="bg-slate-900 border-t border-slate-800 px-6 py-2 text-center text-[10px] text-slate-500 uppercase tracking-wider">
-        Kısıtlı Sistem | Yetkili Personel | Temizinden OPS MERKEZİ
+      <footer className="bg-white border-t border-slate-200 px-6 py-4 text-center text-sm text-slate-500">
+        © 2026 Temizinden. Tüm hakları saklıdır.
       </footer>
     </div>
   );

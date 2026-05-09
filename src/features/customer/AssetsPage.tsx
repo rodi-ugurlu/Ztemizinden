@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,18 +29,17 @@ import {
   type AssetType,
   type AssetStatus,
 } from '@/store/useCustomerStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import {
   Plus,
   Search,
   Building2,
   Home,
-  Briefcase,
   Wrench,
   CheckCircle2,
   AlertCircle,
   ArrowRight,
   Package,
-  Calendar,
   Tag,
   Factory,
 } from 'lucide-react';
@@ -52,11 +51,18 @@ import {
  * Displays all registered assets with filtering and add functionality.
  */
 export default function AssetsPage() {
-  const { assets, addAsset } = useCustomerStore();
+  const { assets, addAsset, fetchAssets } = useCustomerStore();
+  const user = useAuthStore((state) => state.user);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<AssetType | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<AssetStatus | 'all'>('all');
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchAssets(user.id);
+    }
+  }, [fetchAssets, user?.id]);
 
   // Filter assets
   const filteredAssets = assets.filter((asset) => {
@@ -74,22 +80,22 @@ export default function AssetsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Asset Registry</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Varlık Ağacı</h1>
           <p className="text-slate-500 mt-1">
-            Manage your equipment and facilities in one place
+            Ekipman ve tesislerinizi tek yerden yönetin
           </p>
         </div>
         <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
           <SheetTrigger asChild>
             <Button className="bg-red-600 hover:bg-red-700">
               <Plus className="w-4 h-4 mr-2" />
-              Register New Asset
+              Yeni Varlık Ekle
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
             <NewAssetForm
               onSubmit={(asset) => {
-                addAsset(asset);
+                addAsset({ ...asset, ownerId: user?.id });
                 setIsSheetOpen(false);
               }}
               onCancel={() => setIsSheetOpen(false)}
@@ -105,7 +111,7 @@ export default function AssetsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Search by name, tag number, or brand..."
+                placeholder="İsim, etiket numarası veya marka ile arayın..."
                 className="pl-10"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -117,13 +123,13 @@ export default function AssetsPage() {
                 onValueChange={(v) => setFilterType(v as AssetType | 'all')}
               >
                 <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Filter by type" />
+                  <SelectValue placeholder="Tipe göre filtrele" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="Facility">Facility</SelectItem>
-                  <SelectItem value="SME">SME</SelectItem>
-                  <SelectItem value="Home">Home</SelectItem>
+                  <SelectItem value="all">Tüm Tipler</SelectItem>
+                  <SelectItem value="Facility">Tesis</SelectItem>
+                  <SelectItem value="SME">KOBİ</SelectItem>
+                  <SelectItem value="Home">Ev</SelectItem>
                 </SelectContent>
               </Select>
               <Select
@@ -131,13 +137,13 @@ export default function AssetsPage() {
                 onValueChange={(v) => setFilterStatus(v as AssetStatus | 'all')}
               >
                 <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Filter by status" />
+                  <SelectValue placeholder="Duruma göre filtrele" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Under Maintenance">Under Maintenance</SelectItem>
-                  <SelectItem value="Inactive">Inactive</SelectItem>
+                  <SelectItem value="all">Tüm Durumlar</SelectItem>
+                  <SelectItem value="Active">Aktif</SelectItem>
+                  <SelectItem value="Under Maintenance">Bakımda</SelectItem>
+                  <SelectItem value="Inactive">Pasif</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -153,9 +159,9 @@ export default function AssetsPage() {
         {filteredAssets.length === 0 && (
           <div className="col-span-full text-center py-16">
             <Package className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-slate-700">No assets found</h3>
+            <h3 className="text-lg font-medium text-slate-700">Varlık bulunamadı</h3>
             <p className="text-slate-500 mt-1">
-              Try adjusting your filters or register a new asset
+              Filtreleri değiştirin veya yeni bir varlık ekleyin
             </p>
           </div>
         )}
@@ -201,7 +207,7 @@ function AssetCard({ asset }: { asset: Asset }) {
             </div>
           </div>
           <Badge variant="secondary" className={statusColor}>
-            {asset.status}
+            {asset.status === 'Active' ? 'Aktif' : asset.status === 'Under Maintenance' ? 'Bakımda' : asset.status === 'Inactive' ? 'Pasif' : asset.status}
           </Badge>
         </div>
       </CardHeader>
@@ -209,7 +215,7 @@ function AssetCard({ asset }: { asset: Asset }) {
         {/* Asset Details */}
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-slate-500 text-xs uppercase tracking-wider">Brand</p>
+            <p className="text-slate-500 text-xs uppercase tracking-wider">Marka</p>
             <p className="font-medium text-slate-700">{asset.brand}</p>
           </div>
           <div>
@@ -217,12 +223,12 @@ function AssetCard({ asset }: { asset: Asset }) {
             <p className="font-medium text-slate-700">{asset.model}</p>
           </div>
           <div>
-            <p className="text-slate-500 text-xs uppercase tracking-wider">Serial Number</p>
+            <p className="text-slate-500 text-xs uppercase tracking-wider">Seri No</p>
             <p className="font-medium text-slate-700 font-mono text-xs">{asset.serialNumber}</p>
           </div>
           <div>
-            <p className="text-slate-500 text-xs uppercase tracking-wider">Type</p>
-            <p className="font-medium text-slate-700">{asset.type}</p>
+            <p className="text-slate-500 text-xs uppercase tracking-wider">Tip</p>
+            <p className="font-medium text-slate-700">{asset.type === 'Facility' ? 'Tesis' : asset.type === 'SME' ? 'KOBİ' : 'Ev'}</p>
           </div>
         </div>
 
@@ -230,7 +236,7 @@ function AssetCard({ asset }: { asset: Asset }) {
         <div
           className={`p-3 rounded-lg border ${
             isWarrantyExpired
-              ? 'bg-rose-50 border-rose-200'
+              ? 'bg-red-50 border-red-200'
               : isWarrantyExpiring
               ? 'bg-amber-50 border-amber-200'
               : 'bg-emerald-50 border-emerald-200'
@@ -238,7 +244,7 @@ function AssetCard({ asset }: { asset: Asset }) {
         >
           <div className="flex items-center gap-2">
             {isWarrantyExpired ? (
-              <AlertCircle className="w-4 h-4 text-rose-600" />
+              <AlertCircle className="w-4 h-4 text-red-600" />
             ) : isWarrantyExpiring ? (
               <AlertCircle className="w-4 h-4 text-amber-600" />
             ) : (
@@ -247,21 +253,21 @@ function AssetCard({ asset }: { asset: Asset }) {
             <span
               className={`text-sm font-medium ${
                 isWarrantyExpired
-                  ? 'text-rose-700'
+                  ? 'text-red-700'
                   : isWarrantyExpiring
                   ? 'text-amber-700'
                   : 'text-emerald-700'
               }`}
             >
               {isWarrantyExpired
-                ? 'Warranty Expired'
+                ? 'Garanti Süresi Doldu'
                 : isWarrantyExpiring
-                ? `Warranty expires in ${warrantyDaysLeft} days`
-                : 'Under Warranty'}
+                ? `Garantinin bitmesine ${warrantyDaysLeft} gün`
+                : 'Garanti Kapsamında'}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Until {new Date(asset.warrantyEndDate).toLocaleDateString()}
+            Bitiş: {new Date(asset.warrantyEndDate).toLocaleDateString('tr-TR')}
           </p>
         </div>
 
@@ -281,11 +287,11 @@ function AssetCard({ asset }: { asset: Asset }) {
           <Link to={`/customer/tickets/create?assetId=${asset.id}`} className="flex-1">
             <Button variant="outline" className="w-full" size="sm">
               <Wrench className="w-4 h-4 mr-2" />
-              Service Request
+              Arıza Bildir
             </Button>
           </Link>
           <Button variant="ghost" size="sm" className="text-red-600">
-            Details <ArrowRight className="w-4 h-4 ml-1" />
+            Detay <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
       </CardContent>
@@ -340,9 +346,9 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <SheetHeader>
-        <SheetTitle>Register New Asset</SheetTitle>
+        <SheetTitle>Yeni Varlık Ekle</SheetTitle>
         <SheetDescription>
-          Add a new equipment or facility to your asset registry
+          Varlık ağacınıza yeni bir ekipman veya tesis ekleyin
         </SheetDescription>
       </SheetHeader>
 
@@ -350,7 +356,7 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
         {/* Asset Type */}
         <div className="space-y-2">
           <Label htmlFor="type">
-            Asset Type <span className="text-rose-500">*</span>
+            Varlık Tipi <span className="text-red-600">*</span>
           </Label>
           <Select
             value={formData.type}
@@ -358,25 +364,25 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
             required
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select asset type" />
+              <SelectValue placeholder="Varlık tipini seçin" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Facility">
                 <div className="flex items-center gap-2">
                   <Factory className="w-4 h-4" />
-                  Facility - Industrial equipment, HVAC, compressors
+                  Tesis - Endüstriyel ekipman, HVAC, kompresör
                 </div>
               </SelectItem>
               <SelectItem value="SME">
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4" />
-                  SME - Small business machinery
+                  KOBİ - Küçük işletme makineleri
                 </div>
               </SelectItem>
               <SelectItem value="Home">
                 <div className="flex items-center gap-2">
                   <Home className="w-4 h-4" />
-                  Home - Residential equipment
+                  Ev - Konut ekipmanları
                 </div>
               </SelectItem>
             </SelectContent>
@@ -386,11 +392,11 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
         {/* Asset Name */}
         <div className="space-y-2">
           <Label htmlFor="name">
-            Asset Name <span className="text-rose-500">*</span>
+            Varlık Adı <span className="text-red-600">*</span>
           </Label>
           <Input
             id="name"
-            placeholder="e.g., Industrial Air Compressor"
+            placeholder="Örn: Endüstriyel Hava Kompresörü"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             required
@@ -400,25 +406,25 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
         {/* Tag Number */}
         <div className="space-y-2">
           <Label htmlFor="tagNo">
-            Tag Number <span className="text-rose-500">*</span>
+            Etiket Numarası <span className="text-red-600">*</span>
           </Label>
           <Input
             id="tagNo"
-            placeholder="e.g., FAC-COMP-001"
+            placeholder="Örn: FAC-COMP-001"
             value={formData.tagNo}
             onChange={(e) => setFormData({ ...formData, tagNo: e.target.value })}
             required
           />
-          <p className="text-xs text-slate-500">Unique identifier for tracking</p>
+          <p className="text-xs text-slate-500">Takip için benzersiz tanımlayıcı</p>
         </div>
 
         {/* Brand & Model */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="brand">Brand / Manufacturer</Label>
+            <Label htmlFor="brand">Marka / Üretici</Label>
             <Input
               id="brand"
-              placeholder="e.g., Atlas Copco"
+              placeholder="Örn: Atlas Copco"
               value={formData.brand}
               onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
             />
@@ -427,7 +433,7 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
             <Label htmlFor="model">Model</Label>
             <Input
               id="model"
-              placeholder="e.g., GA 160 VSD+"
+              placeholder="Örn: GA 160 VSD+"
               value={formData.model}
               onChange={(e) => setFormData({ ...formData, model: e.target.value })}
             />
@@ -436,10 +442,10 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
 
         {/* Serial Number */}
         <div className="space-y-2">
-          <Label htmlFor="serialNumber">Serial Number</Label>
+          <Label htmlFor="serialNumber">Seri Numarası</Label>
           <Input
             id="serialNumber"
-            placeholder="Serial number from manufacturer plate"
+            placeholder="Üretici plakasındaki seri numarası"
             value={formData.serialNumber}
             onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
           />
@@ -448,7 +454,7 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
         {/* Purchase & Warranty Dates */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="purchaseDate">Purchase Date</Label>
+            <Label htmlFor="purchaseDate">Satın Alma Tarihi</Label>
             <Input
               id="purchaseDate"
               type="date"
@@ -457,7 +463,7 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="warrantyEndDate">Warranty End Date</Label>
+            <Label htmlFor="warrantyEndDate">Garanti Bitiş Tarihi</Label>
             <Input
               id="warrantyEndDate"
               type="date"
@@ -470,19 +476,19 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
         {/* Location */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="location">Location</Label>
+            <Label htmlFor="location">Konum</Label>
             <Input
               id="location"
-              placeholder="e.g., Production Hall A"
+              placeholder="Örn: Üretim Holu A"
               value={formData.location}
               onChange={(e) => setFormData({ ...formData, location: e.target.value })}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="department">Department</Label>
+            <Label htmlFor="department">Departman</Label>
             <Input
               id="department"
-              placeholder="e.g., Manufacturing"
+              placeholder="Örn: Üretim"
               value={formData.department}
               onChange={(e) => setFormData({ ...formData, department: e.target.value })}
             />
@@ -491,10 +497,10 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
 
         {/* Description */}
         <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description">Açıklama</Label>
           <Textarea
             id="description"
-            placeholder="Brief description of the asset and its purpose..."
+            placeholder="Varlığın kısa açıklaması ve kullanım amacı..."
             rows={3}
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -505,7 +511,7 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
       <SheetFooter className="flex-col-reverse sm:flex-row gap-3 pt-4 border-t">
         <SheetClose asChild>
           <Button type="button" variant="outline" onClick={onCancel} className="w-full sm:w-auto">
-            Cancel
+            İptal
           </Button>
         </SheetClose>
         <Button
@@ -514,7 +520,7 @@ function NewAssetForm({ onSubmit, onCancel }: NewAssetFormProps) {
           disabled={!formData.name || !formData.tagNo || !formData.type}
         >
           <Plus className="w-4 h-4 mr-2" />
-          Register Asset
+          Varlık Ekle
         </Button>
       </SheetFooter>
     </form>

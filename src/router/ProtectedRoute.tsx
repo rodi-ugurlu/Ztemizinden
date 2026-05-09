@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuthStore, type UserRole } from '@/store/useAuthStore';
+import { resolveDemoRole, useAuthStore, type UserRole } from '@/store/useAuthStore';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -14,8 +14,9 @@ interface ProtectedRouteProps {
  * - Redirects authenticated users with wrong role to their correct portal
  */
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { isAuthenticated, role } = useAuthStore();
+  const { isAuthenticated, role, user } = useAuthStore();
   const location = useLocation();
+  const effectiveRole = resolveDemoRole(user?.email) ?? role;
 
   if (!isAuthenticated) {
     // Redirect to the appropriate login page based on the required role
@@ -24,8 +25,8 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   }
 
   // If user is authenticated but has a different role, redirect to their correct dashboard
-  if (role !== requiredRole) {
-    const redirectPath = role ? `/${role}/dashboard` : '/';
+  if (effectiveRole !== requiredRole) {
+    const redirectPath = effectiveRole ? `/${effectiveRole}/dashboard` : '/';
     return <Navigate to={redirectPath} replace />;
   }
 
@@ -39,10 +40,11 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
  * Redirects them to their respective dashboard instead.
  */
 export function PublicRoute({ children, role }: { children: React.ReactNode; role: UserRole }) {
-  const { isAuthenticated, role: userRole } = useAuthStore();
+  const { isAuthenticated, role: userRole, user } = useAuthStore();
+  const effectiveRole = resolveDemoRole(user?.email) ?? userRole;
 
-  if (isAuthenticated && userRole === role) {
-    return <Navigate to={`/${role}/dashboard`} replace />;
+  if (isAuthenticated && effectiveRole === role) {
+    return <Navigate to={`/${effectiveRole}/dashboard`} replace />;
   }
 
   return <>{children}</>;

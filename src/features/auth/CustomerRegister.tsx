@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useAuthStore } from '@/store/useAuthStore';
 import { CheckCircle2, ArrowLeft, Building2, Wrench, Users } from 'lucide-react';
 
 export default function CustomerRegister() {
   const navigate = useNavigate();
+  const login = useAuthStore((state) => state.login);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -47,7 +49,7 @@ export default function CustomerRegister() {
 
     if (!formData.phone.trim()) {
       newErrors.phone = 'Telefon alanı zorunludur';
-    } else if (!/^[0-9\s\+\-\(\)]{10,}$/.test(formData.phone.replace(/\s/g, ''))) {
+    } else if (!/^[0-9\s+() -]{10,}$/.test(formData.phone.replace(/\s/g, ''))) {
       newErrors.phone = 'Geçerli bir telefon numarası girin';
     }
 
@@ -73,7 +75,10 @@ export default function CustomerRegister() {
     e.preventDefault();
     if (validateForm()) {
       // TODO: API call to register customer
-      console.log('Registering customer:', formData);
+      login('customer', {
+        email: formData.email,
+        name: `${formData.firstName} ${formData.lastName}`,
+      });
       navigate('/customer/dashboard');
     }
   };
@@ -101,21 +106,21 @@ export default function CustomerRegister() {
 
           <div className="space-y-4">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-6 h-6 text-red-500 flex-shrink-0" />
+              <CheckCircle2 className="w-6 h-6 text-red-600 flex-shrink-0" />
               <div>
                 <p className="font-medium text-slate-900">Varlık Yönetimi</p>
                 <p className="text-sm text-slate-600">Tüm ekipmanlarınızı tek bir yerden takip edin</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-6 h-6 text-red-500 flex-shrink-0" />
+              <CheckCircle2 className="w-6 h-6 text-red-600 flex-shrink-0" />
               <div>
                 <p className="font-medium text-slate-900">Kolay Servis Talebi</p>
                 <p className="text-sm text-slate-600">Birkaç tıklamayla bakım ve onarım talebi oluşturun</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-6 h-6 text-red-500 flex-shrink-0" />
+              <CheckCircle2 className="w-6 h-6 text-red-600 flex-shrink-0" />
               <div>
                 <p className="font-medium text-slate-900">Garanti Takibi</p>
                 <p className="text-sm text-slate-600">Garanti sürelerinizi ve servis geçmişinizi görüntüleyin</p>
@@ -125,17 +130,17 @@ export default function CustomerRegister() {
 
           <div className="grid grid-cols-3 gap-4 pt-6 border-t border-slate-200">
             <div className="text-center">
-              <Building2 className="w-8 h-8 text-red-500 mx-auto mb-2" />
+              <Building2 className="w-8 h-8 text-red-600 mx-auto mb-2" />
               <p className="text-2xl font-bold text-slate-900">500+</p>
               <p className="text-xs text-slate-500">Kayıtlı Firma</p>
             </div>
             <div className="text-center">
-              <Wrench className="w-8 h-8 text-red-500 mx-auto mb-2" />
+              <Wrench className="w-8 h-8 text-red-600 mx-auto mb-2" />
               <p className="text-2xl font-bold text-slate-900">10K+</p>
               <p className="text-xs text-slate-500">Tamamlanan Servis</p>
             </div>
             <div className="text-center">
-              <Users className="w-8 h-8 text-red-500 mx-auto mb-2" />
+              <Users className="w-8 h-8 text-red-600 mx-auto mb-2" />
               <p className="text-2xl font-bold text-slate-900">200+</p>
               <p className="text-xs text-slate-500">Sertifikalı Servis</p>
             </div>
@@ -182,9 +187,9 @@ export default function CustomerRegister() {
                       placeholder="Ahmet"
                       value={formData.firstName}
                       onChange={handleChange}
-                      className={`focus-visible:ring-red-500 ${errors.firstName ? 'border-red-500' : ''}`}
+                      className={`focus-visible:ring-red-500 ${errors.firstName ? 'border-red-200' : ''}`}
                     />
-                    {errors.firstName && <p className="text-xs text-red-500">{errors.firstName}</p>}
+                    {errors.firstName && <p className="text-xs text-red-600">{errors.firstName}</p>}
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700" htmlFor="lastName">
@@ -196,9 +201,9 @@ export default function CustomerRegister() {
                       placeholder="Yılmaz"
                       value={formData.lastName}
                       onChange={handleChange}
-                      className={`focus-visible:ring-red-500 ${errors.lastName ? 'border-red-500' : ''}`}
+                      className={`focus-visible:ring-red-500 ${errors.lastName ? 'border-red-200' : ''}`}
                     />
-                    {errors.lastName && <p className="text-xs text-red-500">{errors.lastName}</p>}
+                    {errors.lastName && <p className="text-xs text-red-600">{errors.lastName}</p>}
                   </div>
                 </div>
 
@@ -214,9 +219,9 @@ export default function CustomerRegister() {
                     placeholder="ornek@firma.com"
                     value={formData.email}
                     onChange={handleChange}
-                    className={`focus-visible:ring-red-500 ${errors.email ? 'border-red-500' : ''}`}
+                    className={`focus-visible:ring-red-500 ${errors.email ? 'border-red-200' : ''}`}
                   />
-                  {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+                  {errors.email && <p className="text-xs text-red-600">{errors.email}</p>}
                 </div>
 
                 {/* Phone */}
@@ -231,9 +236,9 @@ export default function CustomerRegister() {
                     placeholder="+90 (555) 000 0000"
                     value={formData.phone}
                     onChange={handleChange}
-                    className={`focus-visible:ring-red-500 ${errors.phone ? 'border-red-500' : ''}`}
+                    className={`focus-visible:ring-red-500 ${errors.phone ? 'border-red-200' : ''}`}
                   />
-                  {errors.phone && <p className="text-xs text-red-500">{errors.phone}</p>}
+                  {errors.phone && <p className="text-xs text-red-600">{errors.phone}</p>}
                 </div>
 
                 {/* Password */}
@@ -248,9 +253,9 @@ export default function CustomerRegister() {
                     placeholder="••••••••"
                     value={formData.password}
                     onChange={handleChange}
-                    className={`focus-visible:ring-red-500 ${errors.password ? 'border-red-500' : ''}`}
+                    className={`focus-visible:ring-red-500 ${errors.password ? 'border-red-200' : ''}`}
                   />
-                  {errors.password && <p className="text-xs text-red-500">{errors.password}</p>}
+                  {errors.password && <p className="text-xs text-red-600">{errors.password}</p>}
                   <p className="text-xs text-slate-500">En az 8 karakter olmalıdır</p>
                 </div>
 
@@ -266,9 +271,9 @@ export default function CustomerRegister() {
                     placeholder="••••••••"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className={`focus-visible:ring-red-500 ${errors.confirmPassword ? 'border-red-500' : ''}`}
+                    className={`focus-visible:ring-red-500 ${errors.confirmPassword ? 'border-red-200' : ''}`}
                   />
-                  {errors.confirmPassword && <p className="text-xs text-red-500">{errors.confirmPassword}</p>}
+                  {errors.confirmPassword && <p className="text-xs text-red-600">{errors.confirmPassword}</p>}
                 </div>
 
                 {/* Terms Checkbox */}
@@ -296,7 +301,7 @@ export default function CustomerRegister() {
                       'nı kabul ediyorum.
                     </label>
                   </div>
-                  {errors.terms && <p className="text-xs text-red-500">{errors.terms}</p>}
+                  {errors.terms && <p className="text-xs text-red-600">{errors.terms}</p>}
                 </div>
 
                 <Button

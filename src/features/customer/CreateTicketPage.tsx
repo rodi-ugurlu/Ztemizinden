@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,19 +14,18 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useCustomerStore, type TicketCategory, type TicketPriority } from '@/store/useCustomerStore';
+import { useAuthStore } from '@/store/useAuthStore';
+import { api, type UploadResponse } from '@/lib/api';
 import {
   ArrowLeft,
-  Upload,
   X,
   ImageIcon,
   Video,
-  AlertCircle,
   CheckCircle2,
   Wrench,
   Zap,
   Droplets,
   Settings,
-  Info,
   Camera,
   Loader2,
 } from 'lucide-react';
@@ -42,9 +41,11 @@ export default function CreateTicketPage() {
   const [searchParams] = useSearchParams();
   const preselectedAssetId = searchParams.get('assetId');
 
-  const { assets, createTicket } = useCustomerStore();
+  const { assets, createTicket, fetchAssets } = useCustomerStore();
+  const user = useAuthStore((state) => state.user);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -57,34 +58,47 @@ export default function CreateTicketPage() {
 
   // Media upload state
   const [uploadedFiles, setUploadedFiles] = useState<
-    { id: string; name: string; type: 'image' | 'video'; size: string }[]
+    { id: string; file: File; name: string; type: 'image' | 'video'; size: string }[]
   >([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedAsset = assets.find((a) => a.id === formData.assetId);
 
+  useEffect(() => {
+    if (user?.id) {
+      fetchAssets(user.id);
+    }
+  }, [fetchAssets, user?.id]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.assetId || !formData.title || !formData.category) return;
 
     setIsSubmitting(true);
+    setSubmitError('');
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const mediaUrls = await Promise.all(uploadedFiles.map(uploadTicketMedia));
+      await createTicket({
+        customerId: user?.id,
+        customerName: user?.name,
+        customerCompany: user?.name,
+        customerLocation: selectedAsset?.location || 'Belirtilmedi',
+        assetId: formData.assetId,
+        title: formData.title,
+        description: formData.description || formData.title,
+        category: formData.category as TicketCategory,
+        priority: formData.priority,
+        mediaUrls,
+      });
 
-    const newTicket = createTicket({
-      assetId: formData.assetId,
-      title: formData.title,
-      description: formData.description,
-      category: formData.category as TicketCategory,
-      priority: formData.priority,
-      mediaUrls: uploadedFiles.map((f) => `/uploads/${f.name}`),
-      status: 'Open',
-    });
-
-    setIsSubmitting(false);
-    setIsSuccess(true);
+      setIsSuccess(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Talep olusturulamadi');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleFileSelect = (files: FileList | null) => {
@@ -92,6 +106,7 @@ export default function CreateTicketPage() {
 
     const newFiles = Array.from(files).map((file) => ({
       id: Math.random().toString(36).substring(7),
+      file,
       name: file.name,
       type: file.type.startsWith('image/')
         ? ('image' as const)
@@ -132,13 +147,13 @@ export default function CreateTicketPage() {
             <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-10 h-10 text-emerald-600" />
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Service Request Submitted</h2>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Servis Talebi Oluşturuldu</h2>
             <p className="text-slate-600 mb-6">
-              Your ticket has been created successfully. Our team will review it and contact you shortly.
+              Talebiniz başarıyla kaydedildi. Ekibimiz inceleyip en kısa sürede sizinle iletişime geçecek.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button variant="outline" onClick={() => navigate('/customer/dashboard')}>
-                Back to Dashboard
+                Panele Dön
               </Button>
               <Button
                 className="bg-red-600 hover:bg-red-700"
@@ -154,7 +169,7 @@ export default function CreateTicketPage() {
                   setUploadedFiles([]);
                 }}
               >
-                Create Another Ticket
+                Yeni Talep Oluştur
               </Button>
             </div>
           </CardContent>
@@ -169,13 +184,13 @@ export default function CreateTicketPage() {
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="text-slate-600">
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
+          Geri
         </Button>
       </div>
 
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">Create Service Request</h1>
-        <p className="text-slate-500 mt-1">Report an issue with your equipment or facility</p>
+        <h1 className="text-3xl font-bold text-slate-900">Arıza Kaydı Oluştur</h1>
+        <p className="text-slate-500 mt-1">Ekipman veya tesisinizle ilgili bir sorun bildirin</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
@@ -187,8 +202,8 @@ export default function CreateTicketPage() {
                 <span className="text-red-600 font-bold text-sm">1</span>
               </div>
               <div>
-                <CardTitle>Select Asset</CardTitle>
-                <CardDescription>Choose the equipment that needs service</CardDescription>
+                <CardTitle>Varlık Seçin</CardTitle>
+                <CardDescription>Servis gerektiren ekipmanı seçin</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -200,7 +215,7 @@ export default function CreateTicketPage() {
                 required
               >
                 <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Select an asset..." />
+                  <SelectValue placeholder="Bir varlık seçin..." />
                 </SelectTrigger>
                 <SelectContent>
                   {assets.map((asset) => (
@@ -244,15 +259,15 @@ export default function CreateTicketPage() {
                 <span className="text-red-600 font-bold text-sm">2</span>
               </div>
               <div>
-                <CardTitle>Issue Details</CardTitle>
-                <CardDescription>Describe the problem you're experiencing</CardDescription>
+                <CardTitle>Arıza Detayları</CardTitle>
+                <CardDescription>Yaşadığınız sorunu açıklayın</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Category */}
             <div className="space-y-2">
-              <Label>Issue Category <span className="text-rose-500">*</span></Label>
+              <Label>Arıza Kategorisi <span className="text-red-600">*</span></Label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {categories.map((cat) => (
                   <button
@@ -261,8 +276,8 @@ export default function CreateTicketPage() {
                     onClick={() => setFormData({ ...formData, category: cat.value })}
                     className={`p-4 rounded-lg border text-left transition-all ${
                       formData.category === cat.value
-                        ? 'border-red-500 bg-red-50 ring-1 ring-red-500'
-                        : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                        ? 'border-red-200 bg-red-50 ring-1 ring-red-500'
+                        : 'border-slate-200 hover:border-red-300 hover:bg-slate-50'
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-2">
@@ -288,11 +303,11 @@ export default function CreateTicketPage() {
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">
-                Issue Title <span className="text-rose-500">*</span>
+                Arıza Başlığı <span className="text-red-600">*</span>
               </Label>
               <Input
                 id="title"
-                placeholder="e.g., Compressor overheating during startup"
+                placeholder="Örn: Kompresör çalıştırmada aşırı ısınma"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 required
@@ -302,22 +317,22 @@ export default function CreateTicketPage() {
 
             {/* Description */}
             <div className="space-y-2">
-              <Label htmlFor="description">Detailed Description</Label>
+              <Label htmlFor="description">Detaylı Açıklama</Label>
               <Textarea
                 id="description"
-                placeholder="Please provide as much detail as possible: when did the issue start? What are the symptoms? Any error messages or unusual sounds?"
+                placeholder="Lütfen mümkün olduğunca fazla detay verin: Sorun ne zaman başladı? Belirtiler neler? Herhangi bir hata kodu veya olağandışı ses var mı?"
                 rows={5}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               />
               <p className="text-xs text-slate-500">
-                Clear descriptions help our technicians diagnose and resolve issues faster
+                Net açıklamalar, teknisyenlerimizin sorunu daha hızlı teşhis edip çözmesini sağlar
               </p>
             </div>
 
             {/* Priority */}
             <div className="space-y-2">
-              <Label>Priority Level</Label>
+              <Label>Öncelik Seviyesi</Label>
               <div className="flex flex-wrap gap-3">
                 {priorities.map((p) => (
                   <button
@@ -346,8 +361,8 @@ export default function CreateTicketPage() {
                 <span className="text-red-600 font-bold text-sm">3</span>
               </div>
               <div>
-                <CardTitle>Supporting Media</CardTitle>
-                <CardDescription>Upload photos or videos (optional but recommended)</CardDescription>
+                <CardTitle>Destek Medyası</CardTitle>
+                <CardDescription>Fotoğraf veya video yükleyin (isteğe bağlı ancak önerilir)</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -360,8 +375,8 @@ export default function CreateTicketPage() {
               onDrop={handleDrop}
               className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
                 isDragging
-                  ? 'border-red-500 bg-red-50'
-                  : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
+                  ? 'border-red-200 bg-red-50'
+                  : 'border-slate-300 hover:border-red-400 hover:bg-slate-50'
               }`}
             >
               <input
@@ -376,9 +391,9 @@ export default function CreateTicketPage() {
                 <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
                   <Camera className="w-8 h-8 text-red-600" />
                 </div>
-                <p className="text-slate-700 font-medium">Click or drag files to upload</p>
-                <p className="text-sm text-slate-500 mt-1">Photos or videos of the issue</p>
-                <p className="text-xs text-slate-400 mt-4">Supports: JPG, PNG, MP4 • Max 5 files • 50MB each</p>
+                <p className="text-slate-700 font-medium">Dosya yüklemek için tıklayın veya sürükleyin</p>
+                <p className="text-sm text-slate-500 mt-1">Arızanın fotoğrafları veya videosu</p>
+                <p className="text-xs text-slate-400 mt-4">Desteklenen: JPG, PNG, MP4 • Maks. 5 dosya • Her biri 50MB</p>
               </div>
             </div>
 
@@ -386,7 +401,7 @@ export default function CreateTicketPage() {
             {uploadedFiles.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-slate-700">
-                  Uploaded files ({uploadedFiles.length}/5)
+                  Yüklenen dosyalar ({uploadedFiles.length}/5)
                 </p>
                 <div className="space-y-2">
                   {uploadedFiles.map((file) => (
@@ -396,9 +411,9 @@ export default function CreateTicketPage() {
                     >
                       <div className="flex items-center gap-3">
                         {file.type === 'image' ? (
-                          <ImageIcon className="w-5 h-5 text-red-500" />
+                          <ImageIcon className="w-5 h-5 text-red-600" />
                         ) : (
-                          <Video className="w-5 h-5 text-purple-500" />
+                          <Video className="w-5 h-5 text-red-600" />
                         )}
                         <div>
                           <p className="text-sm font-medium text-slate-700 truncate max-w-[200px]">
@@ -412,7 +427,7 @@ export default function CreateTicketPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => removeFile(file.id)}
-                        className="text-slate-400 hover:text-rose-500"
+                        className="text-slate-400 hover:text-red-600"
                       >
                         <X className="w-4 h-4" />
                       </Button>
@@ -432,7 +447,7 @@ export default function CreateTicketPage() {
             onClick={() => navigate('/customer/dashboard')}
             disabled={isSubmitting}
           >
-            Cancel
+            İptal
           </Button>
           <Button
             type="submit"
@@ -442,16 +457,17 @@ export default function CreateTicketPage() {
             {isSubmitting ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Submitting...
+                Gönderiliyor...
               </>
             ) : (
               <>
                 <CheckCircle2 className="w-4 h-4 mr-2" />
-                Submit Service Request
+                Talebi Gönder
               </>
             )}
           </Button>
         </div>
+        {submitError && <p className="text-sm text-red-600 text-right">{submitError}</p>}
       </form>
     </div>
   );
@@ -464,47 +480,47 @@ export default function CreateTicketPage() {
 const categories = [
   {
     value: 'Electric' as TicketCategory,
-    label: 'Electric',
-    description: 'Power, wiring, control panels',
+    label: 'Elektrik',
+    description: 'Güç, kablolama, kontrol panoları',
     icon: Zap,
   },
   {
     value: 'Mechanic' as TicketCategory,
-    label: 'Mechanic',
-    description: 'Motors, belts, bearings',
+    label: 'Mekanik',
+    description: 'Motorlar, kayışlar, rulmanlar',
     icon: Settings,
   },
   {
     value: 'Pneumatic' as TicketCategory,
-    label: 'Pneumatic',
-    description: 'Air systems, compressors',
+    label: 'Pnömatik',
+    description: 'Hava sistemleri, kompresörler',
     icon: Droplets,
   },
   {
     value: 'Hydraulic' as TicketCategory,
-    label: 'Hydraulic',
-    description: 'Hydraulic systems, pumps',
+    label: 'Hidrolik',
+    description: 'Hidrolik sistemler, pompalar',
     icon: Droplets,
   },
   {
     value: 'Software' as TicketCategory,
-    label: 'Software',
-    description: 'Control systems, HMI, PLC',
+    label: 'Yazılım',
+    description: 'Kontrol sistemleri, HMI, PLC',
     icon: Zap,
   },
   {
     value: 'General' as TicketCategory,
-    label: 'General',
-    description: 'Other maintenance needs',
+    label: 'Genel',
+    description: 'Diğer bakım ihtiyaçları',
     icon: Wrench,
   },
 ];
 
 const priorities = [
-  { value: 'Low' as TicketPriority, label: 'Low', selectedClass: 'bg-slate-200 text-slate-800 ring-slate-300' },
-  { value: 'Medium' as TicketPriority, label: 'Medium', selectedClass: 'bg-red-100 text-blue-800 ring-blue-300' },
-  { value: 'High' as TicketPriority, label: 'High', selectedClass: 'bg-amber-100 text-amber-800 ring-amber-300' },
-  { value: 'Critical' as TicketPriority, label: 'Critical', selectedClass: 'bg-rose-100 text-rose-800 ring-rose-300' },
+  { value: 'Low' as TicketPriority, label: 'Düşük', selectedClass: 'bg-slate-200 text-slate-800 ring-slate-300' },
+  { value: 'Medium' as TicketPriority, label: 'Orta', selectedClass: 'bg-amber-100 text-amber-800 ring-amber-300' },
+  { value: 'High' as TicketPriority, label: 'Yüksek', selectedClass: 'bg-orange-100 text-orange-800 ring-orange-300' },
+  { value: 'Critical' as TicketPriority, label: 'Kritik', selectedClass: 'bg-red-100 text-red-800 ring-red-300' },
 ];
 
 function formatFileSize(bytes: number): string {
@@ -513,4 +529,11 @@ function formatFileSize(bytes: number): string {
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+async function uploadTicketMedia(item: { file: File }) {
+  const formData = new FormData();
+  formData.append('file', item.file);
+  const response = await api.upload<UploadResponse>('/uploads/ticket-media', formData);
+  return response.url;
 }

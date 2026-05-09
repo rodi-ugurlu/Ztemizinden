@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
-import { Home, ClipboardList, History, LogOut } from 'lucide-react';
+import { Home, LogOut } from 'lucide-react';
 
 /**
  * CustomerLayout Component
@@ -20,8 +20,8 @@ export default function CustomerLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-3">
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 sm:py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sticky top-0 z-50">
+        <div className="flex items-center gap-3 w-full lg:w-auto">
           <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center shadow-sm">
             <Home className="w-5 h-5 text-white" />
           </div>
@@ -32,7 +32,7 @@ export default function CustomerLayout() {
         </div>
 
         {isAuthenticated && (
-          <nav className="flex items-center gap-6">
+          <nav className="w-full lg:w-auto flex items-center gap-3 sm:gap-6 overflow-x-auto pb-1 lg:pb-0">
             <NavLink
               to="/customer/dashboard"
               className={({ isActive }) =>
@@ -58,12 +58,12 @@ export default function CustomerLayout() {
               Talepler
             </NavLink>
 
-            <div className="flex items-center gap-4 ml-4 border-l border-slate-200 pl-6">
-              <div className="text-right">
+            <div className="flex items-center gap-2 sm:gap-4 ml-auto lg:ml-4 border-l border-slate-200 pl-3 sm:pl-6">
+              <div className="hidden md:block text-right">
                 <p className="text-sm font-medium text-slate-900">{user?.name}</p>
                 <p className="text-xs text-slate-500">{user?.email}</p>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-500 hover:text-slate-900">
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-500 hover:text-slate-900 shrink-0">
                 <LogOut className="w-4 h-4" />
               </Button>
             </div>

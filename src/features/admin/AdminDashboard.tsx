@@ -1,9 +1,9 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useAdminStore, useAdminMetrics, useCriticalTickets } from '@/store/useAdminStore';
+import { useAdminStore, useAdminMetrics, useCriticalTickets, usePendingVerifications } from '@/store/useAdminStore';
 import type { GlobalTicket } from '@/store/useAdminStore';
 import {
   Activity,
@@ -15,8 +15,8 @@ import {
   Shield,
   TicketCheck,
   TrendingUp,
+  Truck,
   Users,
-  Wrench,
   ArrowRight,
 } from 'lucide-react';
 
@@ -27,23 +27,32 @@ import {
  * Displays global metrics, visualizations, and critical tickets.
  */
 export default function AdminDashboard() {
+  const { fetchProviders, fetchQueue } = useAdminStore();
+
+  useEffect(() => {
+    void (async () => {
+      await fetchProviders();
+      await fetchQueue();
+    })();
+  }, [fetchProviders, fetchQueue]);
+
   const metrics = useAdminMetrics();
   const criticalTickets = useCriticalTickets();
-  const pendingVerifications = useAdminStore((state) => state.getPendingVerifications());
+  const pendingVerifications = usePendingVerifications();
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100">Operasyon Merkezi</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Operasyon Merkezi</h1>
           <p className="text-slate-400 mt-1">
             Sistem geneli metrikler ve kritik operasyonlar
           </p>
         </div>
         <div className="flex gap-3">
           <Link to="/admin/dispatch">
-            <Button className="bg-indigo-600 hover:bg-indigo-500">
+            <Button className="bg-red-600 hover:bg-red-700">
               <TicketCheck className="w-4 h-4 mr-2" />
               Tüm Talepler
             </Button>
@@ -57,14 +66,14 @@ export default function AdminDashboard() {
           title="Aktif Talepler"
           value={metrics.totalActiveTickets}
           icon={TicketCheck}
-          color="bg-blue-500/20 text-blue-400 border-blue-500/30"
+          color="bg-blue-50 text-blue-600 border-blue-200/30"
           alert={metrics.totalActiveTickets > 10}
         />
         <MetricCard
           title="Ortalama Yanıt Süresi"
           value={`${metrics.averageResponseTime} dk`}
           icon={Clock}
-          color="bg-amber-500/20 text-amber-400 border-amber-500/30"
+          color="bg-amber-50 text-amber-600 border-amber-200/30"
           trend={metrics.averageResponseTime < 60 ? 'İyi' : 'Yüksek'}
           trendType={metrics.averageResponseTime < 60 ? 'positive' : 'negative'}
         />
@@ -72,25 +81,41 @@ export default function AdminDashboard() {
           title="Onaylı Servis Sağlayıcı"
           value={metrics.verifiedProviders}
           icon={Users}
-          color="bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+          color="bg-indigo-50 text-indigo-600 border-indigo-200/30"
           description={`Toplam: ${metrics.totalRegisteredProviders}`}
         />
         <MetricCard
           title="Kritik Talepler"
           value={metrics.criticalTickets}
           icon={AlertTriangle}
-          color="bg-rose-500/20 text-rose-400 border-rose-500/30"
+          color="bg-red-50 text-red-600 border-red-200/30"
           alert={metrics.criticalTickets > 0}
         />
       </div>
 
       {/* Second Row Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <StatCard
           title="Bugün Çözülen"
           value={metrics.ticketsResolvedToday}
           icon={CheckCircle2}
           trend="+12% dün'e göre"
+        />
+        <StatCard
+          title="SLA İhlali"
+          value={metrics.slaBreaches}
+          icon={AlertTriangle}
+          valueColor={metrics.slaBreaches > 0 ? 'text-red-600' : 'text-emerald-600'}
+          cta="Sevk Et"
+          ctaLink="/admin/dispatch"
+        />
+        <StatCard
+          title="Atama Bekleyen"
+          value={metrics.unassignedOpenTickets}
+          icon={Truck}
+          valueColor={metrics.unassignedOpenTickets > 0 ? 'text-amber-600' : 'text-emerald-600'}
+          cta="Ata"
+          ctaLink="/admin/dispatch"
         />
         <StatCard
           title="Bekleyen Onaylar"
@@ -103,7 +128,7 @@ export default function AdminDashboard() {
           title="Sistem Durumu"
           value="Aktif"
           icon={Shield}
-          valueColor="text-emerald-400"
+          valueColor="text-emerald-600"
         />
       </div>
 
@@ -111,11 +136,11 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Critical Tickets Table */}
         <div className="lg:col-span-2">
-          <Card className="bg-slate-900/50 border-slate-800">
+          <Card className="bg-white/50 border-slate-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
               <div>
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-rose-400" />
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
                   Kritik Talepler
                 </CardTitle>
                 <CardDescription className="text-slate-400">
@@ -123,7 +148,7 @@ export default function AdminDashboard() {
                 </CardDescription>
               </div>
               <Link to="/admin/dispatch">
-                <Button variant="ghost" size="sm" className="text-indigo-400">
+                <Button variant="ghost" size="sm" className="text-red-600">
                   Tümü <ArrowRight className="w-4 h-4 ml-1" />
                 </Button>
               </Link>
@@ -131,7 +156,7 @@ export default function AdminDashboard() {
             <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow className="border-slate-800">
+                  <TableRow className="border-slate-200">
                     <TableHead className="text-slate-400">Talep ID</TableHead>
                     <TableHead className="text-slate-400">Müşteri</TableHead>
                     <TableHead className="text-slate-400">Konu</TableHead>
@@ -141,15 +166,15 @@ export default function AdminDashboard() {
                 </TableHeader>
                 <TableBody>
                   {criticalTickets.map((ticket) => (
-                    <TableRow key={ticket.id} className="border-slate-800">
+                    <TableRow key={ticket.id} className="border-slate-200">
                       <TableCell className="font-mono text-xs text-slate-500">
                         #{ticket.id.split('-')[1]}
                       </TableCell>
-                      <TableCell className="text-slate-300">
+                      <TableCell className="text-slate-700">
                         <div>{ticket.customerCompany}</div>
                         <div className="text-xs text-slate-500">{ticket.customerName}</div>
                       </TableCell>
-                      <TableCell className="max-w-xs truncate text-slate-300">
+                      <TableCell className="max-w-xs truncate text-slate-700">
                         {ticket.title}
                       </TableCell>
                       <TableCell>
@@ -177,9 +202,9 @@ export default function AdminDashboard() {
         <div className="space-y-6">
           {/* Pending Verifications */}
           {pendingVerifications.length > 0 && (
-            <Card className="bg-slate-900/50 border-slate-800">
+            <Card className="bg-white/50 border-slate-200">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-400">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-red-600">
                   <FileCheck className="w-4 h-4" />
                   Onay Bekleyen Başvurular
                 </CardTitle>
@@ -189,11 +214,11 @@ export default function AdminDashboard() {
                   {pendingVerifications.slice(0, 3).map((provider) => (
                     <li key={provider.id} className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-slate-300 font-medium">{provider.name}</p>
+                        <p className="text-sm text-slate-700 font-medium">{provider.name}</p>
                         <p className="text-xs text-slate-500">{provider.city}</p>
                       </div>
                       <Link to="/admin/providers">
-                        <Button variant="ghost" size="sm" className="text-indigo-400 h-7">
+                        <Button variant="ghost" size="sm" className="text-red-600 h-7">
                           İncele
                         </Button>
                       </Link>
@@ -212,40 +237,40 @@ export default function AdminDashboard() {
           )}
 
           {/* Quick Actions */}
-          <Card className="bg-slate-900/50 border-slate-800">
+          <Card className="bg-white/50 border-slate-200">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-slate-200">
+              <CardTitle className="text-lg font-semibold text-slate-900">
                 Hızlı İşlemler
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Link to="/admin/providers">
-                <Button variant="outline" className="w-full justify-start bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-800">
-                  <Building2 className="w-4 h-4 mr-2 text-indigo-400" />
+                <Button variant="outline" className="w-full justify-start bg-slate-50/50 border-slate-200 text-slate-700 hover:bg-red-50">
+                  <Building2 className="w-4 h-4 mr-2 text-red-600" />
                   Servis Sağlayıcıları
                 </Button>
               </Link>
               <Link to="/admin/dispatch">
-                <Button variant="outline" className="w-full justify-start bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-800">
-                  <Activity className="w-4 h-4 mr-2 text-emerald-400" />
+                <Button variant="outline" className="w-full justify-start bg-slate-50/50 border-slate-200 text-slate-700 hover:bg-red-50">
+                  <Activity className="w-4 h-4 mr-2 text-red-600" />
                   Sevk Merkezi
                 </Button>
               </Link>
             </CardContent>
           </Card>
 
-          {/* System Health */}
-          <Card className="bg-slate-900/50 border-slate-800">
+          {/* Product Readiness */}
+          <Card className="bg-white/50 border-slate-200">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-slate-400">
-                Sistem Sağlığı
+                MVP1 Hazırlık Durumu
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <HealthBar label="API Gateway" value={98} color="bg-emerald-500" />
-              <HealthBar label="Database" value={99} color="bg-emerald-500" />
-              <HealthBar label="File Storage" value={100} color="bg-emerald-500" />
-              <HealthBar label="Push Notifications" value={94} color="bg-amber-500" />
+              <HealthBar label="Frontend Akışları" value={100} color="bg-emerald-500" />
+              <HealthBar label="Backend Entegrasyon" value={95} color="bg-blue-500" />
+              <HealthBar label="API Kontratı" value={90} color="bg-indigo-500" />
+              <HealthBar label="Dosya/Medya Akışı" value={54} color="bg-amber-500" />
             </CardContent>
           </Card>
         </div>
@@ -271,12 +296,12 @@ interface MetricCardProps {
 
 function MetricCard({ title, value, icon: Icon, color, description, trend, trendType, alert }: MetricCardProps) {
   return (
-    <Card className={`bg-slate-900/50 border-slate-800 ${alert ? 'border-rose-500/50' : ''}`}>
+    <Card className={`bg-white/50 border-slate-200 ${alert ? 'border-red-200/50' : ''}`}>
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-slate-400">{title}</p>
-            <p className={`text-3xl font-bold mt-2 ${alert ? 'text-rose-400' : 'text-white'}`}>
+            <p className={`text-3xl font-bold mt-2 ${alert ? 'text-red-600' : 'text-slate-900'}`}>
               {value}
             </p>
             {description && (
@@ -284,8 +309,8 @@ function MetricCard({ title, value, icon: Icon, color, description, trend, trend
             )}
             {trend && (
               <p className={`text-xs mt-1 ${
-                trendType === 'positive' ? 'text-emerald-400' :
-                trendType === 'negative' ? 'text-rose-400' : 'text-slate-500'
+                trendType === 'positive' ? 'text-emerald-600' :
+                trendType === 'negative' ? 'text-red-600' : 'text-slate-500'
               }`}>
                 {trend}
               </p>
@@ -310,9 +335,9 @@ interface StatCardProps {
   ctaLink?: string;
 }
 
-function StatCard({ title, value, icon: Icon, valueColor = 'text-white', trend, cta, ctaLink }: StatCardProps) {
+function StatCard({ title, value, icon: Icon, valueColor = 'text-slate-900', trend, cta, ctaLink }: StatCardProps) {
   return (
-    <Card className="bg-slate-900/50 border-slate-800">
+    <Card className="bg-white/50 border-slate-200">
       <CardContent className="p-5">
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-slate-400">{title}</p>
@@ -320,14 +345,14 @@ function StatCard({ title, value, icon: Icon, valueColor = 'text-white', trend, 
         </div>
         <p className={`text-2xl font-bold ${valueColor}`}>{value}</p>
         {trend && (
-          <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
+          <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
             <TrendingUp className="w-3 h-3" />
             {trend}
           </p>
         )}
         {cta && ctaLink && (
           <Link to={ctaLink}>
-            <Button variant="ghost" size="sm" className="text-indigo-400 p-0 h-auto mt-2">
+            <Button variant="ghost" size="sm" className="text-red-600 p-0 h-auto mt-2">
               {cta} <ArrowRight className="w-3 h-3 ml-1" />
             </Button>
           </Link>
@@ -342,9 +367,9 @@ function HealthBar({ label, value, color }: { label: string; value: number; colo
     <div>
       <div className="flex justify-between text-xs mb-1">
         <span className="text-slate-400">{label}</span>
-        <span className="text-slate-300">{value}%</span>
+        <span className="text-slate-700">{value}%</span>
       </div>
-      <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+      <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full`} style={{ width: `${value}%` }} />
       </div>
     </div>
@@ -353,12 +378,12 @@ function HealthBar({ label, value, color }: { label: string; value: number; colo
 
 function StatusBadge({ status }: { status: GlobalTicket['status'] }) {
   const variants: Record<GlobalTicket['status'], { bg: string; text: string; label: string }> = {
-    'Open': { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: 'Açık' },
-    'Offered': { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Teklif' },
-    'In Progress': { bg: 'bg-indigo-500/20', text: 'text-indigo-400', label: 'Devam' },
-    'Resolved': { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Çözüldü' },
-    'Closed': { bg: 'bg-slate-700', text: 'text-slate-400', label: 'Kapalı' },
-    'Cancelled': { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'İptal' },
+    Open: { bg: 'bg-blue-50', text: 'text-blue-600', label: 'Açık' },
+    Offered: { bg: 'bg-amber-50', text: 'text-amber-600', label: 'Teklif' },
+    'In Progress': { bg: 'bg-indigo-50', text: 'text-indigo-600', label: 'Devam' },
+    Resolved: { bg: 'bg-emerald-50', text: 'text-emerald-600', label: 'Çözüldü' },
+    Closed: { bg: 'bg-slate-100', text: 'text-slate-400', label: 'Kapalı' },
+    Cancelled: { bg: 'bg-red-50', text: 'text-red-600', label: 'İptal' },
   };
 
   const variant = variants[status];
@@ -378,7 +403,7 @@ function ResponseTimeBadge({ responseTime }: { responseTime?: number | null }) {
   const isCritical = responseTime > 120;
 
   return (
-    <span className={`text-xs font-mono ${isCritical ? 'text-rose-400' : 'text-emerald-400'}`}>
+    <span className={`text-xs font-mono ${isCritical ? 'text-red-600' : 'text-slate-500'}`}>
       {responseTime} dk
     </span>
   );
