@@ -28,6 +28,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   if (!isFormData && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
+  
+  // Ngrok uyarı sayfasını atlamak için gerekli header
+  headers.set('ngrok-skip-browser-warning', 'true');
 
   const token = getStoredAccessToken();
   if (token) {
