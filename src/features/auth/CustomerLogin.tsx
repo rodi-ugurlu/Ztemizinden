@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom';
 import { CheckCircle2, ArrowRight } from 'lucide-react';
 
 export default function CustomerLogin() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('customer@demo.com');
   const [password, setPassword] = useState('');
   const { loginWithPassword, isLoading, error } = useAuthStore();
   const navigate = useNavigate();

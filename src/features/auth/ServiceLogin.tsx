@@ -9,7 +9,7 @@ import { ShieldAlert, HardHat, Phone, KeyRound } from 'lucide-react';
 
 export default function ServiceLogin() {
   const [method, setMethod] = useState<'otp' | 'password'>('password');
-  const [identifier, setIdentifier] = useState('');
+  const [identifier, setIdentifier] = useState('service@demo.com');
   const [secret, setSecret] = useState('');
   const { loginWithPassword, isLoading, error } = useAuthStore();
   const navigate = useNavigate();

@@ -14,7 +14,7 @@ import { Activity, Fingerprint, Lock, ShieldCheck, Database } from 'lucide-react
  */
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('admin@demo.com');
   const [password, setPassword] = useState('');
   const [step, setStep] = useState<1 | 2>(1);
   const [token, setToken] = useState('');

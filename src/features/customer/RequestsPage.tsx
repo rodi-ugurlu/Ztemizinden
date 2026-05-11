@@ -220,7 +220,7 @@ export default function RequestsPage() {
               </CardContent>
             </Card>
 
-            {selectedTicket.finalEstimatedCost && selectedTicket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL' && (
+            {selectedTicket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL' && (
               <BillingPanel
                 ticket={selectedTicket}
                 onApprove={() => approveFinalBilling(selectedTicket.id)}
@@ -313,9 +313,9 @@ function BillingPanel({
   onApprove: () => void;
   onDispute: () => void;
 }) {
-  if (!ticket.finalEstimatedCost || !ticket.finalActualCost) return null;
+  if (ticket.finalActualCost == null) return null;
   const billing = {
-    estimatedCost: ticket.finalEstimatedCost,
+    estimatedCost: ticket.finalEstimatedCost ?? 0,
     actualCost: ticket.finalActualCost,
     providerName: ticket.assignedProviderName,
     status: ticket.billingStatus ?? 'AWAITING_CUSTOMER_APPROVAL',
