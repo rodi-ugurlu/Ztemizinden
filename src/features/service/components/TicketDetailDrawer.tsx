@@ -16,6 +16,7 @@ import {
   useServiceStore,
 } from '@/store/useServiceStore';
 import type { Ticket, OfferType } from '@/store/useCustomerStore';
+import FinalBillingDialog from './FinalBillingDialog';
 import {
   Building2,
   MapPin,
@@ -67,6 +68,7 @@ export default function TicketDetailDrawer({
   const [chatMessage, setChatMessage] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
   const [isMessageSending, setIsMessageSending] = useState(false);
+  const [isBillingDialogOpen, setIsBillingDialogOpen] = useState(false);
 
   if (!ticket) return null;
 
@@ -147,6 +149,7 @@ export default function TicketDetailDrawer({
   };
 
   return (
+    <>
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent
         side="right"
@@ -298,7 +301,7 @@ export default function TicketDetailDrawer({
           </TabsContent>
 
           <TabsContent value="work-order" className="space-y-6 mt-6">
-            <WorkOrderPanel ticket={activeTicket} />
+            <WorkOrderPanel ticket={activeTicket} onOpenBilling={() => setIsBillingDialogOpen(true)} />
           </TabsContent>
 
           {/* Asset Tab */}
@@ -649,6 +652,12 @@ export default function TicketDetailDrawer({
         </Tabs>
       </SheetContent>
     </Sheet>
+    <FinalBillingDialog
+      ticket={activeTicket}
+      isOpen={isBillingDialogOpen}
+      onClose={() => setIsBillingDialogOpen(false)}
+    />
+    </>
   );
 }
 
@@ -726,9 +735,11 @@ function ServiceCategoryIcon({ category, className }: { category: string; classN
   }
 }
 
-function WorkOrderPanel({ ticket }: { ticket: Ticket }) {
+function WorkOrderPanel({ ticket, onOpenBilling }: { ticket: Ticket; onOpenBilling: () => void }) {
   const acceptedProposal = ticket.offers.find((proposal) => proposal.status === 'ACCEPTED');
   const estimatedCost = acceptedProposal?.estimatedCost ?? 0;
+  const canComplete = ticket.status === 'IN_PROGRESS';
+  const billingPending = ticket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL';
 
   return (
     <div className="space-y-6">
@@ -739,6 +750,29 @@ function WorkOrderPanel({ ticket }: { ticket: Ticket }) {
           <InfoCell label="Konum" value={ticket.customerLocation} />
           <InfoCell label="Varlık" value={ticket.assetName || ''} />
           <InfoCell label="Tahmini Tutar" value={`${estimatedCost.toLocaleString('tr-TR')} TL`} />
+        </div>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">İş Tamamlama</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {billingPending
+                ? 'Hakediş müşterinin onayını bekliyor.'
+                : canComplete
+                ? 'Saha işi tamamlandıysa hakedişi müşteriye onaya gönderin.'
+                : 'İş tamamlama yalnızca devam eden talepler için kullanılabilir.'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            disabled={!canComplete || billingPending}
+            onClick={onOpenBilling}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            <CheckCircle2 className="mr-2 h-4 w-4" />
+            Hakediş Oluştur
+          </Button>
         </div>
       </div>
     </div>

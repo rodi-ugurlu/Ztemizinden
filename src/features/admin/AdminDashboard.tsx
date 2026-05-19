@@ -3,8 +3,14 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useAdminStore, useAdminMetrics, useCriticalTickets, usePendingVerifications } from '@/store/useAdminStore';
-import type { GlobalTicket } from '@/store/useAdminStore';
+import {
+  getProviderReviewSummary,
+  useAdminStore,
+  useAdminMetrics,
+  useCriticalTickets,
+  usePendingVerifications,
+} from '@/store/useAdminStore';
+import type { GlobalTicket, ServiceProvider } from '@/store/useAdminStore';
 import {
   Activity,
   AlertTriangle,
@@ -121,6 +127,8 @@ export default function AdminDashboard() {
           title="Bekleyen Onaylar"
           value={metrics.pendingVerifications}
           icon={FileCheck}
+          valueColor={metrics.pendingVerifications > 0 ? 'text-amber-600' : 'text-emerald-600'}
+          description={`Belge: ${metrics.pendingProviderDocumentReviews} / Hazır: ${metrics.readyProviderApprovals} / Blokaj: ${metrics.blockedProviderApprovals}`}
           cta="İncele"
           ctaLink="/admin/providers"
         />
@@ -212,10 +220,11 @@ export default function AdminDashboard() {
               <CardContent>
                 <ul className="space-y-3">
                   {pendingVerifications.slice(0, 3).map((provider) => (
-                    <li key={provider.id} className="flex items-center justify-between">
+                    <li key={provider.id} className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm text-slate-700 font-medium">{provider.name}</p>
                         <p className="text-xs text-slate-500">{provider.city}</p>
+                        <ProviderReviewLine provider={provider} />
                       </div>
                       <Link to="/admin/providers">
                         <Button variant="ghost" size="sm" className="text-red-600 h-7">
@@ -331,11 +340,12 @@ interface StatCardProps {
   icon: React.ElementType;
   valueColor?: string;
   trend?: string;
+  description?: string;
   cta?: string;
   ctaLink?: string;
 }
 
-function StatCard({ title, value, icon: Icon, valueColor = 'text-slate-900', trend, cta, ctaLink }: StatCardProps) {
+function StatCard({ title, value, icon: Icon, valueColor = 'text-slate-900', trend, description, cta, ctaLink }: StatCardProps) {
   return (
     <Card className="bg-white/50 border-slate-200">
       <CardContent className="p-5">
@@ -350,6 +360,7 @@ function StatCard({ title, value, icon: Icon, valueColor = 'text-slate-900', tre
             {trend}
           </p>
         )}
+        {description && <p className="mt-1 text-xs text-slate-500">{description}</p>}
         {cta && ctaLink && (
           <Link to={ctaLink}>
             <Button variant="ghost" size="sm" className="text-red-600 p-0 h-auto mt-2">
@@ -374,6 +385,20 @@ function HealthBar({ label, value, color }: { label: string; value: number; colo
       </div>
     </div>
   );
+}
+
+function ProviderReviewLine({ provider }: { provider: Pick<ServiceProvider, 'status' | 'documents'> }) {
+  const summary = getProviderReviewSummary(provider);
+  const colors = {
+    'missing-documents': 'text-slate-500',
+    'review-required': 'text-amber-600',
+    blocked: 'text-red-600',
+    ready: 'text-emerald-600',
+    approved: 'text-emerald-600',
+    suspended: 'text-red-600',
+  };
+
+  return <p className={`mt-1 text-xs font-medium ${colors[summary.state]}`}>{summary.label}</p>;
 }
 
 function StatusBadge({ status }: { status: GlobalTicket['status'] }) {

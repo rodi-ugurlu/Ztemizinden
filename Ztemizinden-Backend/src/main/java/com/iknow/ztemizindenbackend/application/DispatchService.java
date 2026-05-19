@@ -2,6 +2,7 @@ package com.iknow.ztemizindenbackend.application;
 
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketStatus;
+import com.iknow.ztemizindenbackend.domain.NotFoundException;
 import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
 import com.iknow.ztemizindenbackend.domain.Ticket;
@@ -20,13 +21,14 @@ public class DispatchService {
 
     @Transactional(readOnly = true)
     public List<Ticket> openDispatchQueue() {
-        return ticketRepository.findByStatusInOrderByCreatedAtAsc(List.of(TicketStatus.OPEN, TicketStatus.OFFERED));
+        return ticketRepository.findByStatusInOrderByCreatedAtAsc(
+                List.of(TicketStatus.OPEN, TicketStatus.OFFERED, TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED));
     }
 
     @Transactional(readOnly = true)
     public List<ProviderMatch> matches(String ticketId) {
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Ticket not found"));
+                .orElseThrow(() -> new NotFoundException("Ticket not found"));
 
         return serviceProviderRepository.findAll().stream()
                 .filter(provider -> provider.getStatus() == ProviderStatus.VERIFIED)
@@ -38,9 +40,9 @@ public class DispatchService {
     @Transactional
     public Ticket assign(String ticketId, String providerId) {
         Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Ticket not found"));
+                .orElseThrow(() -> new NotFoundException("Ticket not found"));
         ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
         if (provider.getStatus() != ProviderStatus.VERIFIED) {
             throw new IllegalStateException("Provider is not verified");
         }

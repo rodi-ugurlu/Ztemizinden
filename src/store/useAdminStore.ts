@@ -35,6 +35,14 @@ export interface ServiceProvider {
   updatedAt: string;
 }
 
+export type ProviderReviewState =
+  | 'missing-documents'
+  | 'review-required'
+  | 'blocked'
+  | 'ready'
+  | 'approved'
+  | 'suspended';
+
 export interface GlobalTicket extends Omit<Ticket, 'status'> {
   status: AdminTicketStatus;
   responseTime: number;
@@ -50,6 +58,9 @@ export interface GlobalMetrics {
   ticketsResolvedToday: number;
   criticalTickets: number;
   pendingVerifications: number;
+  pendingProviderDocumentReviews: number;
+  readyProviderApprovals: number;
+  blockedProviderApprovals: number;
   slaBreaches: number;
   unassignedOpenTickets: number;
 }
@@ -80,6 +91,7 @@ interface AdminStoreState {
   fetchProviders: () => Promise<void>;
   fetchQueue: () => Promise<void>;
   verifyProvider: (providerId: string) => Promise<void>;
+  rejectProvider: (providerId: string) => Promise<void>;
   toggleTrustedStatus: (providerId: string, isTrusted?: boolean) => Promise<void>;
   assignTicket: (ticketId: string, providerId: string, providerName?: string, opsNote?: string) => Promise<void>;
   verifyDocument: (providerId: string, documentId: string, notes?: string) => Promise<void>;
@@ -133,7 +145,12 @@ export const useAdminStore = create<AdminStoreState>()((set, get) => ({
   },
 
   verifyProvider: async (providerId) => {
-    await api.post(`/providers/${providerId}/verify`);
+    await api.post(`/providers/${providerId}/approve`);
+    await get().fetchProviders();
+  },
+
+  rejectProvider: async (providerId) => {
+    await api.post(`/providers/${providerId}/reject`);
     await get().fetchProviders();
   },
 
@@ -179,6 +196,16 @@ export const useAdminStore = create<AdminStoreState>()((set, get) => ({
     const averageResponseTime = activeTickets.length
       ? Math.round(activeTickets.reduce((sum, ticket) => sum + ticket.responseTime, 0) / activeTickets.length)
       : 0;
+    const pendingProviders = get().providers.filter((p) => p.status === 'Pending Verification');
+    const pendingProviderDocumentReviews = pendingProviders.filter(
+      (provider) => getProviderReviewSummary(provider).state === 'review-required'
+    ).length;
+    const readyProviderApprovals = pendingProviders.filter(
+      (provider) => getProviderReviewSummary(provider).state === 'ready'
+    ).length;
+    const blockedProviderApprovals = pendingProviders.filter((provider) =>
+      ['missing-documents', 'blocked'].includes(getProviderReviewSummary(provider).state)
+    ).length;
 
     return {
       totalActiveTickets: activeTickets.length,
@@ -187,7 +214,10 @@ export const useAdminStore = create<AdminStoreState>()((set, get) => ({
       averageResponseTime,
       ticketsResolvedToday: get().tickets.filter((t) => t.status === 'Resolved' && t.updatedAt.startsWith(today)).length,
       criticalTickets: get().tickets.filter((t) => t.priority === 'Critical' && (t.status === 'Open' || t.status === 'In Progress')).length,
-      pendingVerifications: get().providers.filter((p) => p.status === 'Pending Verification').length,
+      pendingVerifications: pendingProviderDocumentReviews + readyProviderApprovals,
+      pendingProviderDocumentReviews,
+      readyProviderApprovals,
+      blockedProviderApprovals,
       slaBreaches: get().tickets.filter((ticket) => get().getSlaStatus(ticket.id) === 'Breach').length,
       unassignedOpenTickets: get().tickets.filter((ticket) => ticket.status === 'Open' && !ticket.assignedProviderId).length,
     };
@@ -198,7 +228,18 @@ export const useAdminStore = create<AdminStoreState>()((set, get) => ({
   },
 
   getPendingVerifications: () => {
-    return get().providers.filter((p) => p.status === 'Pending Verification');
+    const priority: Record<ProviderReviewState, number> = {
+      ready: 0,
+      'review-required': 1,
+      'missing-documents': 2,
+      blocked: 3,
+      approved: 4,
+      suspended: 5,
+    };
+    return get().providers
+      .filter((p) => p.status === 'Pending Verification')
+      .slice()
+      .sort((first, second) => priority[getProviderReviewSummary(first).state] - priority[getProviderReviewSummary(second).state]);
   },
 
   getVerifiedProviders: () => {
@@ -331,4 +372,61 @@ function normalizeProviderMatch(match: BackendProviderMatch, providers: ServiceP
   ];
 
   return { provider, score: match.score, etaMinutes: match.etaMinutes, reasons };
+}
+
+export function getProviderReviewSummary(provider: Pick<ServiceProvider, 'status' | 'documents'>): {
+  state: ProviderReviewState;
+  label: string;
+  description: string;
+} {
+  if (provider.status === 'Verified') {
+    return {
+      state: 'approved',
+      label: 'Onaylı',
+      description: 'Servis operasyon tarafından onaylandı.',
+    };
+  }
+
+  if (provider.status === 'Suspended') {
+    return {
+      state: 'suspended',
+      label: 'Askıda',
+      description: 'Servis hesabı askıya alındı.',
+    };
+  }
+
+  if (provider.documents.length === 0) {
+    return {
+      state: 'missing-documents',
+      label: 'Belge Eksik',
+      description: 'Onay için en az bir sağlayıcı belgesi yüklenmeli.',
+    };
+  }
+
+  if (provider.documents.some((document) => document.status === 'Rejected')) {
+    return {
+      state: 'blocked',
+      label: 'Belge Reddedildi',
+      description: 'Reddedilen belgeler yenilenmeden sağlayıcı onaylanamaz.',
+    };
+  }
+
+  if (provider.documents.some((document) => document.status === 'Pending')) {
+    return {
+      state: 'review-required',
+      label: 'Belge İncelemesi',
+      description: 'Bekleyen belgeler operasyon tarafından incelenmeli.',
+    };
+  }
+
+  return {
+    state: 'ready',
+    label: 'Onaya Hazır',
+    description: 'Tüm belgeler onaylandı; sağlayıcı onaylanabilir.',
+  };
+}
+
+export function getProviderApprovalBlocker(provider: Pick<ServiceProvider, 'status' | 'documents'>) {
+  const summary = getProviderReviewSummary(provider);
+  return summary.state === 'ready' ? null : summary.description;
 }

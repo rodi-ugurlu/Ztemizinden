@@ -1,6 +1,8 @@
 package com.iknow.ztemizindenbackend.application;
 
 import com.iknow.ztemizindenbackend.config.SecurityProperties;
+import com.iknow.ztemizindenbackend.domain.Asset;
+import com.iknow.ztemizindenbackend.domain.CustomerRepository;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
 import com.iknow.ztemizindenbackend.domain.Ticket;
 import java.util.Locale;
@@ -15,10 +17,16 @@ import org.springframework.stereotype.Component;
 @Component
 public class CurrentUser {
     private final SecurityProperties securityProperties;
+    private final CustomerRepository customerRepository;
     private final ServiceProviderRepository serviceProviderRepository;
 
-    public CurrentUser(SecurityProperties securityProperties, ServiceProviderRepository serviceProviderRepository) {
+    public CurrentUser(
+            SecurityProperties securityProperties,
+            CustomerRepository customerRepository,
+            ServiceProviderRepository serviceProviderRepository
+    ) {
         this.securityProperties = securityProperties;
+        this.customerRepository = customerRepository;
         this.serviceProviderRepository = serviceProviderRepository;
     }
 
@@ -29,6 +37,12 @@ public class CurrentUser {
     public String customerId(String requestedCustomerId) {
         if (!securityEnabled() || isAdmin()) {
             return requestedCustomerId;
+        }
+        String email = email();
+        if (email != null) {
+            return customerRepository.findByEmailIgnoreCase(email)
+                    .map(customer -> customer.getId())
+                    .orElseGet(() -> mappedPrincipalId("customer", requestedCustomerId));
         }
         return mappedPrincipalId("customer", requestedCustomerId);
     }
@@ -77,6 +91,15 @@ public class CurrentUser {
         }
         if (!isCustomer() || !customerId(ticket.getCustomerId()).equals(ticket.getCustomerId())) {
             throw new AccessDeniedException("Ticket does not belong to current customer");
+        }
+    }
+
+    public void requireCustomerAsset(Asset asset) {
+        if (!securityEnabled() || isAdmin()) {
+            return;
+        }
+        if (!isCustomer() || !customerId(asset.getOwnerId()).equals(asset.getOwnerId())) {
+            throw new AccessDeniedException("Asset does not belong to current customer");
         }
     }
 

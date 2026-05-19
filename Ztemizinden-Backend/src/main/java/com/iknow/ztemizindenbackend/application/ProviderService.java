@@ -1,7 +1,9 @@
 package com.iknow.ztemizindenbackend.application;
 
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderStatus;
+import com.iknow.ztemizindenbackend.domain.Enums.ProviderDocumentStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketCategory;
+import com.iknow.ztemizindenbackend.domain.NotFoundException;
 import com.iknow.ztemizindenbackend.domain.ProviderDocument;
 import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ProviderService {
     private final ServiceProviderRepository serviceProviderRepository;
+    private final IdentityProvisioningService identityProvisioningService;
 
     @Transactional(readOnly = true)
     public List<ServiceProvider> list() {
@@ -29,11 +32,15 @@ public class ProviderService {
     @Transactional(readOnly = true)
     public ServiceProvider getByEmail(String email) {
         return serviceProviderRepository.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
     }
 
     @Transactional
     public ServiceProvider create(CreateProviderCommand command) {
+        if (serviceProviderRepository.existsByEmailIgnoreCase(command.email())) {
+            throw new IllegalStateException("Provider email is already registered");
+        }
+
         ServiceProvider provider = new ServiceProvider(
                 command.name(),
                 command.contactName(),
@@ -43,21 +50,38 @@ public class ProviderService {
                 command.specialties()
         );
 
-        return serviceProviderRepository.save(provider);
+        ServiceProvider savedProvider = serviceProviderRepository.save(provider);
+        identityProvisioningService.provisionServiceProvider(
+                savedProvider.getEmail(),
+                savedProvider.getContactName(),
+                command.password()
+        );
+        return savedProvider;
     }
 
     @Transactional
     public ServiceProvider verify(String providerId) {
         ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
+        requireVerifiedDocuments(provider);
         provider.verify();
+        identityProvisioningService.enableUser(provider.getEmail());
+        return provider;
+    }
+
+    @Transactional
+    public ServiceProvider reject(String providerId) {
+        ServiceProvider provider = serviceProviderRepository.findById(providerId)
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
+        provider.suspend();
+        identityProvisioningService.disableUser(provider.getEmail());
         return provider;
     }
 
     @Transactional
     public ServiceProvider setTrusted(String providerId, boolean trusted) {
         ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
         provider.setTrusted(trusted);
         return provider;
     }
@@ -65,30 +89,30 @@ public class ProviderService {
     @Transactional
     public ProviderDocument addDocument(String providerId, AddDocumentCommand command) {
         ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
         return provider.addDocument(command.type(), command.url(), command.originalFileName());
     }
 
     @Transactional
     public ProviderDocument verifyDocument(String providerId, String documentId, String notes) {
         ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
         provider.verifyDocument(documentId, notes);
         return provider.getDocuments().stream()
                 .filter(document -> document.getId().equals(documentId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Provider document not found"));
+                .orElseThrow(() -> new NotFoundException("Provider document not found"));
     }
 
     @Transactional
     public ProviderDocument rejectDocument(String providerId, String documentId, String notes) {
         ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
         provider.rejectDocument(documentId, notes);
         return provider.getDocuments().stream()
                 .filter(document -> document.getId().equals(documentId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Provider document not found"));
+                .orElseThrow(() -> new NotFoundException("Provider document not found"));
     }
 
     public record CreateProviderCommand(
@@ -97,10 +121,22 @@ public class ProviderService {
             String email,
             String phone,
             String city,
-            Set<TicketCategory> specialties
+            Set<TicketCategory> specialties,
+            String password
     ) {
     }
 
     public record AddDocumentCommand(String type, String url, String originalFileName) {
+    }
+
+    private void requireVerifiedDocuments(ServiceProvider provider) {
+        if (provider.getDocuments().isEmpty()) {
+            throw new IllegalStateException("Provider must upload at least one document before approval");
+        }
+        boolean hasUnverifiedDocument = provider.getDocuments().stream()
+                .anyMatch(document -> document.getStatus() != ProviderDocumentStatus.VERIFIED);
+        if (hasUnverifiedDocument) {
+            throw new IllegalStateException("All provider documents must be verified before approval");
+        }
     }
 }

@@ -1,9 +1,11 @@
 package com.iknow.ztemizindenbackend.api;
 
+import com.iknow.ztemizindenbackend.application.CurrentUser;
 import com.iknow.ztemizindenbackend.application.ProviderService;
 import com.iknow.ztemizindenbackend.application.ProviderService.AddDocumentCommand;
 import com.iknow.ztemizindenbackend.application.UploadService;
 import com.iknow.ztemizindenbackend.application.UploadService.StoredUpload;
+import com.iknow.ztemizindenbackend.domain.BadRequestException;
 import com.iknow.ztemizindenbackend.domain.ProviderDocument;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class UploadController {
     private final UploadService uploadService;
     private final ProviderService providerService;
+    private final CurrentUser currentUser;
 
     @PostMapping("/ticket-media")
     @ResponseStatus(HttpStatus.CREATED)
@@ -35,11 +38,15 @@ public class UploadController {
             @RequestParam String type,
             @RequestParam(required = false) String providerId
     ) {
+        if (!StringUtils.hasText(type)) {
+            throw new BadRequestException("Provider document type is required");
+        }
         StoredUpload upload = uploadService.storeProviderDocument(file);
         String documentId = null;
-        if (StringUtils.hasText(providerId)) {
+        String resolvedProviderId = resolveProviderId(providerId);
+        if (StringUtils.hasText(resolvedProviderId)) {
             ProviderDocument document = providerService.addDocument(
-                    providerId,
+                    resolvedProviderId,
                     new AddDocumentCommand(type, upload.url(), upload.originalFileName())
             );
             documentId = document.getId();
@@ -65,5 +72,15 @@ public class UploadController {
                     providerDocumentId
             );
         }
+    }
+
+    private String resolveProviderId(String requestedProviderId) {
+        if (StringUtils.hasText(requestedProviderId)) {
+            return currentUser.providerId(requestedProviderId);
+        }
+        if (currentUser.isService()) {
+            return currentUser.providerId(null);
+        }
+        return null;
     }
 }

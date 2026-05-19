@@ -16,6 +16,9 @@ import org.springframework.web.multipart.MultipartFile;
 public class UploadService {
     private static final Set<String> TICKET_MEDIA_PREFIXES = Set.of("image/", "video/");
     private static final Set<String> PROVIDER_DOCUMENT_TYPES = Set.of("application/pdf", "image/jpeg", "image/png");
+    private static final Set<String> PROVIDER_DOCUMENT_EXTENSIONS = Set.of(".pdf", ".jpg", ".jpeg", ".png");
+    private static final long MAX_TICKET_MEDIA_BYTES = 50L * 1024L * 1024L;
+    private static final long MAX_PROVIDER_DOCUMENT_BYTES = 10L * 1024L * 1024L;
 
     private final Path rootDir;
 
@@ -32,7 +35,7 @@ public class UploadService {
         if (!allowed) {
             throw new IllegalArgumentException("Ticket media must be an image or video");
         }
-        return store(file, "ticket-media");
+        return store(file, "ticket-media", MAX_TICKET_MEDIA_BYTES);
     }
 
     public StoredUpload storeProviderDocument(MultipartFile file) {
@@ -40,12 +43,18 @@ public class UploadService {
         if (!PROVIDER_DOCUMENT_TYPES.contains(contentType)) {
             throw new IllegalArgumentException("Provider document must be PDF, JPG, or PNG");
         }
-        return store(file, "provider-documents");
+        if (!hasAllowedProviderDocumentExtension(file)) {
+            throw new IllegalArgumentException("Provider document file extension must be PDF, JPG, JPEG, or PNG");
+        }
+        return store(file, "provider-documents", MAX_PROVIDER_DOCUMENT_BYTES);
     }
 
-    private StoredUpload store(MultipartFile file, String bucket) {
+    private StoredUpload store(MultipartFile file, String bucket, long maxSizeBytes) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Upload file is required");
+        }
+        if (file.getSize() > maxSizeBytes) {
+            throw new IllegalArgumentException("Upload file is too large");
         }
 
         try {
@@ -82,6 +91,11 @@ public class UploadService {
     private String safeFileName(String value) {
         String fileName = value == null || value.isBlank() ? "upload.bin" : value;
         return fileName.replaceAll("[^A-Za-z0-9._-]", "_");
+    }
+
+    private boolean hasAllowedProviderDocumentExtension(MultipartFile file) {
+        String fileName = safeFileName(file == null ? null : file.getOriginalFilename()).toLowerCase(Locale.ROOT);
+        return PROVIDER_DOCUMENT_EXTENSIONS.stream().anyMatch(fileName::endsWith);
     }
 
     public record StoredUpload(String originalFileName, String storedFileName, String contentType, long size, String url) {

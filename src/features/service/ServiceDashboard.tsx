@@ -1,589 +1,444 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import {
-  useServiceStore,
-  useActiveJobs,
-  useMyProposals,
-  useNewOpportunities,
-  useTicketStats,
-} from '@/store/useServiceStore';
+import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useServiceStore } from '@/store/useServiceStore';
 import type { Ticket } from '@/store/useCustomerStore';
-import TicketDetailDrawer from './components/TicketDetailDrawer';
-import FinalBillingDialog from './components/FinalBillingDialog';
 import {
-  Inbox,
-  Send,
-  Hammer,
+  Archive,
+  ArrowRight,
+  BriefcaseBusiness,
   CheckCircle2,
-  Clock,
-  MapPin,
-  ReceiptText,
-  Route,
-  Wrench,
-  Zap,
-  Droplets,
-  Settings,
+  ClipboardList,
+  Clock3,
+  FileCheck2,
+  FileText,
+  HandCoins,
+  Inbox,
+  RadioTower,
+  Send,
+  Sparkles,
+  UsersRound,
 } from 'lucide-react';
 
-/**
- * ServiceDashboard Component
- *
- * Kanban-style ticket board for Service Provider Portal.
- * Three columns: New Opportunities, My Proposals, Active Jobs
- */
 export default function ServiceDashboard() {
-  const stats = useTicketStats();
-  const newOpportunities = useNewOpportunities();
-  const myProposals = useMyProposals();
-  const activeJobs = useActiveJobs();
-  const { myJobs, fetchOpportunities, fetchMyJobs, currentProviderId, resolveProviderSession } = useServiceStore();
+  const {
+    opportunities,
+    myJobs,
+    currentProviderId,
+    providerProfile,
+    fetchOpportunities,
+    fetchMyJobs,
+    resolveProviderSession,
+    isLoading,
+    error,
+  } = useServiceStore();
   const user = useAuthStore((state) => state.user);
+  const providerStatus = providerProfile?.status;
+  const isPendingProvider = providerStatus === 'Pending Verification';
+  const isSuspendedProvider = providerStatus === 'Suspended';
 
   useEffect(() => {
     void resolveProviderSession(user);
   }, [user, resolveProviderSession]);
 
   useEffect(() => {
-    if (currentProviderId) {
-      fetchOpportunities();
-      fetchMyJobs();
-    }
+    if (!currentProviderId) return;
+    void fetchOpportunities();
+    void fetchMyJobs();
   }, [currentProviderId, fetchOpportunities, fetchMyJobs]);
 
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [billingTicket, setBillingTicket] = useState<Ticket | null>(null);
-  const [isBillingOpen, setIsBillingOpen] = useState(false);
-  
-  const currentFieldJob = activeJobs[0];
-  const billingSubmittedJobs = myJobs.filter((ticket) => ticket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL');
+  const visibleTickets = uniqueTickets([...opportunities, ...myJobs]);
+  const proposedTickets = visibleTickets.filter((ticket) => hasProviderOffer(ticket, currentProviderId));
+  const acceptedTickets = myJobs.filter((ticket) =>
+    ticket.offers.some((offer) => offer.providerId === currentProviderId && offer.status === 'ACCEPTED')
+  );
+  const openBillingJobs = myJobs.filter(
+    (ticket) => ticket.status === 'IN_PROGRESS' || ticket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL'
+  );
+  const closedBillingJobs = myJobs.filter(
+    (ticket) => ticket.status === 'CLOSED' || ticket.billingStatus === 'APPROVED'
+  );
+  const incomingThisMonth = visibleTickets.filter((ticket) => isSameMonth(ticket.createdAt)).length;
+  const offersThisMonth = visibleTickets.filter((ticket) =>
+    ticket.offers.some((offer) => offer.providerId === currentProviderId && isSameMonth(offer.createdAt))
+  ).length;
+  const closedThisMonth = closedBillingJobs.filter((ticket) => isSameMonth(ticket.updatedAt)).length;
 
-  const handleTicketClick = (ticket: Ticket) => {
-    setSelectedTicket(ticket);
-    setIsDetailOpen(true);
-  };
+  if (isLoading) {
+    return (
+      <div className="w-full flex-1 bg-slate-50 p-6 lg:p-8">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-5 lg:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((item) => (
+            <div key={item} className="h-40 rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="h-full animate-pulse rounded-lg bg-slate-100" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-  const handleCompleteJob = (ticket: Ticket, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setBillingTicket(ticket);
-    setIsBillingOpen(true);
-  };
+  if (error) {
+    return (
+      <div className="w-full flex-1 bg-slate-50 p-6 lg:p-8">
+        <Card className="mx-auto max-w-3xl border-red-200 bg-red-50">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-3">
+              <FileText className="mt-0.5 h-5 w-5 text-red-600" />
+              <div>
+                <h2 className="font-semibold text-red-950">Servis verileri yüklenemedi</h2>
+                <p className="mt-1 text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-  const handleAdvanceJob = (ticket: Ticket, e: React.MouseEvent) => {
-    e.stopPropagation();
-    // For MVP, if it's in progress, advancing it means completing it
-    if (ticket.status === 'IN_PROGRESS') {
-      handleCompleteJob(ticket, e);
-    }
-  };
+  if (isPendingProvider || isSuspendedProvider) {
+    return (
+      <div className="w-full flex-1 bg-slate-50 p-6 lg:p-8">
+        <Card className={`mx-auto max-w-3xl border ${isSuspendedProvider ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${isSuspendedProvider ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                {isSuspendedProvider ? <FileText className="h-5 w-5" /> : <Clock3 className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-xs font-bold uppercase tracking-[0.18em] ${isSuspendedProvider ? 'text-red-700' : 'text-amber-700'}`}>
+                  {isSuspendedProvider ? 'Başvuru reddedildi' : 'Operasyon onayı bekleniyor'}
+                </p>
+                <h2 className={`mt-2 text-xl font-black ${isSuspendedProvider ? 'text-red-950' : 'text-amber-950'}`}>
+                  {providerProfile?.name ?? user?.name ?? 'Servis hesabı'}
+                </h2>
+                <p className={`mt-2 text-sm leading-relaxed ${isSuspendedProvider ? 'text-red-700' : 'text-amber-800'}`}>
+                  {isSuspendedProvider
+                    ? 'Servis sağlayıcı başvurunuz operasyon tarafından reddedildi veya askıya alındı. Profil ve belgelerinizi kontrol edip operasyon ekibiyle iletişime geçin.'
+                    : 'Başvurunuz alındı. Operasyon merkezi firma ve belge kontrollerini tamamladığında yeni talepler ve iş panosu açılacak.'}
+                </p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Link
+                    to="/service/team"
+                    className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold ${isSuspendedProvider ? 'border-red-200 bg-white text-red-700' : 'border-amber-200 bg-white text-amber-800'}`}
+                  >
+                    <FileCheck2 className="h-4 w-4" />
+                    Profil ve Belgeler
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">İş Panosu</h1>
-        <p className="text-slate-400 mt-1">
-          Yeni fırsatları değerlendirin ve aktif işleri yönetin
-        </p>
-      </div>
-
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          title="Yeni Fırsatlar"
-          value={stats.newOpportunities}
-          icon={Inbox}
-          color="bg-blue-50 text-blue-600"
-        />
-        <StatCard
-          title="Tekliflerim"
-          value={stats.myProposals}
-          icon={Send}
-          color="bg-amber-50 text-amber-600"
-        />
-        <StatCard
-          title="Aktif İşler"
-          value={stats.activeJobs}
-          icon={Hammer}
-          color="bg-indigo-50 text-indigo-600"
-        />
-        <StatCard
-          title="Tamamlanan"
-          value={stats.completedJobs}
-          icon={CheckCircle2}
-          color="bg-emerald-50 text-emerald-600"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        <Card className="lg:col-span-2 bg-white border-slate-200">
-          <CardContent className="p-5">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <p className="text-sm text-slate-500">Sıradaki Saha İşi</p>
-                <h2 className="text-lg font-semibold text-slate-900 mt-1">
-                  {currentFieldJob ? currentFieldJob.title : 'Aktif saha işi yok'}
-                </h2>
-                <p className="text-sm text-slate-400 mt-1">
-                  {currentFieldJob
-                    ? `${currentFieldJob.customerCompany} · ${currentFieldJob.customerLocation}`
-                    : 'Yeni fırsatlardan teklif vererek iş akışını başlatabilirsiniz.'}
-                </p>
-              </div>
-              {currentFieldJob ? (
-                <div className="flex items-center gap-3">
-                  <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-600 border-indigo-200/30">
-                    Çalışıyor
-                  </Badge>
-                  <Button
-                    size="sm"
-                    className="bg-red-600 hover:bg-red-700 text-white"
-                    onClick={() => handleTicketClick(currentFieldJob)}
-                  >
-                    <Route className="w-4 h-4 mr-2" />
-                    İş Emri
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="bg-slate-50 border-slate-200 text-slate-700"
-                  onClick={() => newOpportunities[0] && handleTicketClick(newOpportunities[0])}
-                  disabled={newOpportunities.length === 0}
-                >
-                  <Inbox className="w-4 h-4 mr-2" />
-                  Fırsat Aç
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">Hakediş Gönderilen</p>
-                <p className="text-3xl font-bold text-red-600 mt-2">{billingSubmittedJobs.length}</p>
-                <p className="text-xs text-slate-500 mt-1">Müşteri onayı bekleyen kapanışlar</p>
-              </div>
-              <div className="w-11 h-11 rounded-lg bg-red-50 flex items-center justify-center">
-                <ReceiptText className="w-5 h-5 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Kanban Board */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Column 1: New Opportunities */}
-        <KanbanColumn
-          title="Yeni Fırsatlar"
-          subtitle="Müşteri arıza kayıtları"
-          icon={Inbox}
-          count={newOpportunities.length}
-          color="border-t-blue-500"
-        >
-          {newOpportunities.map((ticket) => (
-            <TicketCard
-              key={ticket.id}
-              ticket={ticket}
-              variant="opportunity"
-              onClick={() => handleTicketClick(ticket)}
-            />
-          ))}
-          {newOpportunities.length === 0 && (
-            <EmptyColumn message="Yeni fırsat bulunmuyor" />
-          )}
-        </KanbanColumn>
-
-        {/* Column 2: My Proposals */}
-        <KanbanColumn
-          title="Tekliflerim"
-          subtitle="Bekleyen ve kabul edilen"
-          icon={Send}
-          count={myProposals.length}
-          color="border-t-amber-500"
-        >
-          {myProposals.map((ticket) => {
-            const myProposal = ticket.offers?.find(
-              (p) => p.providerId === currentProviderId
-            );
-            return (
-              <TicketCard
-                key={ticket.id}
-                ticket={ticket}
-                variant="proposal"
-                proposalStatus={myProposal?.status}
-                onClick={() => handleTicketClick(ticket)}
-              />
-            );
-          })}
-          {myProposals.length === 0 && (
-            <EmptyColumn message="Henüz teklif vermediniz" />
-          )}
-        </KanbanColumn>
-
-        {/* Column 3: Active Jobs */}
-        <KanbanColumn
-          title="Aktif İşler"
-          subtitle="Devam eden servisler"
-          icon={Hammer}
-          count={activeJobs.length}
-          color="border-t-indigo-500"
-        >
-          {activeJobs.map((ticket) => (
-            <TicketCard
-              key={ticket.id}
-              ticket={ticket}
-              variant="active"
-              onClick={() => handleTicketClick(ticket)}
-              onAdvance={(e) => handleAdvanceJob(ticket, e)}
-              onComplete={(e) => handleCompleteJob(ticket, e)}
-            />
-          ))}
-          {activeJobs.length === 0 && (
-            <EmptyColumn message="Aktif iş bulunmuyor" />
-          )}
-        </KanbanColumn>
-      </div>
-
-      {/* Drawers & Modals */}
-      <TicketDetailDrawer
-        ticket={selectedTicket}
-        isOpen={isDetailOpen}
-        onClose={() => setIsDetailOpen(false)}
-      />
-
-      <FinalBillingDialog
-        ticket={billingTicket}
-        isOpen={isBillingOpen}
-        onClose={() => {
-          setIsBillingOpen(false);
-          setBillingTicket(null);
+    <div className="relative w-full flex-1 overflow-hidden bg-slate-50">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.05]"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(15,23,42,0.9) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.9) 1px, transparent 1px)',
+          backgroundSize: '44px 44px',
         }}
       />
+
+      <div className="relative mx-auto flex min-h-[calc(100vh-145px)] w-full max-w-7xl flex-col gap-7 p-4 sm:p-6 lg:p-8">
+        <section className="overflow-hidden rounded-lg border border-emerald-900 bg-emerald-900 shadow-xl">
+          <div className="flex flex-col gap-5 px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between lg:px-7">
+            <div className="flex items-center gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/10 shadow-lg">
+                <BriefcaseBusiness className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-100">Temizinden</p>
+                <h1 className="text-2xl font-black tracking-normal sm:text-3xl">Servis Firması Paneli</h1>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/10 px-4 py-3">
+              <RadioTower className="h-4 w-4 text-emerald-100" />
+              <div className="text-right">
+                <p className="text-xs text-emerald-100">Maintenance 6.0</p>
+                <p className="text-sm font-semibold text-white">Canlı servis akışı</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr_1fr_1.05fr]">
+          <ModuleCard
+            tone="green"
+            eyebrow={`${opportunities.length} yeni kayıt`}
+            title="Yeni Gelen Talepler"
+            description="Fabrikalardan yeni gelen servis talepleri"
+            icon={Inbox}
+            to="/service/tickets"
+            actionLabel="Talepleri Aç"
+          />
+
+          <ModuleCard
+            tone="blue"
+            eyebrow={`${proposedTickets.length} teklif`}
+            title="Teklif Verilen Talepler"
+            description="Teklif gönderilmiş, onay bekleyen işler"
+            icon={Send}
+            to="/service/tickets"
+            actionLabel="Teklifleri Gör"
+          />
+
+          <ModuleCard
+            tone="red"
+            eyebrow={`${acceptedTickets.length} kabul`}
+            title="Kabul Edilen Talepler"
+            description="Fabrika tarafından kabul edilen teklifler"
+            icon={FileCheck2}
+            to="/service/tickets"
+            actionLabel="İşleri Aç"
+          />
+
+          <ComingSoonTile />
+        </section>
+
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.28fr]">
+          <ModuleCard
+            tone="amber"
+            eyebrow={`${openBillingJobs.length} açık süreç`}
+            title="Hakediş Verilen Açık İşler"
+            description="Devam eden işler, hakediş gönderilen ve onay/ödeme bekleyen işler"
+            icon={HandCoins}
+            to="/service/tickets"
+            actionLabel="Açık İşleri Gör"
+            large
+          />
+
+          <ModuleCard
+            tone="softGreen"
+            eyebrow={`${closedBillingJobs.length} arşiv kayıt`}
+            title="Hakediş Verilen Kapanan İşler"
+            description="Arşiv, tamamlanan işler, ödemeler ve belgeler"
+            icon={Archive}
+            to="/service/tickets"
+            actionLabel="Arşivi Aç"
+            large
+          />
+        </section>
+
+        <section className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <MetricPill
+            tone="green"
+            value={incomingThisMonth}
+            label="Bu ay toplam gelen arıza bildirimi"
+            icon={ClipboardList}
+          />
+          <MetricPill
+            tone="blue"
+            value={offersThisMonth}
+            label="Bu ay toplam teklif verdiğim işler"
+            icon={Send}
+          />
+          <MetricPill
+            tone="green"
+            value={closedThisMonth}
+            label="Bu ay kapatılan işler"
+            icon={CheckCircle2}
+          />
+        </section>
+      </div>
     </div>
   );
 }
 
-// ==========================================
-// HELPER COMPONENTS
-// ==========================================
-
-interface StatCardProps {
+function ModuleCard({
+  tone,
+  eyebrow,
+  title,
+  description,
+  icon: Icon,
+  to,
+  actionLabel,
+  large = false,
+}: {
+  tone: 'green' | 'softGreen' | 'blue' | 'red' | 'amber';
+  eyebrow: string;
   title: string;
-  value: number;
+  description: string;
   icon: React.ElementType;
-  color: string;
+  to: string;
+  actionLabel: string;
+  large?: boolean;
+}) {
+  const styles = moduleStyles[tone];
+
+  return (
+    <Link to={to} className="group block h-full">
+      <Card
+        className={`h-full overflow-hidden border-2 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${styles.border} ${styles.hover}`}
+      >
+        <CardContent className={`relative flex flex-col justify-between p-6 ${large ? 'min-h-[190px]' : 'min-h-[180px]'}`}>
+          <div className={`absolute inset-x-0 top-0 h-1 ${styles.bar}`} />
+          <div className="flex items-start justify-between gap-4">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${styles.iconBg}`}>
+              <Icon className={`h-6 w-6 ${styles.icon}`} />
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${styles.badge}`}>
+              {eyebrow}
+            </span>
+          </div>
+
+          <div className="mt-7 space-y-3">
+            <h2 className={`text-2xl font-black leading-tight tracking-normal ${styles.title}`}>{title}</h2>
+            <p className="max-w-lg text-sm font-medium leading-relaxed text-slate-500">{description}</p>
+          </div>
+
+          <div className="mt-6 flex items-center justify-between">
+            <span className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold ${styles.action}`}>
+              {actionLabel}
+            </span>
+            <ArrowRight className={`h-5 w-5 opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100 ${styles.icon}`} />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
 }
 
-function StatCard({ title, value, icon: Icon, color }: StatCardProps) {
+function ComingSoonTile() {
   return (
-    <Card className="bg-white border-slate-200">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-slate-400">{title}</p>
-            <p className="text-2xl font-bold text-slate-900 mt-1">{value}</p>
-          </div>
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${color}`}>
-            <Icon className="w-5 h-5" />
-          </div>
+    <Card className="relative h-full overflow-hidden border-2 border-amber-300 bg-amber-50 shadow-md">
+      <CardContent className="flex min-h-[180px] flex-col justify-between p-6">
+        <div className="absolute right-5 top-5 rotate-6 rounded-lg bg-slate-950 px-4 py-3 text-center text-white shadow-lg">
+          <Sparkles className="mx-auto mb-1 h-4 w-4 text-amber-300" />
+          <p className="text-xl font-black leading-none">New</p>
+          <p className="text-lg font-black leading-none">soon</p>
+        </div>
+
+        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+          <UsersRound className="h-6 w-6" />
+        </div>
+
+        <div className="mt-10 max-w-[72%] space-y-3">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">Yeni modül</p>
+          <h2 className="text-2xl font-black leading-tight tracking-normal text-amber-950">
+            İş / Görev / Personel Yönet
+          </h2>
+          <p className="text-sm font-medium text-amber-800">Saha ekibi, görev ve kaynak planlaması sonra eklenecek.</p>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-interface KanbanColumnProps {
-  title: string;
-  subtitle: string;
-  icon: React.ElementType;
-  count: number;
-  color: string;
-  children: React.ReactNode;
-}
-
-function KanbanColumn({
-  title,
-  subtitle,
+function MetricPill({
+  tone,
+  value,
+  label,
   icon: Icon,
-  count,
-  color,
-  children,
-}: KanbanColumnProps) {
-  return (
-    <div className={`flex flex-col h-full bg-white/50 rounded-lg border border-slate-200 ${color} border-t-4`}>
-      <CardHeader className="pb-3 border-b border-slate-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Icon className="w-5 h-5 text-red-600" />
-            <CardTitle className="text-base font-semibold text-slate-900">{title}</CardTitle>
-          </div>
-          <Badge
-            variant="secondary"
-            className="bg-slate-50 text-slate-700 hover:bg-red-50"
-          >
-            {count}
-          </Badge>
-        </div>
-        <p className="text-xs text-slate-500">{subtitle}</p>
-      </CardHeader>
-      <CardContent className="flex-1 p-3 space-y-3 overflow-y-auto">
-        {children}
-      </CardContent>
-    </div>
-  );
-}
-
-function ServiceCategoryIcon({ category, className }: { category: string; className: string }) {
-  switch (category) {
-    case 'Electric':
-      return <Zap className={className} />;
-    case 'Mechanic':
-      return <Settings className={className} />;
-    case 'Pneumatic':
-    case 'Hydraulic':
-      return <Droplets className={className} />;
-    default:
-      return <Wrench className={className} />;
-  }
-}
-
-interface TicketCardProps {
-  ticket: Ticket;
-  variant: 'opportunity' | 'proposal' | 'active';
-  proposalStatus?: string;
-  onClick: () => void;
-  onAdvance?: (e: React.MouseEvent) => void;
-  onComplete?: (e: React.MouseEvent) => void;
-}
-
-function TicketCard({
-  ticket,
-  variant,
-  proposalStatus,
-  onClick,
-  onAdvance,
-  onComplete,
-}: TicketCardProps) {
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'Critical':
-        return 'bg-red-50 text-red-600 border-red-200/30';
-      case 'High':
-        return 'bg-orange-50 text-orange-600 border-orange-200/30';
-      case 'Medium':
-        return 'bg-amber-50 text-amber-600 border-amber-200/30';
-      default:
-        return 'bg-slate-100 text-slate-500 border-slate-200';
-    }
-  };
-
-  const getVariantStyles = () => {
-    switch (variant) {
-      case 'opportunity':
-        return 'hover:border-red-200/50 hover:bg-red-50';
-      case 'proposal':
-        return 'hover:border-red-200/50 hover:bg-red-50';
-      case 'active':
-        return 'hover:border-red-200/50 hover:bg-red-50 border-red-200/30';
-    }
-  };
-
-  return (
-    <div
-      onClick={onClick}
-      className={`bg-white rounded-lg p-4 border border-slate-200 cursor-pointer transition-all ${getVariantStyles()}`}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono text-slate-500">
-            #{ticket.id.split('-')[1]}
-          </span>
-        </div>
-        <Badge variant="outline" className={`text-xs ${getPriorityColor(ticket.priority)}`}>
-          {priorityLabel(ticket.priority)}
-        </Badge>
-      </div>
-
-      {/* Title */}
-      <h3 className="font-medium text-slate-900 text-sm mb-2 line-clamp-2">
-        {ticket.title}
-      </h3>
-
-      {/* Customer */}
-      <div className="flex items-center gap-2 text-xs text-slate-400 mb-3">
-        <MapPin className="w-3 h-3" />
-        <span className="truncate">{ticket.customerCompany}</span>
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-slate-50 rounded flex items-center justify-center">
-            <ServiceCategoryIcon category={ticket.category} className="w-3 h-3 text-red-600" />
-          </div>
-          <span className="text-xs text-slate-500">{categoryLabel(ticket.category)}</span>
-        </div>
-
-        {variant === 'opportunity' && (
-          <div className="flex items-center gap-1 text-xs text-slate-500">
-            <Clock className="w-3 h-3" />
-            {getTimeAgo(ticket.createdAt)}
-          </div>
-        )}
-
-        {variant === 'proposal' && proposalStatus && (
-          <ProposalStatusBadge status={proposalStatus} />
-        )}
-
-        {variant === 'active' && (
-          <JobActionButton ticket={ticket} onAdvance={onAdvance} onComplete={onComplete} />
-        )}
-      </div>
-
-      {variant === 'active' && (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded bg-slate-50/70 border border-slate-200 p-2">
-            <p className="text-[10px] uppercase tracking-wider text-slate-600">Durum</p>
-            <div className="mt-1">
-              <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-600 border-indigo-200/30">
-                Aktif
-              </Badge>
-            </div>
-          </div>
-          <div className="rounded bg-slate-50/70 border border-slate-200 p-2">
-            <p className="text-[10px] uppercase tracking-wider text-slate-600">Süre</p>
-            <p className="text-xs text-slate-700 mt-1">{getWorkDuration(ticket)}</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function JobActionButton({
-  ticket,
-  onAdvance,
-  onComplete,
 }: {
-  ticket: Ticket;
-  onAdvance?: (e: React.MouseEvent) => void;
-  onComplete?: (e: React.MouseEvent) => void;
+  tone: 'green' | 'blue';
+  value: number;
+  label: string;
+  icon: React.ElementType;
 }) {
-  if (ticket.status === 'IN_PROGRESS') {
-    return (
-      <Button
-        size="sm"
-        className="h-7 px-2 bg-red-600 hover:bg-red-700 text-white text-xs"
-        onClick={onComplete}
-      >
-        <CheckCircle2 className="w-3 h-3 mr-1" />
-        Hakediş
-      </Button>
-    );
-  }
-
-  if (ticket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL' || ticket.status === 'CLOSED') {
-    return (
-      <Badge variant="outline" className="text-xs bg-amber-50 text-amber-600 border-amber-200/30">
-        Hakediş Gönderildi
-      </Badge>
-    );
-  }
+  const styles = metricStyles[tone];
 
   return (
-    <Button
-      size="sm"
-      className="h-7 px-2 bg-red-600 hover:bg-red-700 text-white text-xs"
-      onClick={onAdvance}
-    >
-      İşlem
-    </Button>
-  );
-}
-
-function ProposalStatusBadge({ status }: { status: string }) {
-  const styles = {
-    Pending: 'bg-amber-50 text-amber-600 border-amber-200/30',
-    Accepted: 'bg-emerald-50 text-emerald-600 border-emerald-200/30',
-    Rejected: 'bg-red-50 text-red-600 border-red-200/30',
-  };
-
-  const labels = {
-    Pending: 'Beklemede',
-    Accepted: 'Kabul',
-    Rejected: 'Red',
-  };
-
-  return (
-    <Badge
-      variant="outline"
-      className={`text-xs ${styles[status as keyof typeof styles] || styles.Pending}`}
-    >
-      {labels[status as keyof typeof labels] || status}
-    </Badge>
-  );
-}
-
-function EmptyColumn({ message }: { message: string }) {
-  return (
-    <div className="text-center py-8">
-      <Inbox className="w-8 h-8 text-slate-700 mx-auto mb-2" />
-      <p className="text-sm text-slate-500">{message}</p>
+    <div className={`relative min-h-[150px] overflow-hidden rounded-[999px] border-4 px-8 py-8 shadow-md ${styles.wrap}`}>
+      <div className="absolute inset-x-12 top-0 h-px bg-white/80" />
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+        <div className={`flex h-9 w-9 items-center justify-center rounded-full ${styles.iconBg}`}>
+          <Icon className={`h-4 w-4 ${styles.icon}`} />
+        </div>
+        <div className={`flex items-center gap-3 text-4xl font-black leading-none ${styles.value}`}>
+          {value}
+          <Clock3 className="h-5 w-5 opacity-40" />
+        </div>
+        <p className="max-w-[220px] text-sm font-semibold leading-snug text-slate-600">{label}</p>
+      </div>
     </div>
   );
 }
 
-function getTimeAgo(dateString: string): string {
-  const date = new Date(dateString);
+const moduleStyles = {
+  green: {
+    border: 'border-emerald-600',
+    hover: 'hover:border-emerald-700',
+    bar: 'bg-emerald-600',
+    iconBg: 'bg-emerald-50',
+    icon: 'text-emerald-700',
+    title: 'text-emerald-900',
+    badge: 'bg-emerald-50 text-emerald-800',
+    action: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  },
+  softGreen: {
+    border: 'border-emerald-500',
+    hover: 'hover:border-emerald-600',
+    bar: 'bg-emerald-500',
+    iconBg: 'bg-emerald-50',
+    icon: 'text-emerald-700',
+    title: 'text-emerald-900',
+    badge: 'bg-emerald-50 text-emerald-800',
+    action: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  },
+  blue: {
+    border: 'border-blue-700',
+    hover: 'hover:border-blue-800',
+    bar: 'bg-blue-700',
+    iconBg: 'bg-blue-50',
+    icon: 'text-blue-700',
+    title: 'text-blue-900',
+    badge: 'bg-blue-50 text-blue-800',
+    action: 'border-blue-200 bg-blue-50 text-blue-800',
+  },
+  red: {
+    border: 'border-red-500',
+    hover: 'hover:border-red-600',
+    bar: 'bg-red-600',
+    iconBg: 'bg-red-50',
+    icon: 'text-red-600',
+    title: 'text-red-800',
+    badge: 'bg-red-50 text-red-700',
+    action: 'border-red-200 bg-red-50 text-red-700',
+  },
+  amber: {
+    border: 'border-amber-400',
+    hover: 'hover:border-amber-500',
+    bar: 'bg-amber-500',
+    iconBg: 'bg-amber-50',
+    icon: 'text-amber-700',
+    title: 'text-amber-950',
+    badge: 'bg-amber-50 text-amber-800',
+    action: 'border-amber-200 bg-amber-50 text-amber-800',
+  },
+};
+
+const metricStyles = {
+  green: {
+    wrap: 'border-emerald-600 bg-emerald-50',
+    iconBg: 'bg-white',
+    icon: 'text-emerald-700',
+    value: 'text-emerald-800',
+  },
+  blue: {
+    wrap: 'border-blue-700 bg-blue-50',
+    iconBg: 'bg-white',
+    icon: 'text-blue-700',
+    value: 'text-blue-800',
+  },
+};
+
+function hasProviderOffer(ticket: Ticket, providerId: string) {
+  return ticket.offers.some((offer) => offer.providerId === providerId);
+}
+
+function uniqueTickets(tickets: Ticket[]) {
+  return tickets.filter((ticket, index, list) => list.findIndex((item) => item.id === ticket.id) === index);
+}
+
+function isSameMonth(value: string) {
+  const date = new Date(value);
   const now = new Date();
-  const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-
-  if (diffInHours < 1) {
-    return 'Şimdi';
-  } else if (diffInHours < 24) {
-    return `${diffInHours}s`;
-  } else {
-    const diffInDays = Math.floor(diffInHours / 24);
-    return `${diffInDays}g`;
-  }
-}
-
-function getWorkDuration(ticket: Ticket) {
-  const minutes = Math.max(
-    1,
-    Math.round((Date.now() - new Date(ticket.updatedAt).getTime()) / 60000)
-  );
-  return `${minutes} dk`;
-}
-
-function priorityLabel(priority: string): string {
-  const labels: Record<string, string> = {
-    Critical: 'Kritik',
-    High: 'Yüksek',
-    Medium: 'Orta',
-    Low: 'Düşük',
-  };
-  return labels[priority] || priority;
-}
-
-function categoryLabel(category: string): string {
-  const labels: Record<string, string> = {
-    Electric: 'Elektrik',
-    Mechanic: 'Mekanik',
-    Pneumatic: 'Pnömatik',
-    Hydraulic: 'Hidrolik',
-    Software: 'Yazılım',
-    General: 'Genel',
-  };
-  return labels[category] || category;
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 }

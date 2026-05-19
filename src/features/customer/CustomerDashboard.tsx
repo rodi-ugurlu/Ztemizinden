@@ -1,30 +1,24 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useCustomerStore, useTicketStats, type Ticket } from '@/store/useCustomerStore';
+import { Card, CardContent } from '@/components/ui/card';
+import { useCustomerStore, type Ticket } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
-  Banknote,
-  ClipboardList,
-  Package,
-  FileText,
   AlertCircle,
-  CheckCircle2,
+  Archive,
   ArrowRight,
+  Bell,
+  CalendarClock,
+  Clock3,
+  FileText,
+  Layers3,
+  Package,
   Plus,
+  RadioTower,
+  Sparkles,
   Wrench,
-  MessageSquare,
-  Timer,
 } from 'lucide-react';
 
-/**
- * CustomerDashboard Component
- *
- * Comprehensive overview dashboard for the Customer Portal.
- * Displays metrics, recent tickets, and quick actions.
- */
 export default function CustomerDashboard() {
   const { assets, tickets, isLoading, error, fetchAssets, fetchTickets } = useCustomerStore();
   const user = useAuthStore((state) => state.user);
@@ -35,39 +29,31 @@ export default function CustomerDashboard() {
     fetchTickets(user.id);
   }, [fetchAssets, fetchTickets, user?.id]);
 
-  const stats = useTicketStats();
   const pendingOfferTickets = tickets.filter((ticket) =>
-    (ticket.offers ?? []).some((offer) => offer.status === 'PENDING')
+    ticket.offers.some((offer) => offer.status === 'PENDING')
   );
   const billingApprovalTickets = tickets.filter(
     (ticket) => ticket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL'
   );
-  const invitedTickets = tickets.filter(
-    (ticket) => ticket.status === 'IN_PROGRESS' && ticket.assignedProviderName
-  );
-  const actionQueue = [...billingApprovalTickets, ...pendingOfferTickets]
-    .filter((ticket, index, list) => list.findIndex((item) => item.id === ticket.id) === index)
-    .slice(0, 3);
-
-  // Get recent tickets (last 5)
-  const recentTickets = [...tickets]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
-
-  // Get assets nearing warranty expiration (within 90 days)
-  const nearingWarranty = assets.filter((asset) => {
-    const warrantyEnd = new Date(asset.warrantyEndDate);
-    const today = new Date();
-    const diffDays = Math.ceil((warrantyEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return diffDays > 0 && diffDays <= 90;
-  });
+  const activeServiceTickets = tickets.filter((ticket) => ticket.status === 'IN_PROGRESS');
+  const pendingActionCount = uniqueTickets([
+    ...pendingOfferTickets,
+    ...billingApprovalTickets,
+    ...activeServiceTickets,
+  ]).length;
+  const openedThisMonth = tickets.filter((ticket) => isSameMonth(ticket.createdAt)).length;
+  const closedThisMonth = tickets.filter(
+    (ticket) => (ticket.status === 'RESOLVED' || ticket.status === 'CLOSED') && isSameMonth(ticket.updatedAt)
+  ).length;
 
   if (isLoading) {
     return (
-      <div className="p-6 lg:p-8 max-w-7xl mx-auto w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {[0, 1, 2].map((item) => (
-            <div key={item} className="h-32 rounded-lg bg-white border border-slate-200 animate-pulse" />
+      <div className="w-full flex-1 bg-slate-50 p-6 lg:p-8">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-5 lg:grid-cols-3">
+          {[0, 1, 2, 3, 4].map((item) => (
+            <div key={item} className="h-40 rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="h-full animate-pulse rounded-lg bg-slate-100" />
+            </div>
           ))}
         </div>
       </div>
@@ -76,14 +62,14 @@ export default function CustomerDashboard() {
 
   if (error) {
     return (
-      <div className="p-6 lg:p-8 max-w-7xl mx-auto w-full">
-        <Card className="border-red-200 bg-red-50">
+      <div className="w-full flex-1 bg-slate-50 p-6 lg:p-8">
+        <Card className="mx-auto max-w-3xl border-red-200 bg-red-50">
           <CardContent className="p-6">
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+              <AlertCircle className="mt-0.5 h-5 w-5 text-red-600" />
               <div>
-                <h2 className="font-semibold text-red-900">Veriler yüklenemedi</h2>
-                <p className="text-sm text-red-700 mt-1">{error}</p>
+                <h2 className="font-semibold text-red-950">Veriler yüklenemedi</h2>
+                <p className="mt-1 text-sm text-red-700">{error}</p>
               </div>
             </div>
           </CardContent>
@@ -93,401 +79,282 @@ export default function CustomerDashboard() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Müşteri Paneli</h1>
-          <p className="text-slate-500 mt-1">
-            Varlıklarınız, açık servis talepleriniz ve onay bekleyen işlemleriniz.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Link to="/customer/tickets/create">
-            <Button className="bg-red-600 hover:bg-red-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Arıza Kaydı Aç
-            </Button>
-          </Link>
-        </div>
-      </div>
+    <div className="relative w-full flex-1 overflow-hidden bg-slate-50">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.05]"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(15,23,42,0.9) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.9) 1px, transparent 1px)',
+          backgroundSize: '44px 44px',
+        }}
+      />
 
-      {/* MVP1 Action Queue */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ActionCard
-          title="Onay Bekleyen Teklif"
-          value={pendingOfferTickets.length}
-          description="Servis seçimi yapmanız gereken talepler"
-          icon={FileText}
-          cta="Teklifleri İncele"
-          link="/customer/requests"
-          tone="text-red-600"
-        />
-        <ActionCard
-          title="Hakediş Onayı"
-          value={billingApprovalTickets.length}
-          description="Servis tamamlandıktan sonra kapanış onayı"
-          icon={Banknote}
-          cta="Hakedişi Aç"
-          link="/customer/requests"
-          tone="text-red-600"
-        />
-        <ActionCard
-          title="Sahada Servis"
-          value={invitedTickets.length}
-          description="Davet edilen veya yolda olan servisler"
-          icon={Timer}
-          cta="Durumu Gör"
-          link="/customer/requests"
-          tone="text-red-600"
-        />
-      </div>
-
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Toplam Varlık"
-          value={stats.totalAssets}
-          icon={Package}
-          trend="Varlık pasaportu hazır"
-          trendType="positive"
-        />
-        <MetricCard
-          title="Aktif Talep"
-          value={stats.activeTickets}
-          icon={ClipboardList}
-          description="Açık, teklifli veya sahada"
-          alert={stats.activeTickets > 0}
-        />
-        <MetricCard
-          title="Bekleyen Teklif"
-          value={stats.pendingOffers}
-          icon={FileText}
-          description="Karar bekliyor"
-        />
-        <MetricCard
-          title="Bu Ay Çözülen"
-          value={stats.resolvedThisMonth}
-          icon={CheckCircle2}
-          trend="Geçmişe işlenir"
-          trendType="positive"
-        />
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Recent Tickets Table */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+      <div className="relative mx-auto flex min-h-[calc(100vh-145px)] w-full max-w-7xl flex-col gap-7 p-4 sm:p-6 lg:p-8">
+        <section className="overflow-hidden rounded-lg border border-slate-900 bg-slate-950 shadow-xl">
+          <div className="flex flex-col gap-5 px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between lg:px-7">
+            <div className="flex items-center gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-600 shadow-lg shadow-red-950/30">
+                <Layers3 className="h-5 w-5" />
+              </div>
               <div>
-                <CardTitle className="text-lg font-semibold">Son Servis Talepleri</CardTitle>
-                <CardDescription>Son bakım ve arıza kayıtları</CardDescription>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Temizinden</p>
+                <h1 className="text-2xl font-black tracking-normal sm:text-3xl">Müşteri Paneli</h1>
               </div>
-              <Link to="/customer/requests">
-                <Button variant="ghost" size="sm" className="text-red-600">
-                  Tümü <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Talep ID</TableHead>
-                    <TableHead>Varlık</TableHead>
-                    <TableHead>Konu</TableHead>
-                    <TableHead>Durum</TableHead>
-                    <TableHead>Öncelik</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentTickets.map((ticket) => (
-                    <TableRow key={ticket.id}>
-                      <TableCell className="font-mono text-xs text-slate-500">
-                        {ticket.id.split('-')[1]}
-                      </TableCell>
-                      <TableCell className="font-medium text-slate-700">
-                        {ticket.assetName}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate text-slate-600">
-                        {ticket.title}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={ticket.status} />
-                      </TableCell>
-                      <TableCell>
-                        <PriorityBadge priority={ticket.priority} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {recentTickets.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-slate-400">
-                        Henüz talep yok. İlk arıza kaydınızı oluşturabilirsiniz.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right Sidebar */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Hızlı İşlemler</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Link to="/customer/assets">
-                <Button variant="outline" className="w-full justify-start">
-                  <Package className="w-4 h-4 mr-2 text-red-600" />
-                  Varlık Ağacı
-                </Button>
-              </Link>
-              <Link to="/customer/tickets/create">
-                <Button variant="outline" className="w-full justify-start">
-                  <Wrench className="w-4 h-4 mr-2 text-red-600" />
-                  Arıza Bildir
-                </Button>
-              </Link>
-              <Link to="/customer/requests">
-                <Button variant="outline" className="w-full justify-start">
-                  <ClipboardList className="w-4 h-4 mr-2 text-slate-600" />
-                  Talepler ve Geçmiş
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          {actionQueue.length > 0 && (
-            <Card className="border-red-200 bg-red-50/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-red-800">
-                  <MessageSquare className="w-4 h-4" />
-                  Sizin Aksiyonunuz
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {actionQueue.map((ticket) => (
-                  <Link key={ticket.id} to="/customer/requests" className="block">
-                    <div className="rounded-md border border-red-100 bg-white/70 p-3 hover:border-red-200">
-                      <p className="text-sm font-medium text-slate-900 line-clamp-1">{ticket.title}</p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {ticket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL'
-                          ? 'Hakediş onayı bekliyor'
-                          : `${(ticket.offers ?? []).filter((offer) => offer.status === 'PENDING').length} teklif bekliyor`}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Warranty Alerts */}
-          {nearingWarranty.length > 0 && (
-            <Card className="border-red-200 bg-red-50/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-red-800">
-                  <AlertCircle className="w-4 h-4" />
-                  Garanti Yakında Bitiyor
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {nearingWarranty.slice(0, 3).map((asset) => (
-                    <li key={asset.id} className="text-sm text-red-700">
-                      <span className="font-medium">{asset.name}</span>
-                      <span className="text-red-600">
-                        {' '}— {formatDate(asset.warrantyEndDate)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Asset Distribution */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Varlık Dağılımı</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <AssetTypeRow
-                  type="Tesis"
-                  count={assets.filter((a) => a.type === 'Facility').length}
-                  total={assets.length}
-                  color="bg-red-500"
-                />
-                <AssetTypeRow
-                  type="KOBİ"
-                  count={assets.filter((a) => a.type === 'SME').length}
-                  total={assets.length}
-                  color="bg-red-500"
-                />
-                <AssetTypeRow
-                  type="Ev"
-                  count={assets.filter((a) => a.type === 'Home').length}
-                  total={assets.length}
-                  color="bg-slate-400"
-                />
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+              <RadioTower className="h-4 w-4 text-red-300" />
+              <div className="text-right">
+                <p className="text-xs text-slate-300">Maintenance 6.0</p>
+                <p className="text-sm font-semibold text-white">Canlı servis merkezi</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <ModuleCard
+            tone="blue"
+            eyebrow="Varlık/Ekipman Bazlı"
+            title={`${assets.length}`}
+            description="Toplam varlıklarımız"
+            icon={Package}
+            to="/customer/assets"
+            actionLabel="Yeni Varlık Ekle"
+            actionIcon={Plus}
+          />
+
+          <ModuleCard
+            tone="red"
+            eyebrow="Hizli Aksiyon"
+            title="Arıza İhbarı Aç"
+            description="Yeni arıza bildir, servis firmasına gönder"
+            icon={Wrench}
+            to="/customer/tickets/create"
+            actionLabel="Kayıt Oluştur"
+            actionIcon={ArrowRight}
+            featured
+          />
+
+          <ModuleCard
+            tone={pendingActionCount > 0 ? 'green' : 'amber'}
+            eyebrow={pendingActionCount > 0 ? `${pendingActionCount} aktif işlem` : 'Aksiyon yok'}
+            title="Bekleyen Talepler / İşler / İşlemler"
+            description="Onay, mesaj ve hakediş bekleyen süreçleri takip et"
+            icon={Bell}
+            to="/customer/requests"
+            actionLabel="Süreçleri Aç"
+            actionIcon={ArrowRight}
+          />
+        </section>
+
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.45fr_1.05fr]">
+          <MetricTile
+            value={openedThisMonth}
+            title="Bu Ay Açılan Arızalar"
+            description="Bildirilen arızalar"
+            icon={FileText}
+            to="/customer/requests"
+          />
+
+          <MetricTile
+            value={closedThisMonth}
+            title="Bu Ay Kapanan Arızalar"
+            description="Çözülen arızalar, hakedişler ve arşiv"
+            icon={Archive}
+            to="/customer/requests"
+            wide
+          />
+
+          <ComingSoonTile />
+        </section>
+
       </div>
     </div>
   );
 }
 
-// ==========================================
-// HELPER COMPONENTS
-// ==========================================
-
-interface MetricCardProps {
-  title: string;
-  value: number;
-  icon: React.ElementType;
-  description?: string;
-  trend?: string;
-  trendType?: 'positive' | 'negative' | 'neutral';
-  alert?: boolean;
-}
-
-function ActionCard({
+function ModuleCard({
+  tone,
+  eyebrow,
   title,
-  value,
   description,
   icon: Icon,
-  cta,
-  link,
-  tone,
+  to,
+  actionLabel,
+  actionIcon: ActionIcon,
+  featured = false,
 }: {
+  tone: 'blue' | 'red' | 'amber' | 'green';
+  eyebrow: string;
   title: string;
-  value: number;
   description: string;
   icon: React.ElementType;
-  cta: string;
-  link: string;
-  tone: string;
+  to: string;
+  actionLabel: string;
+  actionIcon: React.ElementType;
+  featured?: boolean;
+}) {
+  const styles = moduleStyles[tone];
+
+  return (
+    <Link to={to} className="group block h-full">
+      <Card
+        className={`h-full overflow-hidden border-2 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${styles.border} ${styles.hover}`}
+      >
+        <CardContent className="relative flex min-h-[190px] flex-col justify-between p-6">
+          <div className={`absolute inset-x-0 top-0 h-1 ${styles.bar}`} />
+          <div className="flex items-start justify-between gap-4">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${styles.iconBg}`}>
+              <Icon className={`h-6 w-6 ${styles.icon}`} />
+            </div>
+            {featured && (
+              <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold uppercase text-red-700">
+                Öncelikli
+              </span>
+            )}
+          </div>
+
+          <div className="mt-7 space-y-2">
+            <p className={`text-xs font-black uppercase tracking-[0.16em] ${styles.eyebrow}`}>{eyebrow}</p>
+            <h2 className={`text-3xl font-black leading-tight tracking-normal ${styles.title}`}>{title}</h2>
+            <p className="max-w-sm text-sm font-medium leading-relaxed text-slate-500">{description}</p>
+          </div>
+
+          <div className="mt-6 flex items-center justify-between">
+            <span className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold ${styles.action}`}>
+              <ActionIcon className="h-4 w-4" />
+              {actionLabel}
+            </span>
+            <ArrowRight className={`h-5 w-5 opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100 ${styles.icon}`} />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+function MetricTile({
+  value,
+  title,
+  description,
+  icon: Icon,
+  to,
+  wide = false,
+}: {
+  value: number;
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  to: string;
+  wide?: boolean;
 }) {
   return (
-    <Card className={value > 0 ? 'border-red-200 bg-white' : 'bg-white'}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-slate-500">{title}</p>
-            <p className={`text-3xl font-bold mt-2 ${value > 0 ? tone : 'text-slate-900'}`}>{value}</p>
-            <p className="text-xs text-slate-500 mt-1">{description}</p>
+    <Link to={to} className="group block h-full">
+      <Card className="h-full border-2 border-slate-200 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:border-red-300 hover:shadow-xl">
+        <CardContent className={`flex min-h-[190px] flex-col justify-between p-6 ${wide ? 'lg:px-8' : ''}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-50 text-red-600">
+              <Icon className="h-6 w-6" />
+            </div>
+            <div className="rounded-full border border-slate-200 px-3 py-1 text-xs font-bold text-slate-500">
+              Bu ay
+            </div>
           </div>
-          <div className="w-11 h-11 rounded-lg bg-slate-100 flex items-center justify-center">
-            <Icon className={`w-5 h-5 ${tone}`} />
+
+          <div className="mt-7">
+            <div className="flex items-end gap-4">
+              <p className="text-5xl font-black leading-none text-red-700">{value}</p>
+              <Clock3 className="mb-1 h-5 w-5 text-slate-300" />
+            </div>
+            <h2 className="mt-4 text-3xl font-black leading-tight tracking-normal text-slate-950">{title}</h2>
+            <p className="mt-3 text-sm font-medium text-slate-500">{description}</p>
           </div>
+
+          <div className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-red-700">
+            Detayları Gör
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+function ComingSoonTile() {
+  return (
+    <Card className="relative h-full overflow-hidden border-2 border-amber-300 bg-amber-50 shadow-md">
+      <CardContent className="flex min-h-[190px] flex-col justify-between p-6">
+        <div className="absolute right-5 top-5 rotate-6 rounded-lg bg-slate-950 px-4 py-3 text-center text-white shadow-lg">
+          <Sparkles className="mx-auto mb-1 h-4 w-4 text-amber-300" />
+          <p className="text-xl font-black leading-none">New</p>
+          <p className="text-lg font-black leading-none">soon</p>
         </div>
-        <Link to={link}>
-          <Button variant="ghost" size="sm" className="mt-4 p-0 h-auto text-red-600">
-            {cta} <ArrowRight className="w-4 h-4 ml-1" />
-          </Button>
-        </Link>
+
+        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+          <CalendarClock className="h-6 w-6" />
+        </div>
+
+        <div className="mt-10 max-w-[72%] space-y-3">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">Yeni modül</p>
+          <h2 className="text-2xl font-black leading-tight tracking-normal text-amber-950">
+            Periyodik & Otonom Arıza Bakım
+          </h2>
+          <p className="text-sm font-medium text-amber-800">Sonra eklenecek. Şimdilik pasif durumda.</p>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function MetricCard({ title, value, icon: Icon, description, trend, trendType, alert }: MetricCardProps) {
-  return (
-    <Card className={alert && value > 0 ? 'border-red-300' : ''}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-500">{title}</p>
-            <p className={`text-3xl font-bold mt-2 ${alert && value > 0 ? 'text-red-600' : 'text-slate-900'}`}>
-              {value}
-            </p>
-            {description && (
-              <p className="text-xs text-slate-400 mt-1">{description}</p>
-            )}
-            {trend && (
-              <p className={`text-xs mt-1 ${
-                trendType === 'positive' ? 'text-emerald-600' :
-                trendType === 'negative' ? 'text-red-600' : 'text-slate-500'
-              }`}>
-                {trend}
-              </p>
-            )}
-          </div>
-          <div className={`p-3 rounded-lg ${alert && value > 0 ? 'bg-red-100' : 'bg-slate-100'}`}>
-            <Icon className={`w-6 h-6 ${alert && value > 0 ? 'text-red-600' : 'text-slate-600'}`} />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+const moduleStyles = {
+  blue: {
+    border: 'border-blue-700',
+    hover: 'hover:border-blue-800',
+    bar: 'bg-blue-700',
+    iconBg: 'bg-blue-50',
+    icon: 'text-blue-700',
+    eyebrow: 'text-blue-700',
+    title: 'text-blue-800',
+    action: 'border-blue-200 bg-blue-50 text-blue-800',
+  },
+  red: {
+    border: 'border-red-500',
+    hover: 'hover:border-red-600',
+    bar: 'bg-red-600',
+    iconBg: 'bg-red-50',
+    icon: 'text-red-600',
+    eyebrow: 'text-red-600',
+    title: 'text-red-700',
+    action: 'border-red-200 bg-red-50 text-red-700',
+  },
+  amber: {
+    border: 'border-amber-400',
+    hover: 'hover:border-amber-500',
+    bar: 'bg-amber-500',
+    iconBg: 'bg-amber-50',
+    icon: 'text-amber-700',
+    eyebrow: 'text-amber-700',
+    title: 'text-amber-900',
+    action: 'border-amber-200 bg-amber-50 text-amber-800',
+  },
+  green: {
+    border: 'border-emerald-500',
+    hover: 'hover:border-emerald-600',
+    bar: 'bg-emerald-500',
+    iconBg: 'bg-emerald-50',
+    icon: 'text-emerald-700',
+    eyebrow: 'text-emerald-700',
+    title: 'text-emerald-900',
+    action: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  },
+};
+
+function uniqueTickets(tickets: Ticket[]) {
+  return tickets.filter((ticket, index, list) => list.findIndex((item) => item.id === ticket.id) === index);
 }
 
-function StatusBadge({ status }: { status: Ticket['status'] }) {
-  const variants: Record<Ticket['status'], { bg: string; text: string; label: string }> = {
-    'OPEN': { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Açık' },
-    'OFFERED': { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Teklifli' },
-    'IN_PROGRESS': { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'Serviste' },
-    'RESOLVED': { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Çözüldü' },
-    'CLOSED': { bg: 'bg-slate-100', text: 'text-slate-700', label: 'Kapalı' },
-    'CANCELLED': { bg: 'bg-red-100', text: 'text-red-700', label: 'İptal' },
-  };
-
-  const variant = variants[status];
-
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variant.bg} ${variant.text}`}>
-      {variant.label}
-    </span>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: Ticket['priority'] }) {
-  const variants: Record<Ticket['priority'], { border: string; text: string; label: string }> = {
-    'Low': { border: 'border-slate-200', text: 'text-slate-600', label: 'Düşük' },
-    'Medium': { border: 'border-amber-300', text: 'text-amber-700', label: 'Orta' },
-    'High': { border: 'border-orange-300', text: 'text-orange-700', label: 'Yüksek' },
-    'Critical': { border: 'border-red-300', text: 'text-red-700', label: 'Kritik' },
-  };
-
-  const variant = variants[priority];
-
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${variant.border} ${variant.text}`}>
-      {variant.label}
-    </span>
-  );
-}
-
-function AssetTypeRow({ type, count, total, color }: { type: string; count: number; total: number; color: string }) {
-  const percentage = total > 0 ? (count / total) * 100 : 0;
-
-  return (
-    <div>
-      <div className="flex justify-between text-sm mb-1">
-        <span className="text-slate-600">{type}</span>
-        <span className="font-medium text-slate-900">{count}</span>
-      </div>
-      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full`} style={{ width: `${percentage}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat('tr-TR', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
+function isSameMonth(value: string) {
+  const date = new Date(value);
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 }

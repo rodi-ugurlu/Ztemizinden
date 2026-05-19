@@ -56,6 +56,18 @@ KEYCLOAK_ISSUER_URI=http://localhost:8081/realms/ztemizinden \
 ./mvnw spring-boot:run
 ```
 
+Registration endpoints can also provision local Keycloak users:
+
+```bash
+APP_KEYCLOAK_PROVISIONING_ENABLED=true \
+KEYCLOAK_BASE_URL=http://localhost:8081 \
+KEYCLOAK_REALM=ztemizinden \
+KEYCLOAK_ADMIN_USERNAME=admin \
+KEYCLOAK_ADMIN_PASSWORD=admin
+```
+
+Customers receive the `CUSTOMER` realm role immediately. Service providers receive the `SERVICE` realm role so they can sign in and upload documents, but ticket opportunities and service jobs remain blocked until operations approves the provider record.
+
 Temporarily disable security for debugging:
 
 ```bash
@@ -73,7 +85,7 @@ APP_UPLOAD_DIR=uploads
 Uploaded files are served from:
 
 - `/uploads/ticket-media/...`
-- `/uploads/provider-documents/...`
+- `/uploads/provider-documents/...` (admin-only when API security is enabled)
 
 ## CORS
 
@@ -87,6 +99,8 @@ APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://y
 
 - `POST /api/assets`
 - `GET /api/assets?ownerId=...`
+- `POST /api/customers`
+- `GET /api/customers/me`
 - `POST /api/tickets`
 - `GET /api/tickets?customerId=...`
 - `POST /api/tickets/{ticketId}/offers`
@@ -100,6 +114,9 @@ APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://y
 - `POST /api/uploads/ticket-media`
 - `POST /api/uploads/provider-documents`
 - `POST /api/providers`
+- `GET /api/providers/me`
+- `POST /api/providers/{providerId}/approve`
+- `POST /api/providers/{providerId}/reject`
 - `POST /api/providers/{providerId}/verify`
 - `PUT /api/providers/{providerId}/trusted`
 - `POST /api/providers/{providerId}/documents/{documentId}/verify`

@@ -23,8 +23,24 @@ export interface Asset {
   location?: string;
   department?: string;
   description?: string;
+  parentId?: string | null;
+  depth: number;
+  leaf: boolean;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AssetTreeNode extends Asset {
+  childCount: number;
+  descendantCount: number;
+  children: AssetTreeNode[];
+}
+
+export interface AssetBreadcrumbItem {
+  id: string;
+  name: string;
+  depth: number;
 }
 
 export type TicketCategory = 'Electric' | 'Mechanic' | 'Pneumatic' | 'Hydraulic' | 'General' | 'Software';
@@ -114,6 +130,7 @@ type CreateTicketInput = Pick<Ticket, 'assetId' | 'title' | 'description' | 'cat
 
 interface CustomerStoreState {
   assets: Asset[];
+  assetTree: AssetTreeNode[];
   tickets: Ticket[];
   isLoading: boolean;
   error: string | null;
@@ -122,10 +139,18 @@ interface CustomerStoreState {
   fetchAssets: (customerId: string) => Promise<void>;
   fetchTickets: (customerId: string) => Promise<void>;
   
-  // Asset Actions
-  addAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { ownerId?: string }) => Promise<Asset>;
+  // Asset Actions (flat)
+  addAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'depth' | 'leaf' | 'sortOrder'> & { ownerId?: string }) => Promise<Asset>;
   deleteAsset: (id: string) => Promise<void>;
   getAssetById: (id: string) => Asset | undefined;
+
+  // Asset Tree Actions
+  fetchAssetTree: (customerId: string) => Promise<void>;
+  createAssetInTree: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'depth' | 'leaf' | 'sortOrder'> & { ownerId?: string; parentId?: string }) => Promise<Asset>;
+  moveAsset: (assetId: string, newParentId: string | null) => Promise<void>;
+  deleteAssetFromTree: (assetId: string) => Promise<void>;
+  reorderAssets: (parentId: string, orderedIds: string[]) => Promise<void>;
+  getAncestors: (assetId: string) => Promise<AssetBreadcrumbItem[]>;
 
   // Ticket Actions
   createTicket: (ticket: CreateTicketInput) => Promise<Ticket>;
@@ -147,6 +172,7 @@ interface CustomerStoreState {
 
 export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
   assets: [],
+  assetTree: [],
   tickets: [],
   isLoading: false,
   error: null,
@@ -181,10 +207,50 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
   },
 
   deleteAsset: async (id) => {
-    // Requires backend implementation, assuming successful deletion
+    await api.delete(`/assets/${id}`);
     set((state) => ({
       assets: state.assets.filter((asset) => asset.id !== id),
     }));
+  },
+
+  // ── Asset Tree Actions ──────────────────────────────────────────
+
+  fetchAssetTree: async (customerId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const tree = await api.get<AssetTreeNode[]>('/assets/tree', { params: { ownerId: customerId } });
+      set({ assetTree: tree, isLoading: false });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Varlık ağacı yüklenemedi', isLoading: false });
+    }
+  },
+
+  createAssetInTree: async (assetData) => {
+    const newAsset = await api.post<Asset>('/assets', {
+      ...assetData,
+      ownerId: assetData.ownerId,
+    });
+    // Refresh tree after creation
+    if (assetData.ownerId) {
+      get().fetchAssetTree(assetData.ownerId);
+    }
+    return newAsset;
+  },
+
+  moveAsset: async (assetId, newParentId) => {
+    await api.put(`/assets/${assetId}/move`, { newParentId });
+  },
+
+  deleteAssetFromTree: async (assetId) => {
+    await api.delete(`/assets/${assetId}`);
+  },
+
+  reorderAssets: async (parentId, orderedIds) => {
+    await api.put(`/assets/${parentId}/reorder`, { orderedChildIds: orderedIds });
+  },
+
+  getAncestors: async (assetId) => {
+    return api.get<AssetBreadcrumbItem[]>(`/assets/${assetId}/ancestors`);
   },
 
   getAssetById: (id) => {

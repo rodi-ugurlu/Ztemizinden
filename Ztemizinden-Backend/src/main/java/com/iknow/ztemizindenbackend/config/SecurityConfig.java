@@ -19,7 +19,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
-@EnableConfigurationProperties(SecurityProperties.class)
+@EnableConfigurationProperties({SecurityProperties.class, KeycloakProvisioningProperties.class})
 public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityProperties securityProperties) throws Exception {
@@ -32,11 +32,19 @@ public class SecurityConfig {
         }
 
         http.authorizeHttpRequests(auth -> auth
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/customers").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/providers").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET, "/uploads/**").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/uploads/provider-documents").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/uploads/provider-documents/**").hasRole("ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/uploads/ticket-media/**").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/providers/**").hasAnyRole("ADMIN", "SERVICE")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/customers/me").hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/customers").hasRole("ADMIN")
+                .requestMatchers("/api/customers/**").hasRole("ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/providers/me").hasAnyRole("SERVICE", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/providers").hasRole("ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/uploads/ticket-media").hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/uploads/provider-documents").hasAnyRole("SERVICE", "ADMIN")
+                .requestMatchers("/api/providers/**").hasRole("ADMIN")
                 .requestMatchers("/api/tickets/**").hasAnyRole("CUSTOMER", "SERVICE", "ADMIN")
                 .requestMatchers("/api/assets/**").hasAnyRole("CUSTOMER", "ADMIN")
                 .anyRequest().authenticated()

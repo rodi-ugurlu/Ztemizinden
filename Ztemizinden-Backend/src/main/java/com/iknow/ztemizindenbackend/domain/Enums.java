@@ -12,6 +12,10 @@ public final class Enums {
         ACTIVE, UNDER_MAINTENANCE, INACTIVE, RETIRED
     }
 
+    public enum CustomerStatus {
+        ACTIVE, SUSPENDED
+    }
+
     public enum TicketCategory {
         ELECTRIC, MECHANIC, PNEUMATIC, HYDRAULIC, GENERAL, SOFTWARE
     }

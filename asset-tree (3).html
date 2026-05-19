@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Fabrika Varlık Ağacı</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#f0f4f8;color:#1f2937;}
+.topbar{background:#1e3a5f;color:#fff;padding:14px 28px;}
+.topbar h1{font-size:20px;font-weight:800;}
+.topbar p{font-size:12px;color:#93c5fd;margin-top:3px;}
+.layout{display:grid;grid-template-columns:400px 1fr;height:calc(100vh - 56px);}
+
+/* SOL FORM */
+.left{background:#fff;border-right:2px solid #e5e7eb;padding:22px;overflow-y:auto;}
+.section-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:6px;}
+.big-input{width:100%;padding:11px 13px;border:2px solid #d1d5db;border-radius:10px;font-size:15px;font-weight:600;color:#111;outline:none;transition:border 0.2s;}
+.big-input:focus{border-color:#2563eb;}
+.divider{border:none;border-top:2px dashed #e5e7eb;margin:18px 0;}
+.sub-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+.sub-item{display:flex;align-items:center;gap:8px;}
+.level-badge{font-size:10px;font-weight:800;background:#e0e7ff;color:#3730a3;padding:4px 8px;border-radius:6px;min-width:26px;text-align:center;}
+.sub-item input{flex:1;padding:9px 11px;border:2px solid #d1d5db;border-radius:8px;font-size:14px;color:#111;outline:none;transition:border 0.2s;}
+.sub-item input:focus{border-color:#2563eb;}
+.del-btn{background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:9px 11px;cursor:pointer;font-weight:800;}
+.del-btn:hover{background:#dc2626;color:#fff;}
+.add-btn{width:100%;padding:10px;border:2px dashed #93c5fd;border-radius:10px;background:#eff6ff;color:#2563eb;font-size:13px;font-weight:800;cursor:pointer;}
+.add-btn:hover{background:#dbeafe;}
+.tag-box{background:#fefce8;border:2px solid #fbbf24;border-radius:10px;padding:14px;}
+.tag-box label{font-size:11px;font-weight:800;text-transform:uppercase;color:#92400e;display:block;margin-bottom:7px;}
+.tag-box input{width:100%;padding:10px 12px;border:2px solid #f59e0b;border-radius:8px;font-size:13px;font-family:monospace;font-weight:700;color:#78350f;background:#fff;outline:none;}
+.save-btn{width:100%;margin-top:18px;padding:14px;background:#16a34a;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;}
+.save-btn:hover{background:#15803d;}
+.clear-btn{width:100%;margin-top:8px;padding:10px;background:#e5e7eb;color:#374151;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;}
+.clear-btn:hover{background:#d1d5db;}
+.editing-bar{background:#fef9c3;border:2px solid #fbbf24;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;color:#92400e;margin-bottom:14px;display:none;}
+
+/* SAĞ - TREE */
+.right{padding:24px;overflow-y:auto;background:#f8fafc;}
+.right-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+.right-header h2{font-size:18px;font-weight:800;color:#1e3a5f;}
+.badge{background:#2563eb;color:#fff;font-size:11px;border-radius:999px;padding:2px 8px;margin-left:6px;}
+.del-all{background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;}
+.del-all:hover{background:#b91c1c;}
+.empty{text-align:center;padding:60px 20px;color:#9ca3af;border:2px dashed #e2e8f0;border-radius:16px;}
+
+/* ACCORDION TREE */
+.tree-node{margin-bottom:6px;}
+.node-header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fff;border:2px solid #e5e7eb;border-radius:10px;cursor:pointer;user-select:none;transition:0.15s;}
+.node-header:hover{border-color:#93c5fd;background:#f0f9ff;}
+.node-header.has-children:hover{background:#eff6ff;}
+.toggle-icon{font-size:12px;color:#9ca3af;min-width:16px;transition:transform 0.2s;}
+.toggle-icon.open{transform:rotate(90deg);}
+.node-label{font-size:14px;font-weight:700;flex:1;}
+.node-count{font-size:11px;background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:999px;}
+.node-tag{font-family:monospace;font-size:11px;background:#fef9c3;color:#854d0e;padding:3px 8px;border-radius:5px;border:1px solid #fde68a;}
+.node-children{margin-left:28px;margin-top:4px;border-left:2px solid #e2e8f0;padding-left:12px;display:none;}
+.node-children.open{display:block;}
+.leaf-node{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:4px;}
+.leaf-name{font-size:13px;font-weight:600;flex:1;}
+.leaf-tag{font-family:monospace;font-size:11px;background:#fef9c3;color:#854d0e;padding:2px 6px;border-radius:4px;}
+.leaf-btns{display:flex;gap:4px;}
+.leaf-btn{border:none;border-radius:5px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer;}
+.btn-edit{background:#dbeafe;color:#1d4ed8;}
+.btn-edit:hover{background:#1d4ed8;color:#fff;}
+.btn-del{background:#fee2e2;color:#dc2626;}
+.btn-del:hover{background:#dc2626;color:#fff;}
+
+/* DEPTH COLORS */
+.depth-0 .node-label{color:#1e3a5f;}
+.depth-0 .node-header{border-left:4px solid #1e3a5f;}
+.depth-1 .node-label{color:#1d4ed8;}
+.depth-1 .node-header{border-left:4px solid #1d4ed8;}
+.depth-2 .node-label{color:#0891b2;}
+.depth-2 .node-header{border-left:4px solid #0891b2;}
+.depth-3 .node-label{color:#7c3aed;}
+.depth-3 .node-header{border-left:4px solid #7c3aed;}
+.depth-4 .node-label{color:#dc2626;}
+.depth-4 .node-header{border-left:4px solid #dc2626;}
+.depth-5 .node-label{color:#16a34a;}
+.depth-5 .node-header{border-left:4px solid #16a34a;}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>🏭 Fabrika Varlık Ağacı — Asset Breakdown Structure</h1>
+  <p>Lokasyon → Alt Varlık → Alt Varlık → ... → Tag No</p>
+</div>
+<div class="layout">
+
+  <!-- SOL FORM -->
+  <div class="left">
+    <div class="editing-bar" id="editBar">✏️ Düzenleniyor: <span id="editLabel"></span></div>
+
+    <div class="section-title">📍 Lokasyon</div>
+    <input class="big-input" id="lokasyon" type="text" placeholder="Örn: Üretim Üst Kat" autocomplete="off"/>
+
+    <hr class="divider"/>
+
+    <div class="section-title">🔩 Alt Varlıklar</div>
+    <div class="sub-list" id="subList"></div>
+    <button class="add-btn" onclick="addSub()">＋ Alt Varlık Ekle</button>
+
+    <hr class="divider"/>
+
+    <div class="tag-box">
+      <label>🏷️ Tag No</label>
+      <input type="text" id="tagNo" placeholder="Örn: URT-REAKTOR-RT1-GOV-PT100" autocomplete="off"/>
+    </div>
+
+    <button class="save-btn" onclick="kaydet()">💾 KAYDET</button>
+    <button class="clear-btn" onclick="formuTemizle()">🧹 Formu Temizle</button>
+  </div>
+
+  <!-- SAĞ TREE -->
+  <div class="right">
+    <div class="right-header">
+      <h2>🌳 Breakdown Structure <span class="badge" id="totalBadge">0</span></h2>
+      <button class="del-all" onclick="tumunuSil()">🗑️ Tümünü Sil</button>
+    </div>
+    <div id="treeArea"></div>
+  </div>
+</div>
+
+<script>
+let records = [];
+let editId = null;
+
+/* FORM */
+function addSub(value="") {
+  const list = document.getElementById("subList");
+  const div = document.createElement("div");
+  div.className = "sub-item";
+  div.innerHTML = `<div class="level-badge">${list.children.length+1}</div>
+    <input type="text" placeholder="Alt varlık adı..." value="${esc(value)}" autocomplete="off"/>
+    <button class="del-btn" onclick="this.parentElement.remove();reindex()">✕</button>`;
+  list.appendChild(div);
+  div.querySelector("input").focus();
+  reindex();
+}
+
+function reindex() {
+  document.querySelectorAll("#subList .sub-item").forEach((el,i)=>{
+    el.querySelector(".level-badge").textContent = i+1;
+  });
+}
+
+function getSubValues() {
+  return [...document.querySelectorAll("#subList .sub-item input")].map(i=>i.value.trim()).filter(Boolean);
+}
+
+function formuTemizle() {
+  editId = null;
+  document.getElementById("lokasyon").value="";
+  document.getElementById("tagNo").value="";
+  document.getElementById("subList").innerHTML="";
+  document.getElementById("editBar").style.display="none";
+}
+
+function kaydet() {
+  const lok = document.getElementById("lokasyon").value.trim();
+  const subs = getSubValues();
+  const tag = document.getElementById("tagNo").value.trim();
+  if (!lok) { alert("Lokasyon boş olamaz!"); document.getElementById("lokasyon").focus(); return; }
+  const rec = { id: editId || ("R"+Date.now()+Math.floor(Math.random()*999)), lokasyon: lok, subs, tag };
+  if (editId) {
+    const i = records.findIndex(r=>r.id===editId);
+    if (i>-1) records[i]=rec;
+  } else {
+    records.push(rec);
+  }
+  formuTemizle();
+  render();
+  saveLocal();
+}
+
+function editRecord(id) {
+  const r = records.find(x=>x.id===id);
+  if (!r) return;
+  editId = id;
+  document.getElementById("lokasyon").value = r.lokasyon;
+  document.getElementById("tagNo").value = r.tag;
+  document.getElementById("subList").innerHTML="";
+  r.subs.forEach(s=>addSub(s));
+  document.getElementById("editBar").style.display="block";
+  document.getElementById("editLabel").textContent = [r.lokasyon,...r.subs].join(" › ");
+  window.scrollTo({top:0,behavior:"smooth"});
+  document.getElementById("lokasyon").focus();
+}
+
+function deleteRecord(id) {
+  if (!confirm("Silinecek. Emin misin?")) return;
+  records = records.filter(r=>r.id!==id);
+  render(); saveLocal();
+}
+
+function tumunuSil() {
+  if (!confirm("Tüm kayıtlar silinecek!")) return;
+  records=[]; render(); saveLocal();
+}
+
+/* TREE BUILD */
+function buildTree(records) {
+  // records → {lokasyon, subs:[], tag, id}
+  // path = [lokasyon, ...subs]
+  // build nested map
+  const root = { children: {}, leaves: [] };
+
+  for (const rec of records) {
+    const path = [rec.lokasyon, ...rec.subs];
+    let node = root;
+    for (let i = 0; i < path.length; i++) {
+      const key = path[i];
+      if (i === path.length - 1) {
+        // leaf
+        node.leaves = node.leaves || [];
+        node.leaves.push({ label: key, tag: rec.tag, id: rec.id });
+      } else {
+        node.children = node.children || {};
+        if (!node.children[key]) node.children[key] = { children: {}, leaves: [] };
+        node = node.children[key];
+      }
+    }
+  }
+  return root;
+}
+
+function countDescendants(node) {
+  let c = (node.leaves||[]).length;
+  for (const k in (node.children||{})) c += countDescendants(node.children[k]);
+  return c;
+}
+
+let nodeCounter = 0;
+function renderNode(key, node, depth) {
+  const id = "nd" + (nodeCounter++);
+  const childKeys = Object.keys(node.children||{});
+  const leaves = node.leaves || [];
+  const total = countDescendants(node) + leaves.length;
+  const hasChildren = childKeys.length > 0 || leaves.length > 0;
+
+  let inner = "";
+
+  // children first
+  for (const ck of childKeys) {
+    inner += renderNode(ck, node.children[ck], depth+1);
+  }
+
+  // leaves
+  for (const leaf of leaves) {
+    inner += `<div class="leaf-node">
+      <span class="leaf-name">📌 ${esc(leaf.label)}</span>
+      ${leaf.tag ? `<span class="leaf-tag">${esc(leaf.tag)}</span>` : ""}
+      <div class="leaf-btns">
+        <button class="leaf-btn btn-edit" onclick="editRecord('${leaf.id}')">✏️</button>
+        <button class="leaf-btn btn-del" onclick="deleteRecord('${leaf.id}')">🗑️</button>
+      </div>
+    </div>`;
+  }
+
+  const depthClass = "depth-" + Math.min(depth, 5);
+  const toggleId = "tog-"+id;
+
+  return `<div class="tree-node ${depthClass}">
+    <div class="node-header ${hasChildren?'has-children':''}" onclick="toggle('${toggleId}', this)">
+      <span class="toggle-icon" id="arr-${toggleId}">${hasChildren ? "▶" : "•"}</span>
+      <span class="node-label">${esc(key)}</span>
+      ${hasChildren ? `<span class="node-count">${countDescendants(node)}</span>` : ""}
+    </div>
+    <div class="node-children" id="${toggleId}">${inner}</div>
+  </div>`;
+}
+
+function toggle(id, header) {
+  const el = document.getElementById(id);
+  const arr = document.getElementById("arr-"+id);
+  if (!el) return;
+  const isOpen = el.classList.contains("open");
+  el.classList.toggle("open", !isOpen);
+  if (arr) arr.classList.toggle("open", !isOpen);
+}
+
+function render() {
+  document.getElementById("totalBadge").textContent = records.length;
+  const area = document.getElementById("treeArea");
+  if (!records.length) {
+    area.innerHTML=`<div class="empty"><div style="font-size:48px">🏗️</div><p style="margin-top:10px;font-size:14px">Henüz kayıt yok.<br>Sol taraftan varlık gir, <b>Kaydet</b>'e bas.</p></div>`;
+    return;
+  }
+  nodeCounter = 0;
+  const tree = buildTree(records);
+  let html = "";
+  for (const key of Object.keys(tree.children||{})) {
+    html += renderNode(key, tree.children[key], 0);
+  }
+  // root-level leaves (lokasyon = son)
+  for (const leaf of (tree.leaves||[])) {
+    html += `<div class="leaf-node">
+      <span class="leaf-name">📌 ${esc(leaf.label)}</span>
+      ${leaf.tag ? `<span class="leaf-tag">${esc(leaf.tag)}</span>` : ""}
+      <div class="leaf-btns">
+        <button class="leaf-btn btn-edit" onclick="editRecord('${leaf.id}')">✏️</button>
+        <button class="leaf-btn btn-del" onclick="deleteRecord('${leaf.id}')">🗑️</button>
+      </div>
+    </div>`;
+  }
+  area.innerHTML = html;
+}
+
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function saveLocal(){ try{localStorage.setItem("abs_v5",JSON.stringify(records));}catch(e){} }
+function loadLocal(){ try{const d=localStorage.getItem("abs_v5");if(d)records=JSON.parse(d);}catch(e){} }
+
+loadLocal();
+render();
+</script>
+</body>
+</html>

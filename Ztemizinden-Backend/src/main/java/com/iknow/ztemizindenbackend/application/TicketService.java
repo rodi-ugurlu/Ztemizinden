@@ -2,11 +2,13 @@ package com.iknow.ztemizindenbackend.application;
 
 import com.iknow.ztemizindenbackend.domain.Asset;
 import com.iknow.ztemizindenbackend.domain.AssetRepository;
+import com.iknow.ztemizindenbackend.domain.BadRequestException;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferType;
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketCategory;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketPriority;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketStatus;
+import com.iknow.ztemizindenbackend.domain.NotFoundException;
 import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
 import com.iknow.ztemizindenbackend.domain.Ticket;
@@ -32,6 +34,7 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public List<Ticket> listOpportunities(String providerId) {
+        requireVerifiedProvider(providerId);
         List<Ticket> tickets = ticketRepository.findByStatusInOrderByCreatedAtAsc(
                 List.of(TicketStatus.OPEN, TicketStatus.OFFERED));
         return tickets.stream()
@@ -42,20 +45,21 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public List<Ticket> listForProvider(String providerId) {
+        requireVerifiedProvider(providerId);
         return ticketRepository.findVisibleForProvider(providerId);
     }
 
     @Transactional(readOnly = true)
     public Ticket get(String id) {
-        return ticketRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Ticket not found"));
+        return ticketRepository.findById(id).orElseThrow(() -> new NotFoundException("Ticket not found"));
     }
 
     @Transactional
     public Ticket create(CreateTicketCommand command) {
         Asset asset = assetRepository.findById(command.assetId())
-                .orElseThrow(() -> new IllegalArgumentException("Asset not found"));
+                .orElseThrow(() -> new NotFoundException("Asset not found"));
         if (!asset.getOwnerId().equals(command.customerId())) {
-            throw new IllegalArgumentException("Asset does not belong to customer");
+            throw new BadRequestException("Asset does not belong to customer");
         }
 
         Ticket ticket = new Ticket(
@@ -78,7 +82,7 @@ public class TicketService {
     public TicketOffer addOffer(String ticketId, AddOfferCommand command) {
         Ticket ticket = get(ticketId);
         ServiceProvider provider = serviceProviderRepository.findById(command.providerId())
-                .orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
         if (provider.getStatus() != ProviderStatus.VERIFIED) {
             throw new IllegalStateException("Provider is not verified");
         }
@@ -98,6 +102,15 @@ public class TicketService {
         Ticket ticket = get(ticketId);
         ticket.acceptOffer(offerId);
         return ticket;
+    }
+
+    private ServiceProvider requireVerifiedProvider(String providerId) {
+        ServiceProvider provider = serviceProviderRepository.findById(providerId)
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
+        if (provider.getStatus() != ProviderStatus.VERIFIED) {
+            throw new IllegalStateException("Provider is not verified");
+        }
+        return provider;
     }
 
     @Transactional

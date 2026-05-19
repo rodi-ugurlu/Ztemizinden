@@ -170,10 +170,25 @@ async function requestKeycloakToken(email: string, password: string): Promise<Ke
   });
 
   if (!response.ok) {
-    throw new Error('E-posta veya sifre hatali');
+    throw new Error(await keycloakErrorMessage(response));
   }
 
   return response.json();
+}
+
+async function keycloakErrorMessage(response: Response) {
+  try {
+    const payload = (await response.json()) as { error?: string; error_description?: string };
+    if (payload.error === 'invalid_grant') {
+      return 'E-posta veya şifre hatalı. Demo hesaplar için şifre: demo123';
+    }
+    if (payload.error === 'invalid_client') {
+      return 'Keycloak client ayarı hatalı. VITE_KEYCLOAK_CLIENT_ID değerini kontrol edin.';
+    }
+    return payload.error_description || payload.error || 'Giriş başarısız';
+  } catch {
+    return 'Giriş başarısız';
+  }
 }
 
 function decodeJwtPayload(token: string): JwtClaims {

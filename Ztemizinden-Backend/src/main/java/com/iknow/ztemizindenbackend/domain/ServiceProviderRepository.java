@@ -18,6 +18,8 @@ public interface ServiceProviderRepository extends JpaRepository<ServiceProvider
     @EntityGraph(attributePaths = {"specialties", "documents"})
     Optional<ServiceProvider> findByEmailIgnoreCase(String email);
 
+    boolean existsByEmailIgnoreCase(String email);
+
     @EntityGraph(attributePaths = {"specialties", "documents"})
     List<ServiceProvider> findByStatusOrderByCreatedAtDesc(ProviderStatus status);
 }

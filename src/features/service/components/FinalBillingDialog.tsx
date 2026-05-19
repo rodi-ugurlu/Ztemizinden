@@ -38,6 +38,7 @@ export default function FinalBillingDialog({
   const [partsSummary, setPartsSummary] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const myProposal = ticket?.offers.find((p) => p.status === 'ACCEPTED');
   const estimatedCost = myProposal?.estimatedCost || 0;
@@ -49,23 +50,26 @@ export default function FinalBillingDialog({
     if (!ticket || actualCost <= 0 || !notes.trim()) return;
 
     setIsSubmitting(true);
+    setSubmitError('');
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      await completeJob(ticket.id, {
+        actualCost,
+        notes: notes.trim(),
+        partsSummary: partsSummary.trim() || 'Parça değişimi yapılmadı',
+      });
 
-    completeJob(ticket.id, {
-      actualCost,
-      notes: notes.trim(),
-      partsSummary: partsSummary.trim() || 'Parça değişimi yapılmadı',
-    });
-
-    setIsSubmitting(false);
-    setLaborCost('');
-    setPartsCost('');
-    setExtraCost('');
-    setPartsSummary('');
-    setNotes('');
-    onClose();
+      setLaborCost('');
+      setPartsCost('');
+      setExtraCost('');
+      setPartsSummary('');
+      setNotes('');
+      onClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Hakediş gönderilemedi');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -173,6 +177,7 @@ export default function FinalBillingDialog({
                 </div>
               </div>
             )}
+            {submitError && <p className="text-sm text-red-600">{submitError}</p>}
 
             <DialogFooter className="gap-3 sm:gap-0">
               <Button

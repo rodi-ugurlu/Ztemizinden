@@ -73,7 +73,7 @@ public class ServiceProvider extends BaseEntity {
     ) {
         this.name = name;
         this.contactName = contactName;
-        this.email = email;
+        this.email = normalizeEmail(email);
         this.phone = phone;
         this.city = city;
         this.specialties = new HashSet<>(specialties);
@@ -81,6 +81,10 @@ public class ServiceProvider extends BaseEntity {
 
     public void verify() {
         status = ProviderStatus.VERIFIED;
+    }
+
+    public void suspend() {
+        status = ProviderStatus.SUSPENDED;
     }
 
     public void setTrusted(boolean trusted) {
@@ -105,6 +109,10 @@ public class ServiceProvider extends BaseEntity {
         return documents.stream()
                 .filter(document -> document.getId().equals(documentId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Provider document not found"));
+                .orElseThrow(() -> new NotFoundException("Provider document not found"));
+    }
+
+    private String normalizeEmail(String value) {
+        return value == null ? null : value.trim().toLowerCase();
     }
 }

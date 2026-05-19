@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 import type { Ticket, TicketOffer, OfferType } from '@/store/useCustomerStore';
-import type { ServiceProvider } from '@/store/useAdminStore';
+import type { ProviderStatus, ServiceProvider } from '@/store/useAdminStore';
 import type { User } from '@/store/useAuthStore';
 
 export type ServiceTicket = Ticket;
@@ -65,10 +65,11 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
 
     try {
       const provider = await api.get<ServiceProvider>('/providers/me');
+      const normalizedProvider = normalizeServiceProvider(provider);
       set({
-        currentProviderId: provider.id,
-        currentProviderName: provider.name,
-        providerProfile: provider,
+        currentProviderId: normalizedProvider.id,
+        currentProviderName: normalizedProvider.name,
+        providerProfile: normalizedProvider,
       });
     } catch {
       set({
@@ -80,21 +81,29 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
   },
 
   fetchOpportunities: async () => {
+    if (!canAccessJobs(get().providerProfile)) {
+      set({ opportunities: [], isLoading: false, error: null });
+      return;
+    }
     set({ isLoading: true, error: null });
     try {
       const tickets = await api.get<Ticket[]>('/tickets/opportunities', { params: { providerId: get().currentProviderId } });
       set({ opportunities: tickets.map(normalizeServiceTicket), isLoading: false });
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({ error: error instanceof Error ? error.message : 'Firsatlar yuklenemedi', isLoading: false });
     }
   },
 
   fetchMyJobs: async () => {
+    if (!canAccessJobs(get().providerProfile)) {
+      set({ myJobs: [], isLoading: false, error: null });
+      return;
+    }
     set({ isLoading: true, error: null });
     try {
       const tickets = await api.get<Ticket[]>('/tickets/provider', { params: { providerId: get().currentProviderId } });
       set({ myJobs: tickets.map(normalizeServiceTicket), isLoading: false });
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({ error: error instanceof Error ? error.message : 'Isler yuklenemedi', isLoading: false });
     }
   },
@@ -102,17 +111,18 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
   fetchProviderProfile: async () => {
     try {
       const provider = await api.get<ServiceProvider>('/providers/me');
+      const normalizedProvider = normalizeServiceProvider(provider);
       set({
-        providerProfile: provider,
-        currentProviderId: provider.id,
-        currentProviderName: provider.name,
+        providerProfile: normalizedProvider,
+        currentProviderId: normalizedProvider.id,
+        currentProviderName: normalizedProvider.name,
       });
     } catch {
       if (!get().currentProviderId) return;
       try {
         const providers = await api.get<ServiceProvider[]>('/providers');
         const provider = providers.find((item) => item.id === get().currentProviderId) ?? null;
-        set({ providerProfile: provider });
+        set({ providerProfile: provider ? normalizeServiceProvider(provider) : null });
       } catch (error) {
         set({ error: error instanceof Error ? error.message : 'Servis profili yuklenemedi' });
       }
@@ -120,6 +130,9 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
   },
 
   submitProposal: async (ticketId, proposalData) => {
+    if (!canAccessJobs(get().providerProfile)) {
+      throw new Error('Servis hesabı operasyon onayı bekliyor');
+    }
     const newOffer = await api.post<TicketOffer>(`/tickets/${ticketId}/offers`, {
       providerId: get().currentProviderId,
       providerName: get().currentProviderName,
@@ -133,6 +146,9 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
   },
 
   completeJob: async (ticketId, billing) => {
+    if (!canAccessJobs(get().providerProfile)) {
+      throw new Error('Servis hesabı operasyon onayı bekliyor');
+    }
     const actualCost =
       billing.actualCost ??
       (billing.laborCost ?? 0) + (billing.partsCost ?? 0) + (billing.extraCost ?? 0);
@@ -142,6 +158,9 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
   },
 
   addTicketMessage: async (ticketId, body) => {
+    if (!canAccessJobs(get().providerProfile)) {
+      throw new Error('Servis hesabı operasyon onayı bekliyor');
+    }
     // We can assume the API is the same for customer and provider.
     // The backend TicketService will handle adding the message.
     await api.post(`/tickets/${ticketId}/messages`, { body });
@@ -195,6 +214,29 @@ function normalizeServiceTicket(ticket: Ticket): Ticket {
     offers: ticket.offers ?? [],
     messages: ticket.messages ?? [],
   };
+}
+
+function normalizeServiceProvider(provider: ServiceProvider): ServiceProvider {
+  return {
+    ...provider,
+    status: displayProviderStatus(provider.status),
+    trusted: provider.trusted ?? provider.isTrusted ?? false,
+    isTrusted: provider.isTrusted ?? provider.trusted ?? false,
+    documents: provider.documents ?? [],
+  };
+}
+
+function canAccessJobs(provider: ServiceProvider | null) {
+  return provider?.status === 'Verified';
+}
+
+function displayProviderStatus(status: ProviderStatus | string): ProviderStatus {
+  const statuses: Record<string, ProviderStatus> = {
+    PENDING_VERIFICATION: 'Pending Verification',
+    VERIFIED: 'Verified',
+    SUSPENDED: 'Suspended',
+  };
+  return statuses[status] ?? (status as ProviderStatus);
 }
 
 // ==========================================

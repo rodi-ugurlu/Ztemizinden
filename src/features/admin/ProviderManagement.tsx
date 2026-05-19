@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { downloadProtectedFile } from '@/lib/api';
 import {
   Dialog,
   DialogContent,
@@ -22,7 +23,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useAdminStore, type ServiceProvider, type ProviderDocument } from '@/store/useAdminStore';
+import {
+  getProviderApprovalBlocker,
+  getProviderReviewSummary,
+  useAdminStore,
+  type ProviderDocument,
+  type ServiceProvider,
+} from '@/store/useAdminStore';
 import {
   Building2,
   CheckCircle2,
@@ -35,17 +42,27 @@ import {
   Star,
   ArrowLeft,
   AlertCircle,
-  ShieldCheck,
   Wrench,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function ProviderManagement() {
-  const { providers, fetchProviders, toggleTrustedStatus, verifyDocument, rejectDocument } = useAdminStore();
+  const {
+    providers,
+    fetchProviders,
+    verifyProvider,
+    rejectProvider,
+    toggleTrustedStatus,
+    verifyDocument,
+    rejectDocument,
+  } = useAdminStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<ServiceProvider | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<ProviderDocument | null>(null);
   const [documentNotes, setDocumentNotes] = useState('');
+  const [documentOpenError, setDocumentOpenError] = useState('');
+  const [documentActionError, setDocumentActionError] = useState('');
 
   useEffect(() => {
     fetchProviders();
@@ -58,21 +75,29 @@ export default function ProviderManagement() {
       provider.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       provider.specialties.some((specialty) => specialty.toLowerCase().includes(searchQuery.toLowerCase()))
   );
-  const verifiedProviders = providers.filter((p) => p.status === 'Verified');
-  const averageRating =
-    verifiedProviders.length > 0
-      ? verifiedProviders.reduce((sum, provider) => sum + provider.rating, 0) / verifiedProviders.length
-      : 0;
+  const pendingProviders = providers.filter((p) => p.status === 'Pending Verification');
+  const documentReviewCount = pendingProviders.filter(
+    (provider) => getProviderReviewSummary(provider).state === 'review-required'
+  ).length;
+  const readyApprovalCount = pendingProviders.filter(
+    (provider) => getProviderReviewSummary(provider).state === 'ready'
+  ).length;
+  const blockedApprovalCount = pendingProviders.filter((provider) =>
+    ['missing-documents', 'blocked'].includes(getProviderReviewSummary(provider).state)
+  ).length;
 
   const handleOpenDocumentReview = (provider: ServiceProvider, document: ProviderDocument) => {
     setSelectedProvider(provider);
     setSelectedDocument(document);
     setDocumentNotes(document.notes || '');
+    setDocumentOpenError('');
+    setDocumentActionError('');
     setIsDialogOpen(true);
   };
 
   const handleVerifyDocument = async () => {
     if (selectedProvider && selectedDocument) {
+      setDocumentActionError('');
       await verifyDocument(selectedProvider.id, selectedDocument.id, documentNotes);
       setIsDialogOpen(false);
     }
@@ -80,8 +105,26 @@ export default function ProviderManagement() {
 
   const handleRejectDocument = async () => {
     if (selectedProvider && selectedDocument) {
+      if (!documentNotes.trim()) {
+        setDocumentActionError('Reddetmek için servis sağlayıcının göreceği bir neden yazın.');
+        return;
+      }
+      setDocumentActionError('');
       await rejectDocument(selectedProvider.id, selectedDocument.id, documentNotes);
       setIsDialogOpen(false);
+    }
+  };
+
+  const handleOpenDocumentFile = async () => {
+    if (!selectedDocument?.url) return;
+    setDocumentOpenError('');
+    try {
+      const blob = await downloadProtectedFile(selectedDocument.url);
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      setDocumentOpenError(error instanceof Error ? error.message : 'Belge açılamadı');
     }
   };
 
@@ -119,22 +162,22 @@ export default function ProviderManagement() {
           color="text-emerald-600"
         />
         <StatCard
-          title="Bekleyen"
-          value={providers.filter((p) => p.status === 'Pending Verification').length}
+          title="Belge İncelemesi"
+          value={documentReviewCount}
           icon={AlertCircle}
           color="text-amber-600"
         />
         <StatCard
-          title="Güvenilir"
-          value={providers.filter((p) => p.isTrusted).length}
-          icon={Star}
-          color="text-indigo-600"
+          title="Onaya Hazır"
+          value={readyApprovalCount}
+          icon={FileCheck}
+          color="text-emerald-600"
         />
         <StatCard
-          title="Ort. Puan"
-          value={averageRating.toFixed(1)}
-          icon={ShieldCheck}
-          color="text-amber-600"
+          title="Blokaj"
+          value={blockedApprovalCount}
+          icon={AlertCircle}
+          color={blockedApprovalCount > 0 ? 'text-red-600' : 'text-slate-500'}
         />
       </div>
 
@@ -173,7 +216,11 @@ export default function ProviderManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProviders.map((provider) => (
+              {filteredProviders.map((provider) => {
+                const approvalBlocker = getProviderApprovalBlocker(provider);
+                const reviewSummary = getProviderReviewSummary(provider);
+                const documentCounts = getDocumentCounts(provider.documents);
+                return (
                 <TableRow key={provider.id} className="border-slate-200">
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -238,11 +285,28 @@ export default function ProviderManagement() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-slate-400">
-                        {provider.documents.filter((d) => d.status === 'Verified').length}/
-                        {provider.documents.length}
-                      </span>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-slate-400">
+                          {documentCounts.verified}/{provider.documents.length}
+                        </span>
+                        <ProviderReviewBadge summary={reviewSummary} />
+                      </div>
+                      <p className="max-w-56 text-xs text-slate-500">{reviewSummary.description}</p>
+                      {(documentCounts.pending > 0 || documentCounts.rejected > 0) && (
+                        <div className="flex flex-wrap gap-1 text-[11px] font-medium">
+                          {documentCounts.pending > 0 && (
+                            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                              {documentCounts.pending} bekleyen
+                            </span>
+                          )}
+                          {documentCounts.rejected > 0 && (
+                            <span className="rounded bg-red-50 px-1.5 py-0.5 text-red-700">
+                              {documentCounts.rejected} reddedilen
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <div className="flex gap-1">
                         {provider.documents.map((doc) => (
                           <button
@@ -262,7 +326,31 @@ export default function ProviderManagement() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <div className="flex max-w-56 flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                      {provider.status === 'Pending Verification' && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => rejectProvider(provider.id)}
+                            className="h-7 bg-red-50 text-red-600 border-red-200/30"
+                          >
+                            <FileX className="w-3 h-3 mr-1" />
+                            Reddet
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => verifyProvider(provider.id)}
+                            disabled={Boolean(approvalBlocker)}
+                            title={approvalBlocker ?? 'Onayla'}
+                            className="h-7 bg-emerald-600 hover:bg-emerald-700"
+                          >
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Onayla
+                          </Button>
+                        </>
+                      )}
                       {provider.status === 'Verified' && (
                         <Button
                           variant="outline"
@@ -278,10 +366,15 @@ export default function ProviderManagement() {
                           {provider.isTrusted ? 'Güvenilir' : 'Güvenilir Yap'}
                         </Button>
                       )}
+                      </div>
+                      {provider.status === 'Pending Verification' && approvalBlocker && (
+                        <p className="text-xs font-medium text-amber-700">{approvalBlocker}</p>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {filteredProviders.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-slate-500">
@@ -340,18 +433,37 @@ export default function ProviderManagement() {
                 </Label>
                 <Textarea
                   id="notes"
-                  placeholder="Doğrulama notları..."
+                  placeholder={selectedDocument.status === 'Rejected' ? 'Ret nedeni...' : 'Doğrulama notları...'}
                   value={documentNotes}
-                  onChange={(e) => setDocumentNotes(e.target.value)}
+                  onChange={(e) => {
+                    setDocumentNotes(e.target.value);
+                    setDocumentActionError('');
+                  }}
                   className="bg-slate-50 border-slate-200 text-slate-900"
                   rows={3}
                 />
+                {documentActionError && (
+                  <p className="text-xs font-medium text-red-600">{documentActionError}</p>
+                )}
               </div>
 
               <div className="bg-slate-50/50 rounded-lg border border-slate-200 aspect-video flex items-center justify-center">
                 <div className="text-center">
                   <FileCheck className="w-12 h-12 text-slate-600 mx-auto mb-2" />
-                  <span className="text-sm text-slate-500">Belge Önizlemesi</span>
+                  <span className="block text-sm text-slate-500">{selectedDocument.originalFileName || 'Belge dosyası'}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleOpenDocumentFile}
+                    disabled={!selectedDocument.url}
+                    className="mt-3 bg-white border-slate-200 text-slate-700"
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Belgeyi Aç
+                  </Button>
+                  {documentOpenError && (
+                    <p className="mt-2 text-xs font-medium text-red-600">{documentOpenError}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -394,6 +506,35 @@ export default function ProviderManagement() {
 // ==========================================
 // HELPER COMPONENTS
 // ==========================================
+
+function getDocumentCounts(documents: ProviderDocument[]) {
+  return {
+    pending: documents.filter((document) => document.status === 'Pending').length,
+    verified: documents.filter((document) => document.status === 'Verified').length,
+    rejected: documents.filter((document) => document.status === 'Rejected').length,
+  };
+}
+
+function ProviderReviewBadge({
+  summary,
+}: {
+  summary: ReturnType<typeof getProviderReviewSummary>;
+}) {
+  const variants = {
+    'missing-documents': 'bg-slate-50 text-slate-600 border-slate-200',
+    'review-required': 'bg-amber-50 text-amber-700 border-amber-200',
+    blocked: 'bg-red-50 text-red-700 border-red-200',
+    ready: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    suspended: 'bg-red-50 text-red-700 border-red-200',
+  };
+
+  return (
+    <Badge variant="outline" className={variants[summary.state]}>
+      {summary.label}
+    </Badge>
+  );
+}
 
 function StatCard({
   title,
@@ -439,7 +580,7 @@ function StatusBadge({ status }: { status: ServiceProvider['status'] }) {
       bg: 'bg-red-50',
       text: 'text-red-600',
       border: 'border-red-200/30',
-      label: 'Askıda',
+      label: 'Reddedildi',
     },
   };
 

@@ -144,6 +144,10 @@ public class Ticket extends BaseEntity {
             String message
     ) {
         ensureOpenForOffer();
+        if (offers.stream().anyMatch(offer -> offer.getProviderId().equals(providerId)
+                && offer.getStatus() == com.iknow.ztemizindenbackend.domain.Enums.OfferStatus.PENDING)) {
+            throw new IllegalStateException("Provider already has a pending offer for this ticket");
+        }
         TicketOffer offer = new TicketOffer(this, providerId, providerName, type, estimatedCost, eta, message);
         offers.add(offer);
         status = TicketStatus.OFFERED;
@@ -151,10 +155,16 @@ public class Ticket extends BaseEntity {
     }
 
     public void acceptOffer(String offerId) {
+        if (status != TicketStatus.OFFERED) {
+            throw new IllegalStateException("Ticket is not waiting for offer approval");
+        }
         TicketOffer acceptedOffer = offers.stream()
                 .filter(offer -> offer.getId().equals(offerId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Offer not found"));
+                .orElseThrow(() -> new NotFoundException("Offer not found"));
+        if (acceptedOffer.getStatus() != com.iknow.ztemizindenbackend.domain.Enums.OfferStatus.PENDING) {
+            throw new IllegalStateException("Only pending offers can be accepted");
+        }
 
         offers.forEach(TicketOffer::reject);
         acceptedOffer.accept();
@@ -168,10 +178,16 @@ public class Ticket extends BaseEntity {
     }
 
     public void rejectOffer(String offerId) {
+        if (status != TicketStatus.OFFERED) {
+            throw new IllegalStateException("Ticket is not waiting for offer approval");
+        }
         TicketOffer rejectedOffer = offers.stream()
                 .filter(offer -> offer.getId().equals(offerId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Offer not found"));
+                .orElseThrow(() -> new NotFoundException("Offer not found"));
+        if (rejectedOffer.getStatus() != com.iknow.ztemizindenbackend.domain.Enums.OfferStatus.PENDING) {
+            throw new IllegalStateException("Only pending offers can be rejected");
+        }
 
         rejectedOffer.reject();
         if (offers.stream().noneMatch(offer -> offer.getStatus() == com.iknow.ztemizindenbackend.domain.Enums.OfferStatus.PENDING)) {
@@ -180,6 +196,9 @@ public class Ticket extends BaseEntity {
     }
 
     public void assignProvider(String providerId, String providerName) {
+        if (status != TicketStatus.OPEN && status != TicketStatus.OFFERED) {
+            throw new IllegalStateException("Only open tickets can be assigned");
+        }
         assignedProviderId = providerId;
         assignedProviderName = providerName;
         status = TicketStatus.IN_PROGRESS;

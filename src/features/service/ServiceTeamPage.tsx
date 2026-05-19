@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { api, type UploadResponse } from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useServiceStore, useTicketStats } from '@/store/useServiceStore';
 import {
@@ -18,7 +20,12 @@ import {
   Star,
   ShieldCheck,
   Clock,
+  AlertTriangle,
+  Upload,
+  RefreshCw,
 } from 'lucide-react';
+
+const providerDocumentTypes = ['Vergi Levhası', 'Sigorta Belgesi', 'Teknik Lisans', 'ISO Sertifikası'];
 
 /**
  * ServiceTeamPage Component
@@ -36,6 +43,11 @@ export default function ServiceTeamPage() {
     providerProfile: serviceProviderProfile,
   } = useServiceStore();
   const stats = useTicketStats();
+  const [documentType, setDocumentType] = useState(providerDocumentTypes[0]);
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [documentUploadError, setDocumentUploadError] = useState('');
+  const [documentUploadNotice, setDocumentUploadNotice] = useState('');
 
   useEffect(() => {
     void resolveProviderSession(user);
@@ -56,18 +68,57 @@ export default function ServiceTeamPage() {
     city: serviceProviderProfile?.city || '-',
     specialties: serviceProviderProfile?.specialties ?? [],
     rating: serviceProviderProfile?.rating ?? 0,
+    status: serviceProviderProfile?.status ?? 'Verified',
     memberSince: serviceProviderProfile?.createdAt ? new Date(serviceProviderProfile.createdAt).getFullYear().toString() : '-',
     documents: serviceProviderProfile?.documents ?? [],
+  };
+  const providerStatusMeta = getProviderStatusMeta(providerProfile.status);
+  const ProviderStatusIcon = providerStatusMeta.icon;
+  const documentCounts = getDocumentCounts(providerProfile.documents);
+
+  const handleProviderDocumentUpload = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setDocumentUploadError('');
+    setDocumentUploadNotice('');
+
+    if (!documentFile) {
+      setDocumentUploadError('Yüklenecek belge seçilmedi');
+      return;
+    }
+
+    setIsUploadingDocument(true);
+    try {
+      const formData = new FormData();
+      formData.append('type', documentType);
+      formData.append('file', documentFile);
+      await api.upload<UploadResponse>('/uploads/provider-documents', formData);
+      setDocumentUploadNotice('Belge yüklendi ve operasyon incelemesine gönderildi.');
+      setDocumentFile(null);
+      await fetchProviderProfile();
+    } catch (error) {
+      setDocumentUploadError(error instanceof Error ? error.message : 'Belge yüklenemedi');
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  };
+
+  const handleRetryDocumentUpload = (type: string) => {
+    setDocumentType(type);
+    setDocumentUploadError('');
+    setDocumentUploadNotice(`${type} için yeni dosyayı seçip yükleyin.`);
   };
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Ekip & Profil</h1>
-        <p className="text-slate-500 mt-1">
-          Firma bilgileriniz, ekip üyeleriniz ve performans metrikleri
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Ekip & Profil</h1>
+          <p className="text-slate-500 mt-1">
+            Firma bilgileriniz, ekip üyeleriniz ve performans metrikleri
+          </p>
+        </div>
+        <ProviderStatusBadge status={providerProfile.status} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -92,6 +143,16 @@ export default function ServiceTeamPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className={`rounded-lg border p-4 ${providerStatusMeta.panelClass}`}>
+              <div className="flex items-start gap-3">
+                <ProviderStatusIcon className={`mt-0.5 h-5 w-5 ${providerStatusMeta.iconClass}`} />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{providerStatusMeta.title}</p>
+                  <p className="mt-1 text-sm text-slate-600">{providerStatusMeta.description}</p>
+                </div>
+              </div>
+            </div>
+
             {/* Contact */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="flex items-center gap-3 text-sm">
@@ -161,11 +222,7 @@ export default function ServiceTeamPage() {
               {providerProfile.documents.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {providerProfile.documents.map((document) => (
-                    <Badge
-                      key={document.id}
-                      variant="outline"
-                      className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1"
-                    >
+                    <Badge key={document.id} variant="outline" className={`${documentStatusClass(document.status)} px-3 py-1`}>
                       <Award className="w-3 h-3 mr-1.5" />
                       {document.type}
                     </Badge>
@@ -213,32 +270,84 @@ export default function ServiceTeamPage() {
             <Users className="w-5 h-5 text-red-600" />
             Sağlayıcı Belgeleri
           </CardTitle>
-          <CardDescription>Başvuru sırasında yüklenen belgeler ve inceleme durumları</CardDescription>
+          <CardDescription>
+            {documentCounts.verified} onaylı, {documentCounts.pending} incelemede, {documentCounts.rejected} reddedildi
+          </CardDescription>
         </CardHeader>
         <CardContent>
+          <form
+            onSubmit={handleProviderDocumentUpload}
+            className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-[180px_minmax(0,1fr)_auto]"
+          >
+            <select
+              value={documentType}
+              onChange={(event) => setDocumentType(event.target.value)}
+              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-red-300"
+            >
+              {providerDocumentTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+            <label className="flex h-10 min-w-0 cursor-pointer items-center rounded-md border border-dashed border-slate-300 bg-white px-3 text-sm text-slate-500">
+              <span className="truncate">{documentFile?.name ?? 'PDF, JPG veya PNG belge seçin'}</span>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                className="hidden"
+                onChange={(event) => setDocumentFile(event.currentTarget.files?.[0] ?? null)}
+              />
+            </label>
+            <Button type="submit" disabled={isUploadingDocument} className="h-10 bg-red-600 hover:bg-red-700">
+              <Upload className="mr-2 h-4 w-4" />
+              {isUploadingDocument ? 'Yükleniyor' : 'Yükle'}
+            </Button>
+            {(documentUploadError || documentUploadNotice) && (
+              <p
+                className={`md:col-span-3 text-sm font-medium ${
+                  documentUploadError ? 'text-red-600' : 'text-emerald-600'
+                }`}
+              >
+                {documentUploadError || documentUploadNotice}
+              </p>
+            )}
+          </form>
+
           {providerProfile.documents.length > 0 ? (
             <div className="divide-y divide-slate-100">
               {providerProfile.documents.map((document) => (
-                <div key={document.id} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
+                <div key={document.id} className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
                   <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center text-red-600">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-slate-900 text-sm">{document.type}</p>
                     <p className="text-xs text-slate-400">{document.originalFileName || document.url || 'Dosya'}</p>
+                    {document.status === 'Rejected' && document.notes && (
+                      <p className="mt-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                        Ret nedeni: {document.notes}
+                      </p>
+                    )}
+                    {document.status === 'Pending' && (
+                      <p className="mt-2 text-xs text-amber-600">Operasyon incelemesi bekleniyor.</p>
+                    )}
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={
-                      document.status === 'Verified'
-                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                        : document.status === 'Rejected'
-                        ? 'bg-red-50 text-red-600 border-red-200'
-                        : 'bg-amber-50 text-amber-600 border-amber-200'
-                    }
-                  >
-                    {document.status}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-2">
+                    <DocumentStatusBadge status={document.status} />
+                    {document.status === 'Rejected' && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRetryDocumentUpload(document.type)}
+                        className="h-8 border-red-200 bg-red-50 text-red-600"
+                      >
+                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                        Yenile
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -256,6 +365,83 @@ export default function ServiceTeamPage() {
 // ==========================================
 // HELPER COMPONENTS
 // ==========================================
+
+function getDocumentCounts(documents: Array<{ status: 'Pending' | 'Verified' | 'Rejected' }>) {
+  return {
+    pending: documents.filter((document) => document.status === 'Pending').length,
+    verified: documents.filter((document) => document.status === 'Verified').length,
+    rejected: documents.filter((document) => document.status === 'Rejected').length,
+  };
+}
+
+function ProviderStatusBadge({ status }: { status: 'Pending Verification' | 'Verified' | 'Suspended' }) {
+  const meta = getProviderStatusMeta(status);
+  return (
+    <Badge variant="outline" className={`${meta.badgeClass} px-3 py-1.5 text-xs font-semibold`}>
+      {meta.label}
+    </Badge>
+  );
+}
+
+function getProviderStatusMeta(status: 'Pending Verification' | 'Verified' | 'Suspended') {
+  const variants = {
+    'Pending Verification': {
+      label: 'Operasyon Onayı Bekliyor',
+      title: 'Operasyon onayı bekleniyor',
+      description: 'Başvurunuz operasyon merkezi tarafından incelendikten sonra fırsatlar ve işler açılacak.',
+      icon: Clock,
+      iconClass: 'text-amber-600',
+      badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+      panelClass: 'bg-amber-50/70 border-amber-200',
+    },
+    Verified: {
+      label: 'Onaylı Servis',
+      title: 'Servis hesabınız onaylı',
+      description: 'Fırsat havuzu, teklifler ve aktif iş akışları kullanılabilir.',
+      icon: ShieldCheck,
+      iconClass: 'text-emerald-600',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      panelClass: 'bg-emerald-50/70 border-emerald-200',
+    },
+    Suspended: {
+      label: 'Askıya Alındı',
+      title: 'Servis hesabınız askıda',
+      description: 'Operasyon merkezi hesabınızı tekrar onaylayana kadar servis işleri kapalıdır.',
+      icon: AlertTriangle,
+      iconClass: 'text-red-600',
+      badgeClass: 'bg-red-50 text-red-700 border-red-200',
+      panelClass: 'bg-red-50/70 border-red-200',
+    },
+  } as const;
+
+  return variants[status];
+}
+
+function DocumentStatusBadge({ status }: { status: 'Pending' | 'Verified' | 'Rejected' }) {
+  return (
+    <Badge variant="outline" className={documentStatusClass(status)}>
+      {documentStatusLabel(status)}
+    </Badge>
+  );
+}
+
+function documentStatusClass(status: 'Pending' | 'Verified' | 'Rejected') {
+  const variants = {
+    Pending: 'bg-amber-50 text-amber-600 border-amber-200',
+    Verified: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    Rejected: 'bg-red-50 text-red-600 border-red-200',
+  };
+  return variants[status];
+}
+
+function documentStatusLabel(status: 'Pending' | 'Verified' | 'Rejected') {
+  const labels = {
+    Pending: 'İncelemede',
+    Verified: 'Onaylı',
+    Rejected: 'Reddedildi',
+  };
+  return labels[status];
+}
 
 function SpecialtyIcon({ specialty, className }: { specialty: string; className: string }) {
   switch (specialty) {

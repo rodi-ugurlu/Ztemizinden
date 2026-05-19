@@ -18,6 +18,7 @@ const AdminLogin = lazy(() => import('@/features/auth/AdminLogin'));
 // Customer Portal Pages
 const CustomerDashboard = lazy(() => import('@/features/customer/CustomerDashboard'));
 const AssetsPage = lazy(() => import('@/features/customer/AssetsPage'));
+const AssetTreePage = lazy(() => import('@/features/customer/AssetTreePage'));
 const CreateTicketPage = lazy(() => import('@/features/customer/CreateTicketPage'));
 const RequestsPage = lazy(() => import('@/features/customer/RequestsPage'));
 
@@ -115,6 +116,14 @@ export const router = createBrowserRouter([
         element: withPageLoader(
           <ProtectedRoute requiredRole="customer">
             <RequestsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'asset-tree',
+        element: withPageLoader(
+          <ProtectedRoute requiredRole="customer">
+            <AssetTreePage />
           </ProtectedRoute>
         ),
       },

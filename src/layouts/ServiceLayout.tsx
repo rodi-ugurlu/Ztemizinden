@@ -12,6 +12,10 @@ export default function ServiceLayout() {
   const { isAuthenticated, logout, user } = useAuthStore();
   const navigate = useNavigate();
 
+  if (!isAuthenticated) {
+    return <Outlet />;
+  }
+
   const handleLogout = () => {
     logout();
     navigate('/service/login');
@@ -75,11 +79,6 @@ export default function ServiceLayout() {
           </nav>
         )}
 
-        {!isAuthenticated && (
-          <nav className="text-sm font-medium text-slate-600">
-            Servis Sağlayıcı Portalı
-          </nav>
-        )}
       </header>
 
       <main className="flex-1 flex flex-col">

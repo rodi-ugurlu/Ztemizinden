@@ -35,7 +35,7 @@ import {
  * Shows all tickets the provider has interacted with or can see.
  */
 export default function ServiceTicketsPage() {
-  const { opportunities, myJobs, fetchOpportunities, fetchMyJobs, currentProviderId, resolveProviderSession } = useServiceStore();
+  const { opportunities, myJobs, fetchOpportunities, fetchMyJobs, currentProviderId, providerProfile, resolveProviderSession } = useServiceStore();
   const user = useAuthStore((state) => state.user);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -80,6 +80,33 @@ export default function ServiceTicketsPage() {
     setSelectedTicket(ticket);
     setIsDetailOpen(true);
   };
+
+  if (providerProfile?.status === 'Pending Verification' || providerProfile?.status === 'Suspended') {
+    const isSuspended = providerProfile.status === 'Suspended';
+    return (
+      <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+        <Card className={isSuspended ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}>
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${isSuspended ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                {isSuspended ? <TicketCheck className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+              </div>
+              <div>
+                <h1 className={`text-xl font-bold ${isSuspended ? 'text-red-950' : 'text-amber-950'}`}>
+                  {isSuspended ? 'Başvuru reddedildi' : 'Operasyon onayı bekleniyor'}
+                </h1>
+                <p className={`mt-2 text-sm leading-relaxed ${isSuspended ? 'text-red-700' : 'text-amber-800'}`}>
+                  {isSuspended
+                    ? 'Servis hesabınız askıda olduğu için talep listesine erişemezsiniz.'
+                    : `${providerProfile.name || user?.name || 'Servis hesabınız'} onaylandığında yeni talepler ve iş geçmişi burada görünecek.`}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">

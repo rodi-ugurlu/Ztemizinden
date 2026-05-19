@@ -26,6 +26,16 @@ app:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
   upload:
     root-dir: ${APP_UPLOAD_DIR:uploads}
+  keycloak:
+    provisioning:
+      enabled: ${APP_KEYCLOAK_PROVISIONING_ENABLED:true}
+      base-url: ${KEYCLOAK_BASE_URL:http://localhost:8081}
+      realm: ${KEYCLOAK_REALM:ztemizinden}
+      admin-realm: ${KEYCLOAK_ADMIN_REALM:master}
+      admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
+      admin-username: ${KEYCLOAK_ADMIN_USERNAME:admin}
+      admin-password: ${KEYCLOAK_ADMIN_PASSWORD:admin}
+      default-password: ${APP_REGISTRATION_DEFAULT_PASSWORD:demo123}
 
 server:
   port: ${SERVER_PORT:8080}

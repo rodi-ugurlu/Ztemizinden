@@ -2,7 +2,11 @@ package com.iknow.ztemizindenbackend.api;
 
 import com.iknow.ztemizindenbackend.application.CurrentUser;
 import com.iknow.ztemizindenbackend.application.ProviderService;
+import com.iknow.ztemizindenbackend.application.ProviderService.AddDocumentCommand;
 import com.iknow.ztemizindenbackend.application.ProviderService.CreateProviderCommand;
+import com.iknow.ztemizindenbackend.application.UploadService;
+import com.iknow.ztemizindenbackend.application.UploadService.StoredUpload;
+import com.iknow.ztemizindenbackend.domain.BadRequestException;
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderDocumentStatus;
 import com.iknow.ztemizindenbackend.domain.ProviderDocument;
@@ -18,20 +22,24 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/providers")
 public class ProviderController {
     private final ProviderService providerService;
+    private final UploadService uploadService;
     private final CurrentUser currentUser;
 
     @GetMapping
@@ -43,28 +51,79 @@ public class ProviderController {
     public ProviderResponse me() {
         String email = currentUser.email();
         if (email == null) {
-            throw new IllegalArgumentException("Provider email not found in token");
+            throw new BadRequestException("Provider email is missing from token");
         }
         return ProviderResponse.from(providerService.getByEmail(email));
     }
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public ProviderResponse create(@Valid @RequestBody CreateProviderRequest request) {
-        ServiceProvider provider = providerService.create(new CreateProviderCommand(
+        throw new BadRequestException("Servis başvurusu için en az bir belge yüklenmelidir.");
+    }
+
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public ProviderResponse createWithDocuments(
+            @Valid @RequestPart("request") CreateProviderRequest request,
+            @RequestPart(required = false) MultipartFile taxCertificate,
+            @RequestPart(required = false) MultipartFile insurance,
+            @RequestPart(required = false) MultipartFile technicalLicense,
+            @RequestPart(required = false) MultipartFile isoCertificate
+    ) {
+        if (!hasAnyRegistrationDocument(taxCertificate, insurance, technicalLicense, isoCertificate)) {
+            throw new BadRequestException("Servis başvurusu için en az bir belge yüklenmelidir.");
+        }
+        ServiceProvider provider = createProvider(request);
+        addRegistrationDocument(provider.getId(), "Vergi Levhası", taxCertificate);
+        addRegistrationDocument(provider.getId(), "Sigorta Belgesi", insurance);
+        addRegistrationDocument(provider.getId(), "Teknik Lisans", technicalLicense);
+        addRegistrationDocument(provider.getId(), "ISO Sertifikası", isoCertificate);
+        return ProviderResponse.from(providerService.getByEmail(provider.getEmail()));
+    }
+
+    private ServiceProvider createProvider(CreateProviderRequest request) {
+        return providerService.create(new CreateProviderCommand(
                 request.name(),
                 request.contactName(),
                 request.email(),
                 request.phone(),
                 request.city(),
-                request.specialties().stream().map(ApiEnums::ticketCategory).collect(Collectors.toSet())
+                request.specialties().stream().map(ApiEnums::ticketCategory).collect(Collectors.toSet()),
+                request.password()
         ));
-        return ProviderResponse.from(provider);
+    }
+
+    private void addRegistrationDocument(String providerId, String type, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return;
+        }
+        StoredUpload upload = uploadService.storeProviderDocument(file);
+        providerService.addDocument(providerId, new AddDocumentCommand(type, upload.url(), upload.originalFileName()));
+    }
+
+    private boolean hasAnyRegistrationDocument(MultipartFile... files) {
+        for (MultipartFile file : files) {
+            if (file != null && !file.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @PostMapping("/{providerId}/verify")
     public ProviderResponse verify(@PathVariable String providerId) {
         return ProviderResponse.from(providerService.verify(providerId));
+    }
+
+    @PostMapping("/{providerId}/approve")
+    public ProviderResponse approve(@PathVariable String providerId) {
+        return ProviderResponse.from(providerService.verify(providerId));
+    }
+
+    @PostMapping("/{providerId}/reject")
+    public ProviderResponse reject(@PathVariable String providerId) {
+        return ProviderResponse.from(providerService.reject(providerId));
     }
 
     @PutMapping("/{providerId}/trusted")
@@ -98,7 +157,8 @@ public class ProviderController {
             @Email @NotBlank String email,
             @NotBlank String phone,
             @NotBlank String city,
-            @NotEmpty Set<String> specialties
+            @NotEmpty Set<String> specialties,
+            @NotBlank String password
     ) {
     }
 

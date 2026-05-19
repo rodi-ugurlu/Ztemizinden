@@ -13,6 +13,10 @@ export default function CustomerLayout() {
   const { isAuthenticated, logout, user } = useAuthStore();
   const navigate = useNavigate();
 
+  if (!isAuthenticated) {
+    return <Outlet />;
+  }
+
   const handleLogout = () => {
     logout();
     navigate('/customer/login');
@@ -50,6 +54,14 @@ export default function CustomerLayout() {
               Varlıklar
             </NavLink>
             <NavLink
+              to="/customer/asset-tree"
+              className={({ isActive }) =>
+                `text-sm font-medium transition-colors ${isActive ? 'text-red-600' : 'text-slate-600 hover:text-slate-900'}`
+              }
+            >
+              Varlık Ağacı
+            </NavLink>
+            <NavLink
               to="/customer/requests"
               className={({ isActive }) =>
                 `text-sm font-medium transition-colors ${isActive ? 'text-red-600' : 'text-slate-600 hover:text-slate-900'}`
@@ -70,11 +82,6 @@ export default function CustomerLayout() {
           </nav>
         )}
 
-        {!isAuthenticated && (
-          <nav className="text-sm font-medium text-slate-600">
-            Müşteri Portalı
-          </nav>
-        )}
       </header>
 
       <main className="flex-1 flex flex-col">
