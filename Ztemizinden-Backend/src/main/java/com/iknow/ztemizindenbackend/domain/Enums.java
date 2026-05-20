@@ -16,6 +16,10 @@ public final class Enums {
         ACTIVE, SUSPENDED
     }
 
+    public enum AuthRole {
+        CUSTOMER, SERVICE, ADMIN
+    }
+
     public enum TicketCategory {
         ELECTRIC, MECHANIC, PNEUMATIC, HYDRAULIC, GENERAL, SOFTWARE
     }

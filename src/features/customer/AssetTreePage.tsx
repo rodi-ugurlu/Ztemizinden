@@ -21,8 +21,8 @@ export default function AssetTreePage() {
     fetchAssetTree,
     createAssetInTree,
     deleteAssetFromTree,
-    isLoading,
   } = useCustomerStore();
+  const userId = user?.id;
 
   const [editingNode, setEditingNode] = useState<{ id: string; name: string } | null>(null);
   const [addingToParent, setAddingToParent] = useState<{ id: string; name: string } | null>(null);
@@ -30,10 +30,10 @@ export default function AssetTreePage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchAssetTree(user.id);
+    if (userId) {
+      fetchAssetTree(userId);
     }
-  }, [fetchAssetTree, user?.id]);
+  }, [fetchAssetTree, userId]);
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -56,7 +56,7 @@ export default function AssetTreePage() {
   // ── Form submission handler ─────────────────────────────────────
   const handleFormSubmit = useCallback(
     async (data: AssetFormData) => {
-      if (!user?.id) return;
+      if (!userId) return;
       setIsSaving(true);
 
       try {
@@ -71,7 +71,7 @@ export default function AssetTreePage() {
           const isLast = i === allLevels.length - 1;
 
           const newAsset = await createAssetInTree({
-            ownerId: user.id,
+            ownerId: userId,
             name: allLevels[i].name,
             tagNo: isLast && data.tagNo ? data.tagNo : `${data.name.substring(0, 3).toUpperCase()}-${Date.now()}-L${i}`,
             type: data.type,
@@ -91,7 +91,7 @@ export default function AssetTreePage() {
           currentParentId = newAsset.id;
         }
 
-        await fetchAssetTree(user.id);
+        await fetchAssetTree(userId);
         setAddingToParent(null);
         setToast({ type: 'success', message: `"${data.name}" başarıyla oluşturuldu` });
       } catch (err) {
@@ -101,7 +101,7 @@ export default function AssetTreePage() {
         setIsSaving(false);
       }
     },
-    [user?.id, createAssetInTree, fetchAssetTree, addingToParent]
+    [userId, createAssetInTree, fetchAssetTree, addingToParent]
   );
 
   // ── Edit handler ────────────────────────────────────────────────
@@ -122,21 +122,21 @@ export default function AssetTreePage() {
   const handleDelete = useCallback(
     async (node: AssetTreeNode) => {
       const childInfo = node.descendantCount > 0
-        ? `\n\n⚠️ Bu varlığın ${node.descendantCount} alt varlığı da silinecek!`
+        ? `\n\nDikkat: Bu varlığın ${node.descendantCount} alt varlığı da silinecek.`
         : '';
 
       if (!confirm(`"${node.name}" silinecek.${childInfo}\n\nEmin misiniz?`)) return;
 
       try {
         await deleteAssetFromTree(node.id);
-        if (user?.id) await fetchAssetTree(user.id);
+        if (userId) await fetchAssetTree(userId);
         setToast({ type: 'success', message: `"${node.name}" silindi` });
       } catch (err) {
         console.error('Failed to delete asset:', err);
         setToast({ type: 'error', message: 'Silme işlemi başarısız' });
       }
     },
-    [deleteAssetFromTree, fetchAssetTree, user?.id]
+    [deleteAssetFromTree, fetchAssetTree, userId]
   );
 
   return (

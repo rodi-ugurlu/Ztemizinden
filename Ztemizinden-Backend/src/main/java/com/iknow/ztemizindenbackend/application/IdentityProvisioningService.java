@@ -13,10 +13,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
+@ConditionalOnProperty(prefix = "app.keycloak.provisioning", name = "enabled", havingValue = "true")
 public class IdentityProvisioningService {
     private static final TypeReference<Map<String, Object>> MAP_OF_OBJECTS = new TypeReference<>() {
     };

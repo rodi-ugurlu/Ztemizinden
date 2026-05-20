@@ -8,27 +8,21 @@ Spring Boot backend for the MVP1 maintenance workflow.
 - Spring Boot 4
 - PostgreSQL
 - Flyway
-- Keycloak-ready OAuth2 Resource Server
+- Internal JWT auth with Spring OAuth2 Resource Server
 
 ## Local Infrastructure
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 ```
 
 Services:
 
 - PostgreSQL: `localhost:55432`
-- Keycloak: `http://localhost:8081`
-- Keycloak admin: `admin / admin`
 
-Imported realm:
+Keycloak service is still present in `docker-compose.yml` for reference, but the current MVP auth path does not depend on it.
 
-- Realm: `ztemizinden`
-- Frontend client: `ztemizinden-frontend`
-- Backend bearer client: `ztemizinden-backend`
-
-Local Keycloak users:
+Local internal JWT users:
 
 - `customer@demo.com / demo123`
 - `service@demo.com / demo123`
@@ -46,27 +40,19 @@ Default local config enables API security:
 APP_SECURITY_ENABLED=true
 ```
 
-Flyway `V7__remove_demo_seed_content.sql` removes presentation seed tickets, assets, offers, provider documents, and extra demo providers. Local screens therefore start with clean user-created product data while keeping the Keycloak demo accounts for login.
+Flyway `V7__remove_demo_seed_content.sql` removes presentation seed tickets, assets, offers, provider documents, and extra demo providers. Local screens therefore start with clean user-created product data while keeping the demo account anchors for login.
+Flyway `V10__internal_auth_users.sql` creates internal auth users for demo login and migrates existing customers/providers with temporary `demo123` passwords.
 
-Run with Keycloak JWT checks:
+Run with internal JWT settings:
 
 ```bash
 APP_SECURITY_ENABLED=true \
-KEYCLOAK_ISSUER_URI=http://localhost:8081/realms/ztemizinden \
+APP_JWT_SECRET=change-this-secret-to-a-long-random-value \
+APP_JWT_ISSUER=ztemizinden \
 ./mvnw spring-boot:run
 ```
 
-Registration endpoints can also provision local Keycloak users:
-
-```bash
-APP_KEYCLOAK_PROVISIONING_ENABLED=true \
-KEYCLOAK_BASE_URL=http://localhost:8081 \
-KEYCLOAK_REALM=ztemizinden \
-KEYCLOAK_ADMIN_USERNAME=admin \
-KEYCLOAK_ADMIN_PASSWORD=admin
-```
-
-Customers receive the `CUSTOMER` realm role immediately. Service providers receive the `SERVICE` realm role so they can sign in and upload documents, but ticket opportunities and service jobs remain blocked until operations approves the provider record.
+Customers receive the `CUSTOMER` role immediately. Service providers receive the `SERVICE` role so they can sign in and upload documents, but ticket opportunities and service jobs remain blocked until operations approves the provider record.
 
 Temporarily disable security for debugging:
 
@@ -92,11 +78,12 @@ Uploaded files are served from:
 Localhost is allowed by default. For Vercel + ngrok beta runs:
 
 ```bash
-APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://your-vercel-domain.vercel.app,https://*.ngrok-free.app
+APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://your-vercel-domain.vercel.app,https://*.ngrok-free.app,https://*.ngrok.app,https://*.ngrok.io
 ```
 
 ## MVP1 API Surface
 
+- `POST /api/auth/login`
 - `POST /api/assets`
 - `GET /api/assets?ownerId=...`
 - `POST /api/customers`

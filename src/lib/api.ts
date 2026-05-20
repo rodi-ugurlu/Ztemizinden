@@ -1,6 +1,6 @@
-import { clearAuthSession, getStoredAccessToken } from '@/store/useAuthStore';
+import { clearAuthSession, getAuthLoginPath, getStoredAccessToken, useAuthStore } from '@/store/useAuthStore';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api').replace(/\/+$/, '');
 const API_ROOT_URL = BASE_URL.replace(/\/api\/?$/, '');
 
 interface RequestOptions extends RequestInit {
@@ -43,11 +43,17 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     headers,
   };
 
-  const response = await fetch(url, config);
+  let response: Response;
+  try {
+    response = await fetch(url, config);
+  } catch {
+    throw new Error(networkErrorMessage());
+  }
 
   if (response.status === 401) {
+    const loginPath = getAuthLoginPath(useAuthStore.getState().role);
     clearAuthSession();
-    window.location.assign('/');
+    window.location.assign(loginPath);
     throw new Error('Oturum suresi doldu');
   }
 
@@ -82,8 +88,9 @@ export async function downloadProtectedFile(path: string): Promise<Blob> {
 
   const response = await fetch(resolveUrl(path), { headers });
   if (response.status === 401) {
+    const loginPath = getAuthLoginPath(useAuthStore.getState().role);
     clearAuthSession();
-    window.location.assign('/');
+    window.location.assign(loginPath);
     throw new Error('Oturum suresi doldu');
   }
   if (!response.ok) {
@@ -123,6 +130,12 @@ function friendlyErrorMessage(message: string, status: number) {
       'Servis sağlayıcı onaylanmadan önce tüm belgeler doğrulanmalıdır.',
     'Provider email is already registered':
       'Bu e-posta ile kayıtlı bir servis sağlayıcı zaten var.',
+    'E-posta veya şifre hatalı':
+      'E-posta veya şifre hatalı. Bilgileri kontrol edip tekrar deneyin.',
+    'Access Denied':
+      'Bu işlem için yetkiniz yok.',
+    Forbidden:
+      'Bu işlem için yetkiniz yok.',
   };
 
   if (knownMessages[normalized]) {
@@ -131,5 +144,15 @@ function friendlyErrorMessage(message: string, status: number) {
   if (normalized.startsWith('API Error:')) {
     return `İşlem tamamlanamadı. API yanıtı: ${status}`;
   }
+  if (status === 403) {
+    return 'Bu işlem için yetkiniz yok.';
+  }
+  if (status === 404) {
+    return 'İstenen kayıt ya da dosya bulunamadı.';
+  }
   return normalized;
+}
+
+function networkErrorMessage() {
+  return 'Backend bağlantısı kurulamadı. Ngrok veya CORS ayarlarını kontrol edin.';
 }

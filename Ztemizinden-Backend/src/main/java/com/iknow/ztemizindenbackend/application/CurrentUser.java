@@ -38,6 +38,10 @@ public class CurrentUser {
         if (!securityEnabled() || isAdmin()) {
             return requestedCustomerId;
         }
+        String claimCustomerId = claim("customerId");
+        if (claimCustomerId != null) {
+            return claimCustomerId;
+        }
         String email = email();
         if (email != null) {
             return customerRepository.findByEmailIgnoreCase(email)
@@ -50,6 +54,10 @@ public class CurrentUser {
     public String providerId(String requestedProviderId) {
         if (!securityEnabled() || isAdmin()) {
             return requestedProviderId;
+        }
+        String claimProviderId = claim("providerId");
+        if (claimProviderId != null) {
+            return claimProviderId;
         }
         String email = email();
         if (email != null) {
@@ -77,12 +85,16 @@ public class CurrentUser {
     }
 
     public String email() {
+        return claim("email");
+    }
+
+    private String claim(String name) {
         Jwt jwt = jwt();
         if (jwt == null) {
             return null;
         }
-        String email = jwt.getClaimAsString("email");
-        return email == null || email.isBlank() ? null : email;
+        String value = jwt.getClaimAsString(name);
+        return value == null || value.isBlank() ? null : value;
     }
 
     public void requireCustomerTicket(Ticket ticket) {

@@ -275,6 +275,11 @@
   background-color: #cc1e1e;
 }
 
+.animated-auth__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 .animated-auth__form-switch {
   margin-top: 8px;
   border: 0;

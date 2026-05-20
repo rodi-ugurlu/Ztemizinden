@@ -22,14 +22,15 @@ interface AuthState {
   error: string | null;
 
   // Actions
-  login: (role: UserRole, userData: Partial<User>) => void;
-  loginWithPassword: (role: Exclude<UserRole, null>, email: string, password: string) => Promise<void>;
+  login: (role: UserRole, userData: Partial<User>) => User;
+  loginWithPassword: (role: Exclude<UserRole, null>, email: string, password: string) => Promise<User>;
   logout: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 
   // Computed
   hasRole: (role: UserRole) => boolean;
+  isSessionValid: () => boolean;
 }
 
 /**
@@ -66,23 +67,24 @@ export const useAuthStore = create<AuthState>()(
           avatar: userData.avatar,
         };
         set({ user, role: resolvedRole, isAuthenticated: true, error: null });
+        return user;
       },
 
       loginWithPassword: async (role, email, password) => {
         set({ isLoading: true, error: null });
         try {
           if (import.meta.env.VITE_AUTH_MODE === 'demo') {
-            get().login(role, { email });
+            const user = get().login(role, { email });
             set({ isLoading: false });
-            return;
+            return user;
           }
 
-          const session = await requestKeycloakToken(email, password);
+          const session = await requestBackendToken(email, password);
           const claims = decodeJwtPayload(session.access_token);
           const resolvedRole = resolveRoleFromClaims(claims) ?? resolveDemoRole(email) ?? role;
           const demoProfile = getDemoProfile(email);
           const user: User = {
-            id: resolvePrincipalId(email, claims.sub, resolvedRole),
+            id: resolvePrincipalId(email, claims, resolvedRole),
             email: claims.email ?? email,
             name: claims.name ?? demoProfile?.name ?? email,
             role: resolvedRole,
@@ -98,6 +100,7 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             error: null,
           });
+          return user;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Giris basarisiz';
           set({ error: message, isLoading: false, isAuthenticated: false, accessToken: null, refreshToken: null, expiresAt: null });
@@ -122,6 +125,13 @@ export const useAuthStore = create<AuthState>()(
       setError: (error) => set({ error }),
 
       hasRole: (role) => get().role === role,
+
+      isSessionValid: () => {
+        if (!get().isAuthenticated) return false;
+        if (import.meta.env.VITE_AUTH_MODE === 'demo') return true;
+        const expiresAt = get().expiresAt;
+        return Boolean(get().accessToken && expiresAt && Date.now() < expiresAt - 30_000);
+      },
     }),
     {
       name: 'emaintenance-auth-storage',
@@ -137,7 +147,7 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-interface KeycloakTokenResponse {
+interface AuthTokenResponse {
   access_token: string;
   refresh_token?: string;
   expires_in: number;
@@ -147,45 +157,44 @@ interface JwtClaims {
   sub?: string;
   email?: string;
   name?: string;
+  customerId?: string;
+  providerId?: string;
   realm_access?: {
     roles?: string[];
   };
 }
 
-async function requestKeycloakToken(email: string, password: string): Promise<KeycloakTokenResponse> {
-  const keycloakUrl = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8081';
-  const realm = import.meta.env.VITE_KEYCLOAK_REALM || 'ztemizinden';
-  const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'ztemizinden-frontend';
-  const body = new URLSearchParams({
-    grant_type: 'password',
-    client_id: clientId,
-    username: email,
-    password,
-  });
-
-  const response = await fetch(`${keycloakUrl}/realms/${realm}/protocol/openid-connect/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
+async function requestBackendToken(email: string, password: string): Promise<AuthTokenResponse> {
+  const apiUrl = normalizedApiUrl();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    throw new Error('Backend bağlantısı kurulamadı. Ngrok veya CORS ayarlarını kontrol edin.');
+  }
 
   if (!response.ok) {
-    throw new Error(await keycloakErrorMessage(response));
+    throw new Error(await authErrorMessage(response));
   }
 
   return response.json();
 }
 
-async function keycloakErrorMessage(response: Response) {
+function normalizedApiUrl() {
+  return (import.meta.env.VITE_API_URL || 'http://localhost:8080/api').replace(/\/+$/, '');
+}
+
+async function authErrorMessage(response: Response) {
   try {
-    const payload = (await response.json()) as { error?: string; error_description?: string };
-    if (payload.error === 'invalid_grant') {
-      return 'E-posta veya şifre hatalı. Demo hesaplar için şifre: demo123';
-    }
-    if (payload.error === 'invalid_client') {
-      return 'Keycloak client ayarı hatalı. VITE_KEYCLOAK_CLIENT_ID değerini kontrol edin.';
-    }
-    return payload.error_description || payload.error || 'Giriş başarısız';
+    const payload = (await response.json()) as { detail?: string; reason?: string; title?: string };
+    return payload.detail || payload.reason || payload.title || 'Giriş başarısız';
   } catch {
     return 'Giriş başarısız';
   }
@@ -207,11 +216,12 @@ function resolveRoleFromClaims(claims: JwtClaims): Exclude<UserRole, null> | nul
   return null;
 }
 
-function resolvePrincipalId(email: string, subject: string | undefined, role: UserRole) {
+function resolvePrincipalId(email: string, claims: JwtClaims, role: UserRole) {
   const demoProfile = getDemoProfile(email);
   if (demoProfile) return demoProfile.id;
-  if (role === 'customer' || role === 'service') return subject ?? crypto.randomUUID();
-  return subject ?? 'admin-001';
+  if (role === 'customer') return claims.customerId ?? claims.sub ?? crypto.randomUUID();
+  if (role === 'service') return claims.providerId ?? claims.sub ?? crypto.randomUUID();
+  return claims.sub ?? 'admin-001';
 }
 
 export function getStoredAccessToken() {
@@ -219,6 +229,10 @@ export function getStoredAccessToken() {
   if (!state.accessToken || !state.expiresAt) return null;
   if (Date.now() > state.expiresAt - 30_000) return null;
   return state.accessToken;
+}
+
+export function getAuthLoginPath(role?: UserRole) {
+  return `/${role ?? useAuthStore.getState().role ?? 'customer'}/login`;
 }
 
 export function clearAuthSession() {

@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ProviderService {
     private final ServiceProviderRepository serviceProviderRepository;
-    private final IdentityProvisioningService identityProvisioningService;
+    private final AuthService authService;
 
     @Transactional(readOnly = true)
     public List<ServiceProvider> list() {
@@ -51,11 +51,7 @@ public class ProviderService {
         );
 
         ServiceProvider savedProvider = serviceProviderRepository.save(provider);
-        identityProvisioningService.provisionServiceProvider(
-                savedProvider.getEmail(),
-                savedProvider.getContactName(),
-                command.password()
-        );
+        authService.createServiceUser(savedProvider, command.password());
         return savedProvider;
     }
 
@@ -65,7 +61,7 @@ public class ProviderService {
                 .orElseThrow(() -> new NotFoundException("Provider not found"));
         requireVerifiedDocuments(provider);
         provider.verify();
-        identityProvisioningService.enableUser(provider.getEmail());
+        authService.enableUser(provider.getEmail());
         return provider;
     }
 
@@ -74,7 +70,7 @@ public class ProviderService {
         ServiceProvider provider = serviceProviderRepository.findById(providerId)
                 .orElseThrow(() -> new NotFoundException("Provider not found"));
         provider.suspend();
-        identityProvisioningService.disableUser(provider.getEmail());
+        authService.disableUser(provider.getEmail());
         return provider;
     }
 

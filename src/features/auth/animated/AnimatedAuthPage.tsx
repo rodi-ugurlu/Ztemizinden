@@ -8,7 +8,6 @@ import './AnimatedAuthPage.css';
 
 type AuthRole = 'customer' | 'service';
 type AuthView = 'login' | 'register';
-type ServiceMethod = 'otp' | 'password';
 type IconName = 'mail' | 'lock' | 'phone' | 'service' | 'user' | 'file';
 
 interface AnimatedAuthPageProps {
@@ -17,13 +16,6 @@ interface AnimatedAuthPageProps {
 }
 
 const localDemoPassword = import.meta.env.DEV ? 'demo123' : '';
-
-const socialLinks = [
-  { label: 'Facebook', mark: 'f' },
-  { label: 'Twitter', mark: 't' },
-  { label: 'Google', mark: 'G' },
-  { label: 'LinkedIn', mark: 'in' },
-];
 
 const customerSlogans = [
   {
@@ -196,7 +188,6 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   const [serviceView, setServiceView] = useState<AuthView>(
     initialRole === 'service' ? initialView : 'login'
   );
-  const [serviceMethod, setServiceMethod] = useState<ServiceMethod>('password');
   const [customerLogin, setCustomerLogin] = useState({
     email: 'customer@demo.com',
     password: localDemoPassword,
@@ -247,8 +238,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     event.preventDefault();
     clearFeedback();
     try {
-      await loginWithPassword('customer', customerLogin.email, customerLogin.password);
-      navigate(dashboardPathForEmail(customerLogin.email, 'customer'));
+      const signedInUser = await loginWithPassword('customer', customerLogin.email, customerLogin.password);
+      navigate(dashboardPathForRole(signedInUser.role ?? 'customer'));
     } catch {
       // Store error is rendered below the form.
     }
@@ -258,12 +249,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     event.preventDefault();
     clearFeedback();
     try {
-      await loginWithPassword(
-        'service',
-        serviceLogin.identifier,
-        serviceMethod === 'password' ? serviceLogin.secret : serviceLogin.secret || 'demo123'
-      );
-      navigate(dashboardPathForEmail(serviceLogin.identifier, 'service'));
+      const signedInUser = await loginWithPassword('service', serviceLogin.identifier, serviceLogin.secret);
+      navigate(dashboardPathForRole(signedInUser.role ?? 'service'));
     } catch {
       // Store error is rendered below the form.
     }
@@ -297,8 +284,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       });
       accountCreated = true;
       setLocalNotice('Müşteri hesabınız oluşturuldu. Giriş yapılıyor...');
-      await loginWithPassword('customer', customerRegister.email, customerRegister.password);
-      navigate('/customer/dashboard');
+      const signedInUser = await loginWithPassword('customer', customerRegister.email, customerRegister.password);
+      navigate(dashboardPathForRole(signedInUser.role ?? 'customer'));
     } catch (submitError) {
       if (accountCreated) {
         setCustomerView('login');
@@ -343,6 +330,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     }
 
     setIsSubmitting(true);
+    let providerCreated = false;
     try {
       const registrationRequest = {
         name: serviceRegister.companyName,
@@ -365,17 +353,27 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
         }
       });
       await api.upload<{ id: string }>('/providers', formData);
-      setServiceView('login');
-      setServiceLogin((prev) => ({
-        ...prev,
-        identifier: serviceRegister.email,
-        secret: serviceRegister.password,
-      }));
-      setLocalNotice('Başvurunuz alındı. Operasyon merkezi onayladıktan sonra servis işleri açılacak.');
+      providerCreated = true;
+      setLocalNotice('Başvurunuz alındı. Servis paneliniz açılıyor...');
+      const signedInUser = await loginWithPassword('service', serviceRegister.email, serviceRegister.password);
+      navigate(dashboardPathForRole(signedInUser.role ?? 'service'));
     } catch (submitError) {
-      setLocalError(
-        submitError instanceof Error ? submitError.message : 'Başvuru gönderilemedi'
-      );
+      if (providerCreated) {
+        setServiceView('login');
+        setServiceLogin((prev) => ({
+          ...prev,
+          identifier: serviceRegister.email,
+          secret: serviceRegister.password,
+        }));
+        setLocalNotice('Başvurunuz alındı. E-posta ve şifrenizle servis paneline giriş yapabilirsiniz.');
+        setLocalError(
+          submitError instanceof Error
+            ? `Otomatik giriş yapılamadı: ${submitError.message}`
+            : 'Otomatik giriş yapılamadı'
+        );
+      } else {
+        setLocalError(submitError instanceof Error ? submitError.message : 'Başvuru gönderilemedi');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -437,27 +435,9 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                     }
                   />
                 </div>
-                <a href="#" className="animated-auth__link">
-                  Şifremi unuttum
-                </a>
-                <button className="animated-auth__btn animated-auth__btn--solid" type="submit">
+                <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isLoading}>
                   {isLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
                 </button>
-                <p className="animated-auth__social-text">
-                  Sosyal hesaplarınızla müşteri girişi yapabilirsiniz.
-                </p>
-                <div className="animated-auth__social-media">
-                  {socialLinks.map((link) => (
-                    <a
-                      href="#"
-                      className="animated-auth__social-icon"
-                      aria-label={link.label}
-                      key={link.label}
-                    >
-                      <span aria-hidden="true">{link.mark}</span>
-                    </a>
-                  ))}
-                </div>
                 <button
                   className="animated-auth__form-switch"
                   type="button"
@@ -587,7 +567,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                   />
                   <span>Kullanım Koşulları ve Gizlilik Politikası'nı kabul ediyorum.</span>
                 </label>
-                <button className="animated-auth__btn animated-auth__btn--solid" type="submit">
+                <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isSubmitting}>
                   {isSubmitting ? 'Oluşturuluyor...' : 'Hesap Oluştur'}
                 </button>
                 <button
@@ -622,33 +602,13 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
 
             {serviceView === 'login' ? (
               <>
-                <div className="animated-auth__method-toggle" role="group" aria-label="Servis giriş yöntemi">
-                  <button
-                    type="button"
-                    className={serviceMethod === 'otp' ? 'active' : ''}
-                    onClick={() => setServiceMethod('otp')}
-                  >
-                    Telefon / OTP
-                  </button>
-                  <button
-                    type="button"
-                    className={serviceMethod === 'password' ? 'active' : ''}
-                    onClick={() => setServiceMethod('password')}
-                  >
-                    Şifre
-                  </button>
-                </div>
                 <div className="animated-auth__input-field">
-                  <FieldIcon name={serviceMethod === 'otp' ? 'phone' : 'service'} />
+                  <FieldIcon name="mail" />
                   <input
                     name="identifier"
-                    type={serviceMethod === 'otp' ? 'tel' : 'text'}
-                    placeholder={
-                      serviceMethod === 'otp'
-                        ? '+90 (555) 000-0000'
-                        : 'E-posta / Kullanıcı Adı'
-                    }
-                    autoComplete={serviceMethod === 'otp' ? 'tel' : 'username'}
+                    type="email"
+                    placeholder="Servis e-posta adresi"
+                    autoComplete="email"
                     required
                     value={serviceLogin.identifier}
                     onChange={(event) =>
@@ -659,32 +619,25 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                     }
                   />
                 </div>
-                {serviceMethod === 'password' && (
-                  <div className="animated-auth__input-field">
-                    <FieldIcon name="lock" />
-                    <input
-                      name="secret"
-                      type="password"
-                      placeholder="Şifre"
-                      autoComplete="current-password"
-                      required
-                      value={serviceLogin.secret}
-                      onChange={(event) =>
-                        setServiceLogin((prev) => ({
-                          ...prev,
-                          secret: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                )}
-                {serviceMethod === 'password' && (
-                  <a href="#" className="animated-auth__link">
-                    Servis şifremi unuttum
-                  </a>
-                )}
-                <button className="animated-auth__btn animated-auth__btn--solid" type="submit">
-                  {isLoading ? 'Giriş yapılıyor...' : serviceMethod === 'otp' ? 'Güvenli Giriş' : 'Servis Girişi'}
+                <div className="animated-auth__input-field">
+                  <FieldIcon name="lock" />
+                  <input
+                    name="secret"
+                    type="password"
+                    placeholder="Şifre"
+                    autoComplete="current-password"
+                    required
+                    value={serviceLogin.secret}
+                    onChange={(event) =>
+                      setServiceLogin((prev) => ({
+                        ...prev,
+                        secret: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isLoading}>
+                  {isLoading ? 'Giriş yapılıyor...' : 'Servis Girişi'}
                 </button>
                 <p className="animated-auth__social-text">
                   Yetkili servis hesabınızla panelinize erişebilirsiniz.
@@ -910,7 +863,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                   />
                   <span>Servis Sağlayıcı Sözleşmesi ve Gizlilik Politikası'nı kabul ediyorum.</span>
                 </label>
-                <button className="animated-auth__btn animated-auth__btn--solid" type="submit">
+                <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isSubmitting}>
                   {isSubmitting ? 'Gönderiliyor...' : 'Başvuruyu Gönder'}
                 </button>
                 <button
@@ -974,13 +927,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   );
 }
 
-function dashboardPathForEmail(email: string, fallbackRole: AuthRole | 'admin') {
-  const roleByEmail: Record<string, AuthRole | 'admin'> = {
-    'customer@demo.com': 'customer',
-    'service@demo.com': 'service',
-    'admin@demo.com': 'admin',
-  };
-  const role = roleByEmail[email.trim().toLowerCase()] ?? fallbackRole;
+function dashboardPathForRole(role: AuthRole | 'admin') {
   return `/${role}/dashboard`;
 }
 

@@ -13,7 +13,7 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class CustomerService {
     private final CustomerRepository customerRepository;
-    private final IdentityProvisioningService identityProvisioningService;
+    private final AuthService authService;
 
     @Transactional(readOnly = true)
     public List<Customer> list() {
@@ -41,11 +41,7 @@ public class CustomerService {
         );
 
         Customer savedCustomer = customerRepository.save(customer);
-        identityProvisioningService.provisionCustomer(
-                savedCustomer.getEmail(),
-                savedCustomer.getName(),
-                command.password()
-        );
+        authService.createCustomerUser(savedCustomer, command.password());
         return savedCustomer;
     }
 

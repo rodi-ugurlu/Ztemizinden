@@ -3,8 +3,8 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Activity, Fingerprint, Lock, ShieldCheck, Database } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Activity, AlertCircle, Database, Lock, ShieldCheck } from 'lucide-react';
 
 /**
  * AdminLogin Component
@@ -13,24 +13,19 @@ import { Activity, Fingerprint, Lock, ShieldCheck, Database } from 'lucide-react
  * Dark theme with indigo accents for system administrators.
  */
 
+const localDemoPassword = import.meta.env.DEV ? 'demo123' : '';
+
 export default function AdminLogin() {
   const [email, setEmail] = useState('admin@demo.com');
-  const [password, setPassword] = useState('');
-  const [step, setStep] = useState<1 | 2>(1);
-  const [token, setToken] = useState('');
+  const [password, setPassword] = useState(localDemoPassword);
   const { loginWithPassword, isLoading, error } = useAuthStore();
   const navigate = useNavigate();
 
-  const handleCredentials = (e: React.FormEvent) => {
-    e.preventDefault();
-    setStep(2); // Move to 2FA step
-  };
-
-  const handle2FA = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await loginWithPassword('admin', email, password);
-      navigate(dashboardPathForEmail(email, 'admin'));
+      const signedInUser = await loginWithPassword('admin', email, password);
+      navigate(`/${signedInUser.role ?? 'admin'}/dashboard`);
     } catch {
       // Store error is rendered below the form.
     }
@@ -114,76 +109,48 @@ export default function AdminLogin() {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-8 pb-8">
-              {step === 1 ? (
-                <form onSubmit={handleCredentials} className="space-y-5">
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Kurumsal E-posta
-                    </label>
-                    <Input 
-                      type="email" 
-                      required 
-                      className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 h-11"
-                      placeholder="admin@demo.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Şifre
-                    </label>
-                    <Input 
-                      type="password" 
-                      required 
-                      className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 h-11"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
-                  </div>
-                  <Button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white h-11 mt-4">
-                    Kimlik Doğrula
-                  </Button>
-                </form>
-              ) : (
-                <form onSubmit={handle2FA} className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div className="flex items-center gap-4 mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <Fingerprint className="w-8 h-8 text-red-600 flex-shrink-0" />
-                    <div>
-                      <h4 className="text-sm font-medium text-slate-900">İki Faktörlü Doğrulama</h4>
-                      <p className="text-xs text-slate-400">Doğrulayıcı uygulamanızdaki 6 haneli kodu girin.</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Güvenlik Kodu
-                    </label>
-                    <Input 
-                      type="text" 
-                      required 
-                      maxLength={6}
-                      className="bg-slate-50 border-slate-200 text-center text-2xl tracking-[0.5em] text-slate-900 focus-visible:ring-red-600 h-14 font-mono"
-                      placeholder="••••••"
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex gap-3 mt-6">
-                    <Button type="button" variant="outline" className="flex-1 bg-transparent border-slate-200 text-slate-700 hover:bg-red-50 hover:text-red-600" onClick={() => setStep(1)}>
-                      Geri
-                    </Button>
-                    <Button type="submit" className="flex-[2] bg-red-600 hover:bg-red-700 text-white h-11">
-                      {isLoading ? 'Giriş yapılıyor...' : 'Yetkilendir'}
-                    </Button>
-                  </div>
-                </form>
+              <form onSubmit={handleLogin} className="space-y-5">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    Kurumsal E-posta
+                  </label>
+                  <Input
+                    type="email"
+                    required
+                    autoComplete="email"
+                    className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 h-11"
+                    placeholder="admin@demo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    Şifre
+                  </label>
+                  <Input
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 h-11"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+                <Button type="submit" disabled={isLoading} className="w-full bg-red-600 hover:bg-red-700 text-white h-11 mt-4">
+                  {isLoading ? 'Giriş yapılıyor...' : 'Operasyon Merkezine Gir'}
+                </Button>
+              </form>
+              {error && (
+                <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
               )}
-              {error && <p className="mt-3 text-sm text-red-600 text-center">{error}</p>}
             </CardContent>
             <CardFooter className="px-8 pb-8 pt-0 border-t border-slate-200/50 mt-4 flex justify-between items-center text-xs text-slate-500">
               <span>Yetkili Erişim Gerekli</span>
-              <a href="#" className="hover:text-red-600 transition-colors">BT Destek</a>
+              <span className="font-medium text-red-600">JWT güvenli oturum</span>
             </CardFooter>
           </Card>
         </div>
@@ -191,14 +158,4 @@ export default function AdminLogin() {
       </div>
     </div>
   );
-}
-
-function dashboardPathForEmail(email: string, fallbackRole: 'customer' | 'service' | 'admin') {
-  const roleByEmail: Record<string, 'customer' | 'service' | 'admin'> = {
-    'customer@demo.com': 'customer',
-    'service@demo.com': 'service',
-    'admin@demo.com': 'admin',
-  };
-  const role = roleByEmail[email.trim().toLowerCase()] ?? fallbackRole;
-  return `/${role}/dashboard`;
 }

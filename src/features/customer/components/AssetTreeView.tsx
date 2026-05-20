@@ -53,6 +53,26 @@ function getTypeColor(type: string) {
   }
 }
 
+function filterAssetNodes(nodes: AssetTreeNode[], query: string): AssetTreeNode[] {
+  if (!query.trim()) return nodes;
+
+  const normalizedQuery = query.toLowerCase();
+  return nodes
+    .map((node) => {
+      const childMatches = filterAssetNodes(node.children || [], query);
+      const selfMatches =
+        node.name.toLowerCase().includes(normalizedQuery) ||
+        node.tagNo?.toLowerCase().includes(normalizedQuery) ||
+        node.brand?.toLowerCase().includes(normalizedQuery);
+
+      if (selfMatches || childMatches.length > 0) {
+        return { ...node, children: childMatches.length > 0 ? childMatches : node.children || [] };
+      }
+      return null;
+    })
+    .filter(Boolean) as AssetTreeNode[];
+}
+
 // ── Props ─────────────────────────────────────────────────────────
 
 interface AssetTreeViewProps {
@@ -97,27 +117,7 @@ export default function AssetTreeView({ nodes, onEdit, onDelete, onAddChild }: A
     setExpandedIds(new Set());
   }, []);
 
-  // Filter nodes recursively
-  const filterNodes = useCallback((nodes: AssetTreeNode[], query: string): AssetTreeNode[] => {
-    if (!query.trim()) return nodes;
-    const lq = query.toLowerCase();
-    return nodes
-      .map((node) => {
-        const childMatches = filterNodes(node.children || [], query);
-        const selfMatches =
-          node.name.toLowerCase().includes(lq) ||
-          node.tagNo?.toLowerCase().includes(lq) ||
-          node.brand?.toLowerCase().includes(lq);
-
-        if (selfMatches || childMatches.length > 0) {
-          return { ...node, children: childMatches.length > 0 ? childMatches : node.children || [] };
-        }
-        return null;
-      })
-      .filter(Boolean) as AssetTreeNode[];
-  }, []);
-
-  const filteredNodes = filterNodes(nodes, searchQuery);
+  const filteredNodes = filterAssetNodes(nodes, searchQuery);
 
   const countTotal = (nodes: AssetTreeNode[]): number =>
     nodes.reduce((sum, n) => sum + 1 + countTotal(n.children || []), 0);
@@ -222,7 +222,6 @@ function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }:
   const hasChildren = node.children && node.children.length > 0;
   const style = getDepthStyle(node.depth);
   const typeColor = getTypeColor(node.type);
-  const isLeaf = node.leaf && !hasChildren;
 
   return (
     <div className="group/tree">
@@ -316,7 +315,7 @@ function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }:
           {/* Connector line */}
           <div className={`absolute left-0 top-0 bottom-2 w-px border-l-2 border-dashed ${style.line}`} />
 
-          {node.children.map((child, idx) => (
+          {node.children.map((child) => (
             <div key={child.id} className="relative">
               {/* Horizontal connector */}
               <div className={`absolute -left-5 top-5 w-5 h-px border-t border-dashed ${style.line}`} />
