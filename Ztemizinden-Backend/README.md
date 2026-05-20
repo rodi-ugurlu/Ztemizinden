@@ -78,7 +78,7 @@ Uploaded files are served from:
 Localhost is allowed by default. For Vercel + ngrok beta runs:
 
 ```bash
-APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://your-vercel-domain.vercel.app,https://*.ngrok-free.app,https://*.ngrok.app,https://*.ngrok.io
+APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://*.vercel.app,https://*.ngrok-free.app,https://*.ngrok.app,https://*.ngrok.io
 ```
 
 ## MVP1 API Surface

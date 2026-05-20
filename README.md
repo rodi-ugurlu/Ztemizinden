@@ -47,7 +47,7 @@ Local internal JWT kullanicilari:
 - Demo ticket/asset/provider sunum verisi V7 migration ile temizlenir; ekranlar kullanicinin ekledigi gercek backend verisiyle baslar.
 - Upload dosyalari backend local diskte `APP_UPLOAD_DIR` altinda tutulur, varsayilan `uploads`.
 - Vercel frontend kullanilacaksa `VITE_API_URL` ngrok backend adresine set edilir.
-- CORS icin backend env: `APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://your-vercel-domain.vercel.app,https://*.ngrok-free.app,https://*.ngrok.app,https://*.ngrok.io`
+- CORS icin backend env: `APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://*.vercel.app,https://*.ngrok-free.app,https://*.ngrok.app,https://*.ngrok.io`
 
 ## Dogrulama
 

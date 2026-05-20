@@ -38,6 +38,7 @@ public class SecurityConfig {
     private static final List<String> DEFAULT_ALLOWED_ORIGIN_PATTERNS = List.of(
             "http://localhost:*",
             "http://127.0.0.1:*",
+            "https://*.vercel.app",
             "https://*.ngrok-free.app",
             "https://*.ngrok.app",
             "https://*.ngrok.io"

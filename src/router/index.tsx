@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { lazy, Suspense, type ReactNode } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, isRouteErrorResponse, Navigate, useRouteError } from 'react-router-dom';
 import { ProtectedRoute, PublicRoute } from './ProtectedRoute';
 
 // Layouts
@@ -47,6 +47,66 @@ function RouteLoading() {
   );
 }
 
+function RouteErrorBoundary() {
+  const error = useRouteError();
+  const message = routeErrorMessage(error);
+  const isChunkError = isDynamicImportError(error);
+
+  return (
+    <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100 flex items-center justify-center">
+      <div className="w-full max-w-lg rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+        <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-lg bg-red-600 text-lg font-black text-white">
+          !
+        </div>
+        <h1 className="text-2xl font-black tracking-normal">
+          {isChunkError ? 'Yeni sürüm hazır' : 'Ekran yüklenemedi'}
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-slate-300">
+          {isChunkError
+            ? 'Uygulama güncellendiği için tarayıcı eski bir ekran dosyasını çağırıyor. Sayfayı yenileyince yeni sürüm açılacak.'
+            : message}
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-700"
+          >
+            Sayfayı Yenile
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.assign('/customer/login')}
+            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-bold text-slate-200 transition hover:bg-slate-800"
+          >
+            Girişe Dön
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function routeErrorMessage(error: unknown) {
+  if (isRouteErrorResponse(error)) {
+    return error.statusText || `${error.status} hatası`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'Beklenmeyen bir hata oluştu.';
+}
+
+function isDynamicImportError(error: unknown) {
+  const message = routeErrorMessage(error).toLowerCase();
+  return (
+    message.includes('failed to fetch dynamically imported module') ||
+    message.includes('importing a module script failed') ||
+    message.includes('chunkloaderror') ||
+    message.includes('loading chunk')
+  );
+}
+
 /**
  * Temizinden Router Configuration
  *
@@ -62,6 +122,7 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <Navigate to="/customer/login" replace />,
+    errorElement: <RouteErrorBoundary />,
   },
 
   // ==========================================
@@ -70,6 +131,7 @@ export const router = createBrowserRouter([
   {
     path: '/customer',
     element: withPageLoader(<CustomerLayout />),
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         path: 'login',
@@ -136,6 +198,7 @@ export const router = createBrowserRouter([
   {
     path: '/service',
     element: withPageLoader(<ServiceLayout />),
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         path: 'login',
@@ -186,6 +249,7 @@ export const router = createBrowserRouter([
   {
     path: '/admin',
     element: withPageLoader(<AdminLayout />),
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         path: 'login',
@@ -225,6 +289,7 @@ export const router = createBrowserRouter([
   // 404 Catch-all
   {
     path: '*',
+    errorElement: <RouteErrorBoundary />,
     element: (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="text-center">

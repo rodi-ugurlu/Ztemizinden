@@ -17,7 +17,7 @@ spring:
 app:
   security:
     enabled: ${APP_SECURITY_ENABLED:true}
-    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,https://*.ngrok-free.app,https://*.ngrok.app,https://*.ngrok.io}
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,https://*.vercel.app,https://*.ngrok-free.app,https://*.ngrok.app,https://*.ngrok.io}
     jwt-secret: ${APP_JWT_SECRET:ZtemizindenLocalJwtSecretMustBeAtLeast32Chars!}
     jwt-issuer: ${APP_JWT_ISSUER:ztemizinden}
     jwt-expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:480}
