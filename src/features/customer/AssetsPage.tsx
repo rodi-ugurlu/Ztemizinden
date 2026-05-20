@@ -26,6 +26,7 @@ import {
 import {
   useCustomerStore,
   type Asset,
+  type CreateAssetInput,
   type AssetType,
   type AssetStatus,
 } from '@/store/useCustomerStore';
@@ -303,7 +304,7 @@ function AssetCard({ asset }: { asset: Asset }) {
  * New Asset Form Component
  */
 interface NewAssetFormProps {
-  onSubmit: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onSubmit: (asset: CreateAssetInput) => void;
   onCancel: () => void;
 }
 

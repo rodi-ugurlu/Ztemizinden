@@ -31,6 +31,23 @@ export interface Asset {
   updatedAt: string;
 }
 
+export type CreateAssetInput = {
+  ownerId?: string;
+  parentId?: string | null;
+  name: string;
+  tagNo: string;
+  type: AssetType;
+  brand: string;
+  model: string;
+  serialNumber: string;
+  purchaseDate?: string;
+  warrantyEndDate?: string;
+  status: AssetStatus;
+  location?: string;
+  department?: string;
+  description?: string;
+};
+
 export interface AssetTreeNode extends Asset {
   childCount: number;
   descendantCount: number;
@@ -140,13 +157,13 @@ interface CustomerStoreState {
   fetchTickets: (customerId: string) => Promise<void>;
   
   // Asset Actions (flat)
-  addAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'depth' | 'leaf' | 'sortOrder'> & { ownerId?: string }) => Promise<Asset>;
+  addAsset: (asset: CreateAssetInput) => Promise<Asset>;
   deleteAsset: (id: string) => Promise<void>;
   getAssetById: (id: string) => Asset | undefined;
 
   // Asset Tree Actions
   fetchAssetTree: (customerId: string) => Promise<void>;
-  createAssetInTree: (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'depth' | 'leaf' | 'sortOrder'> & { ownerId?: string; parentId?: string }) => Promise<Asset>;
+  createAssetInTree: (asset: CreateAssetInput) => Promise<Asset>;
   moveAsset: (assetId: string, newParentId: string | null) => Promise<void>;
   deleteAssetFromTree: (assetId: string) => Promise<void>;
   reorderAssets: (parentId: string, orderedIds: string[]) => Promise<void>;
