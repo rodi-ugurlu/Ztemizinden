@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:jar": "cd Ztemizinden-Backend && ./mvnw -Pfullstack clean package",
     "lint": "eslint .",
     "preview": "vite preview"
   },

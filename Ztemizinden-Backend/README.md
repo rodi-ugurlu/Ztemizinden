@@ -60,6 +60,22 @@ Temporarily disable security for debugging:
 APP_SECURITY_ENABLED=false ./mvnw spring-boot:run
 ```
 
+## Fullstack Jar
+
+Repo kokunden:
+
+```bash
+npm run build:jar
+```
+
+Backend klasorunden:
+
+```bash
+./mvnw -Pfullstack clean package
+```
+
+`fullstack` profili root React uygulamasinda `npm ci` ve `npm run build` calistirir, `dist` ciktisini Spring Boot static kaynaklarina kopyalar ve `target/ztemizinden.jar` uretir.
+
 ## Upload Storage
 
 V1 stores ticket media and provider documents on the backend local filesystem.

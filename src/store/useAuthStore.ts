@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { getApiBaseUrl } from '@/lib/backendUrl';
 
 export type UserRole = 'customer' | 'service' | 'admin' | null;
 
@@ -177,7 +178,7 @@ async function requestBackendToken(email: string, password: string): Promise<Aut
       body: JSON.stringify({ email, password }),
     });
   } catch {
-    throw new Error('Backend bağlantısı kurulamadı. Ngrok veya CORS ayarlarını kontrol edin.');
+    throw new Error('Backend bağlantısı kurulamadı. API adresini ve sunucu erişimini kontrol edin.');
   }
 
   if (!response.ok) {
@@ -188,21 +189,7 @@ async function requestBackendToken(email: string, password: string): Promise<Aut
 }
 
 function normalizedApiUrl() {
-  const trimmed = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api').trim().replace(/\/+$/, '');
-  const normalized = trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
-  assertExternalBackendUrl(normalized);
-  return normalized;
-}
-
-function assertExternalBackendUrl(value: string) {
-  if (typeof window === 'undefined') return;
-
-  const apiUrl = new URL(value, window.location.origin);
-  const currentHost = window.location.hostname;
-  const isLocalhost = ['localhost', '127.0.0.1'].includes(currentHost);
-  if (!isLocalhost && apiUrl.hostname === currentHost) {
-    throw new Error('VITE_API_URL frontend domaini değil backend ngrok adresi olmalı.');
-  }
+  return getApiBaseUrl();
 }
 
 async function authErrorMessage(response: Response) {

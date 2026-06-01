@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useServiceStore,
 } from '@/store/useServiceStore';
+import { getApiRootUrl } from '@/lib/backendUrl';
 import type { Ticket, OfferType } from '@/store/useCustomerStore';
 import FinalBillingDialog from './FinalBillingDialog';
 import {
@@ -43,7 +44,7 @@ interface TicketDetailDrawerProps {
   onClose: () => void;
 }
 
-const API_MEDIA_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api').replace(/\/api\/?$/, '');
+const API_MEDIA_ORIGIN = getApiRootUrl();
 
 /**
  * TicketDetailDrawer Component

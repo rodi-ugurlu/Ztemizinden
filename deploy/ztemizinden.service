@@ -1,0 +1,21 @@
+[Unit]
+Description=Ztemizinden Spring Boot application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ztemizinden
+Group=ztemizinden
+WorkingDirectory=/opt/ztemizinden
+EnvironmentFile=/etc/ztemizinden/ztemizinden.env
+ExecStart=/usr/bin/java -Xms256m -Xmx768m -jar /opt/ztemizinden/ztemizinden.jar
+Restart=always
+RestartSec=10
+SuccessExitStatus=143
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/ztemizinden /opt/ztemizinden
+
+[Install]
+WantedBy=multi-user.target
