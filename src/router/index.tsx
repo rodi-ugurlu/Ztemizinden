@@ -7,6 +7,7 @@ import { ProtectedRoute, PublicRoute } from './ProtectedRoute';
 const CustomerLayout = lazy(() => import('@/layouts/CustomerLayout'));
 const ServiceLayout = lazy(() => import('@/layouts/ServiceLayout'));
 const AdminLayout = lazy(() => import('@/layouts/AdminLayout'));
+const MaintlyLandingPage = lazy(() => import('@/features/landing/MaintlyLandingPage'));
 
 // Auth Pages
 const CustomerLogin = lazy(() => import('@/features/auth/CustomerLogin'));
@@ -17,7 +18,6 @@ const AdminLogin = lazy(() => import('@/features/auth/AdminLogin'));
 
 // Customer Portal Pages
 const CustomerDashboard = lazy(() => import('@/features/customer/CustomerDashboard'));
-const AssetsPage = lazy(() => import('@/features/customer/AssetsPage'));
 const AssetTreePage = lazy(() => import('@/features/customer/AssetTreePage'));
 const CreateTicketPage = lazy(() => import('@/features/customer/CreateTicketPage'));
 const RequestsPage = lazy(() => import('@/features/customer/RequestsPage'));
@@ -108,7 +108,7 @@ function isDynamicImportError(error: unknown) {
 }
 
 /**
- * Temizinden Router Configuration
+ * Maintly Router Configuration
  *
  * Three distinct portals with isolated routing:
  * - Customer Portal: /customer/*
@@ -118,10 +118,10 @@ function isDynamicImportError(error: unknown) {
  * Protected routes redirect unauthenticated users to their respective login pages.
  */
 export const router = createBrowserRouter([
-  // Root redirect to customer login
+  // Public landing page
   {
     path: '/',
-    element: <Navigate to="/customer/login" replace />,
+    element: withPageLoader(<MaintlyLandingPage />),
     errorElement: <RouteErrorBoundary />,
   },
 
@@ -133,6 +133,14 @@ export const router = createBrowserRouter([
     element: withPageLoader(<CustomerLayout />),
     errorElement: <RouteErrorBoundary />,
     children: [
+      {
+        index: true,
+        element: withPageLoader(
+          <ProtectedRoute requiredRole="customer">
+            <Navigate to="/customer/dashboard" replace />
+          </ProtectedRoute>
+        ),
+      },
       {
         path: 'login',
         element: withPageLoader(
@@ -161,7 +169,7 @@ export const router = createBrowserRouter([
         path: 'assets',
         element: withPageLoader(
           <ProtectedRoute requiredRole="customer">
-            <AssetsPage />
+            <Navigate to="/customer/asset-tree" replace />
           </ProtectedRoute>
         ),
       },
@@ -200,6 +208,14 @@ export const router = createBrowserRouter([
     element: withPageLoader(<ServiceLayout />),
     errorElement: <RouteErrorBoundary />,
     children: [
+      {
+        index: true,
+        element: withPageLoader(
+          <ProtectedRoute requiredRole="service">
+            <Navigate to="/service/dashboard" replace />
+          </ProtectedRoute>
+        ),
+      },
       {
         path: 'login',
         element: withPageLoader(
@@ -251,6 +267,14 @@ export const router = createBrowserRouter([
     element: withPageLoader(<AdminLayout />),
     errorElement: <RouteErrorBoundary />,
     children: [
+      {
+        index: true,
+        element: withPageLoader(
+          <ProtectedRoute requiredRole="admin">
+            <Navigate to="/admin/dashboard" replace />
+          </ProtectedRoute>
+        ),
+      },
       {
         path: 'login',
         element: withPageLoader(

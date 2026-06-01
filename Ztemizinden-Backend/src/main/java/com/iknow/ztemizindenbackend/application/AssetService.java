@@ -3,6 +3,7 @@ package com.iknow.ztemizindenbackend.application;
 import com.iknow.ztemizindenbackend.domain.Asset;
 import com.iknow.ztemizindenbackend.domain.AssetRepository;
 import com.iknow.ztemizindenbackend.domain.BadRequestException;
+import com.iknow.ztemizindenbackend.domain.Enums.AssetStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.AssetType;
 import com.iknow.ztemizindenbackend.domain.NotFoundException;
 import java.time.LocalDate;
@@ -93,6 +94,35 @@ public class AssetService {
         return assetRepository.save(asset);
     }
 
+    // ── Update ────────────────────────────────────────────────────────
+
+    @Transactional
+    public Asset update(String assetId, UpdateAssetCommand command) {
+        Asset asset = assetRepository.findById(assetId)
+                .orElseThrow(() -> new NotFoundException("Asset not found: " + assetId));
+
+        if (!asset.getTagNo().equals(command.tagNo()) && assetRepository.existsByTagNoAndIdNot(command.tagNo(), assetId)) {
+            throw new BadRequestException("Asset tag number is already registered");
+        }
+
+        asset.updateDetails(
+                command.name(),
+                command.tagNo(),
+                command.type(),
+                command.brand(),
+                command.model(),
+                command.serialNumber(),
+                command.purchaseDate(),
+                command.warrantyEndDate(),
+                command.status(),
+                command.location(),
+                command.department(),
+                command.description()
+        );
+
+        return assetRepository.save(asset);
+    }
+
     // ── Move ──────────────────────────────────────────────────────────
 
     /**
@@ -178,6 +208,22 @@ public class AssetService {
     }
 
     public record MoveAssetCommand(String newParentId) {
+    }
+
+    public record UpdateAssetCommand(
+            String name,
+            String tagNo,
+            AssetType type,
+            String brand,
+            String model,
+            String serialNumber,
+            LocalDate purchaseDate,
+            LocalDate warrantyEndDate,
+            AssetStatus status,
+            String location,
+            String department,
+            String description
+    ) {
     }
 
     public record ReorderCommand(List<String> orderedChildIds) {

@@ -9,7 +9,7 @@ import { Activity, AlertCircle, Database, Lock, ShieldCheck } from 'lucide-react
 /**
  * AdminLogin Component
  *
- * Temizinden OPS MERKEZİ - Administrative Access Portal
+ * Maintly OPS MERKEZİ - Administrative Access Portal
  * Dark theme with indigo accents for system administrators.
  */
 

@@ -30,7 +30,7 @@ export default function CustomerLayout() {
             <Home className="w-5 h-5 text-white" />
           </div>
           <div>
-            <span className="font-bold text-slate-900 text-lg tracking-tight">Temizinden</span>
+            <span className="font-bold text-slate-900 text-lg tracking-tight">Maintly</span>
             <p className="text-xs text-slate-500">Müşteri Portalı</p>
           </div>
         </div>
@@ -46,20 +46,12 @@ export default function CustomerLayout() {
               Dashboard
             </NavLink>
             <NavLink
-              to="/customer/assets"
-              className={({ isActive }) =>
-                `text-sm font-medium transition-colors ${isActive ? 'text-red-600' : 'text-slate-600 hover:text-slate-900'}`
-              }
-            >
-              Varlıklar
-            </NavLink>
-            <NavLink
               to="/customer/asset-tree"
               className={({ isActive }) =>
                 `text-sm font-medium transition-colors ${isActive ? 'text-red-600' : 'text-slate-600 hover:text-slate-900'}`
               }
             >
-              Varlık Ağacı
+              Varlıklar
             </NavLink>
             <NavLink
               to="/customer/requests"
@@ -89,7 +81,7 @@ export default function CustomerLayout() {
       </main>
 
       <footer className="bg-white border-t border-slate-200 px-6 py-4 text-center text-sm text-slate-500">
-        © 2026 Temizinden. Tüm hakları saklıdır.
+        © 2026 Maintly. Tüm hakları saklıdır.
       </footer>
     </div>
   );

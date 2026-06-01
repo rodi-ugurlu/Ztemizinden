@@ -39,6 +39,8 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     /** Check if any children exist for a given parent. */
     boolean existsByParentId(String parentId);
 
+    boolean existsByTagNoAndIdNot(String tagNo, String id);
+
     /** Count direct children of a parent. */
     long countByParentId(String parentId);
 }

@@ -24,6 +24,7 @@ import {
   Timer,
   Wrench,
   XCircle,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function RequestsPage() {
@@ -35,10 +36,19 @@ export default function RequestsPage() {
     approveFinalBilling,
     disputeFinalBilling,
     fetchTickets,
+    error: storeError,
   } = useCustomerStore();
   const user = useAuthStore((state) => state.user);
   const [selectedTicketId, setSelectedTicketId] = useState(tickets[0]?.id ?? '');
   const [message, setMessage] = useState('');
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (user?.id) {
@@ -61,20 +71,104 @@ export default function RequestsPage() {
     [tickets]
   );
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!selectedTicket || !message.trim()) return;
-    addTicketMessage(selectedTicket.id, message.trim());
-    setMessage('');
+    try {
+      await addTicketMessage(selectedTicket.id, message.trim());
+      setMessage('');
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Mesaj gönderilemedi',
+      });
+    }
+  };
+
+  const handleAcceptOffer = async (offerId: string) => {
+    if (!selectedTicket) return;
+    try {
+      await acceptOffer(selectedTicket.id, offerId);
+      setToast({ type: 'success', message: 'Servis başarıyla davet edildi' });
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Teklif kabul edilemedi',
+      });
+    }
+  };
+
+  const handleRejectOffer = async (offerId: string) => {
+    if (!selectedTicket) return;
+    try {
+      await rejectOffer(selectedTicket.id, offerId);
+      setToast({ type: 'success', message: 'Teklif reddedildi' });
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Teklif reddedilemedi',
+      });
+    }
+  };
+
+  const handleApproveBilling = async () => {
+    if (!selectedTicket) return;
+    try {
+      await approveFinalBilling(selectedTicket.id);
+      setToast({ type: 'success', message: 'Hakediş başarıyla onaylandı' });
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Hakediş onaylanamadı',
+      });
+    }
+  };
+
+  const handleDisputeBilling = async (reason: string) => {
+    if (!selectedTicket) return;
+    try {
+      await disputeFinalBilling(selectedTicket.id, reason);
+      setToast({ type: 'success', message: 'Detay talebi başarıyla iletildi' });
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Detay talebi iletilemedi',
+      });
+    }
   };
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8 relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-20 right-6 z-[100] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl
+                      border backdrop-blur-md transition-all duration-500 animate-in slide-in-from-right-5 fade-in
+                      ${toast.type === 'success'
+                        ? 'bg-emerald-50/95 border-emerald-200 text-emerald-800 shadow-emerald-100/50'
+                        : 'bg-red-50/95 border-red-200 text-red-800 shadow-red-100/50'
+                      }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          )}
+          <span className="text-sm font-semibold">{toast.message}</span>
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-slate-900">Servis Taleplerim</h1>
         <p className="text-slate-500">
           Arıza kayıtlarını, servis tekliflerini, davet durumunu ve hakediş onaylarını tek yerden yönetin.
         </p>
       </div>
+
+      {storeError && (
+        <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl flex items-center gap-3 animate-in fade-in duration-300">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          <span className="text-sm font-semibold">{storeError}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Metric title="Açık Arıza" value={stats.open} icon={Wrench} tone="text-red-600 bg-red-50" />
@@ -192,7 +286,7 @@ export default function RequestsPage() {
                             <Button
                               size="sm"
                               className="bg-red-600 hover:bg-red-700"
-                              onClick={() => acceptOffer(selectedTicket.id, offer.id)}
+                              onClick={() => handleAcceptOffer(offer.id)}
                             >
                               <CheckCircle2 className="w-4 h-4" />
                               Davet Et
@@ -200,7 +294,7 @@ export default function RequestsPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => rejectOffer(selectedTicket.id, offer.id)}
+                              onClick={() => handleRejectOffer(offer.id)}
                             >
                               <XCircle className="w-4 h-4" />
                               Reddet
@@ -223,8 +317,8 @@ export default function RequestsPage() {
             {selectedTicket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL' && (
               <BillingPanel
                 ticket={selectedTicket}
-                onApprove={() => approveFinalBilling(selectedTicket.id)}
-                onDispute={() => disputeFinalBilling(selectedTicket.id, 'Maliyet kalemleri için detay istiyoruz.')}
+                onApprove={handleApproveBilling}
+                onDispute={() => handleDisputeBilling('Maliyet kalemleri için detay istiyoruz.')}
               />
             )}
 

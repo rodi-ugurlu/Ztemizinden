@@ -2,7 +2,7 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from '@/router';
 
 /**
- * Temizinden - Main Application Component
+ * Maintly - Main Application Component
  *
  * Three distinct portals with isolated routing:
  * - Customer Portal: /customer/* (Mod A - Fabrika/KOBİ/Ev)

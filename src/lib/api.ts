@@ -1,6 +1,6 @@
 import { clearAuthSession, getAuthLoginPath, getStoredAccessToken, useAuthStore } from '@/store/useAuthStore';
 
-const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api').replace(/\/+$/, '');
+const BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL || 'http://localhost:8080/api');
 const API_ROOT_URL = BASE_URL.replace(/\/api\/?$/, '');
 
 interface RequestOptions extends RequestInit {
@@ -103,7 +103,7 @@ function resolveUrl(endpoint: string) {
   if (/^https?:\/\//i.test(endpoint)) {
     return endpoint;
   }
-  if (endpoint.startsWith('/uploads/')) {
+  if (endpoint.startsWith('/uploads/') && !endpoint.endsWith('/ticket-media') && !endpoint.endsWith('/provider-documents')) {
     return `${API_ROOT_URL}${endpoint}`;
   }
   return `${BASE_URL}${endpoint}`;
@@ -130,6 +130,8 @@ function friendlyErrorMessage(message: string, status: number) {
       'Servis sağlayıcı onaylanmadan önce tüm belgeler doğrulanmalıdır.',
     'Provider email is already registered':
       'Bu e-posta ile kayıtlı bir servis sağlayıcı zaten var.',
+    'Asset tag number is already registered':
+      'Bu tag numarası başka bir varlıkta kullanılıyor.',
     'E-posta veya şifre hatalı':
       'E-posta veya şifre hatalı. Bilgileri kontrol edip tekrar deneyin.',
     'Access Denied':
@@ -150,9 +152,30 @@ function friendlyErrorMessage(message: string, status: number) {
   if (status === 404) {
     return 'İstenen kayıt ya da dosya bulunamadı.';
   }
+  if (status === 405) {
+    return 'API adresi yanlış görünüyor. VITE_API_URL backend ngrok adresi ve /api ile bitmeli.';
+  }
   return normalized;
 }
 
 function networkErrorMessage() {
   return 'Backend bağlantısı kurulamadı. Ngrok veya CORS ayarlarını kontrol edin.';
+}
+
+function normalizeApiBaseUrl(value: string) {
+  const trimmed = value.trim().replace(/\/+$/, '');
+  const normalized = trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+  assertExternalBackendUrl(normalized);
+  return normalized;
+}
+
+function assertExternalBackendUrl(value: string) {
+  if (typeof window === 'undefined') return;
+
+  const apiUrl = new URL(value, window.location.origin);
+  const currentHost = window.location.hostname;
+  const isLocalhost = ['localhost', '127.0.0.1'].includes(currentHost);
+  if (!isLocalhost && apiUrl.hostname === currentHost) {
+    throw new Error('VITE_API_URL frontend domaini değil backend ngrok adresi olmalı.');
+  }
 }

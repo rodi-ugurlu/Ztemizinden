@@ -3,6 +3,7 @@ package com.iknow.ztemizindenbackend.api;
 import com.iknow.ztemizindenbackend.application.AssetService;
 import com.iknow.ztemizindenbackend.application.AssetService.CreateAssetCommand;
 import com.iknow.ztemizindenbackend.application.AssetService.AssetBreadcrumb;
+import com.iknow.ztemizindenbackend.application.AssetService.UpdateAssetCommand;
 import com.iknow.ztemizindenbackend.application.CurrentUser;
 import com.iknow.ztemizindenbackend.domain.Asset;
 import jakarta.validation.Valid;
@@ -74,6 +75,28 @@ public class AssetController {
                 request.department(),
                 request.description(),
                 request.parentId()
+        ));
+        return toResponse(asset);
+    }
+
+    // ── Update metadata (does not move hierarchy) ─────────────────────
+
+    @PutMapping("/{id}")
+    public AssetResponse update(@PathVariable String id, @Valid @RequestBody UpdateAssetRequest request) {
+        currentUser.requireCustomerAsset(assetService.get(id));
+        Asset asset = assetService.update(id, new UpdateAssetCommand(
+                request.name(),
+                request.tagNo(),
+                ApiEnums.assetType(request.type()),
+                request.brand(),
+                request.model(),
+                request.serialNumber(),
+                request.purchaseDate(),
+                request.warrantyEndDate(),
+                ApiEnums.assetStatus(request.status()),
+                request.location(),
+                request.department(),
+                request.description()
         ));
         return toResponse(asset);
     }
@@ -265,6 +288,22 @@ public class AssetController {
     }
 
     public record MoveAssetRequest(String newParentId) {
+    }
+
+    public record UpdateAssetRequest(
+            @NotBlank String name,
+            @NotBlank String tagNo,
+            @NotBlank String type,
+            @NotBlank String brand,
+            @NotBlank String model,
+            @NotBlank String serialNumber,
+            LocalDate purchaseDate,
+            LocalDate warrantyEndDate,
+            @NotBlank String status,
+            String location,
+            String department,
+            String description
+    ) {
     }
 
     public record ReorderRequest(List<String> orderedChildIds) {

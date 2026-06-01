@@ -59,10 +59,11 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
 
   resolveProviderSession: async (user) => {
     if (!user) {
-      set({ currentProviderId: '', currentProviderName: '', providerProfile: null });
+      set({ currentProviderId: '', currentProviderName: '', providerProfile: null, error: null, isLoading: false });
       return;
     }
 
+    set({ isLoading: true, error: null });
     try {
       const provider = await api.get<ServiceProvider>('/providers/me');
       const normalizedProvider = normalizeServiceProvider(provider);
@@ -70,18 +71,33 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
         currentProviderId: normalizedProvider.id,
         currentProviderName: normalizedProvider.name,
         providerProfile: normalizedProvider,
+        isLoading: false,
+        error: null,
       });
-    } catch {
+    } catch (error) {
       set({
         currentProviderId: user.id,
         currentProviderName: user.name,
         providerProfile: null,
+        opportunities: [],
+        myJobs: [],
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Servis profili yuklenemedi',
       });
     }
   },
 
   fetchOpportunities: async () => {
-    if (!canAccessJobs(get().providerProfile)) {
+    const providerProfile = get().providerProfile;
+    if (!providerProfile) {
+      set({
+        opportunities: [],
+        isLoading: false,
+        error: get().error ?? 'Servis profili yuklenemedi',
+      });
+      return;
+    }
+    if (!canAccessJobs(providerProfile)) {
       set({ opportunities: [], isLoading: false, error: null });
       return;
     }
@@ -95,7 +111,16 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
   },
 
   fetchMyJobs: async () => {
-    if (!canAccessJobs(get().providerProfile)) {
+    const providerProfile = get().providerProfile;
+    if (!providerProfile) {
+      set({
+        myJobs: [],
+        isLoading: false,
+        error: get().error ?? 'Servis profili yuklenemedi',
+      });
+      return;
+    }
+    if (!canAccessJobs(providerProfile)) {
       set({ myJobs: [], isLoading: false, error: null });
       return;
     }
@@ -109,6 +134,7 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
   },
 
   fetchProviderProfile: async () => {
+    set({ isLoading: true, error: null });
     try {
       const provider = await api.get<ServiceProvider>('/providers/me');
       const normalizedProvider = normalizeServiceProvider(provider);
@@ -116,16 +142,17 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
         providerProfile: normalizedProvider,
         currentProviderId: normalizedProvider.id,
         currentProviderName: normalizedProvider.name,
+        isLoading: false,
+        error: null,
       });
-    } catch {
-      if (!get().currentProviderId) return;
-      try {
-        const providers = await api.get<ServiceProvider[]>('/providers');
-        const provider = providers.find((item) => item.id === get().currentProviderId) ?? null;
-        set({ providerProfile: provider ? normalizeServiceProvider(provider) : null });
-      } catch (error) {
-        set({ error: error instanceof Error ? error.message : 'Servis profili yuklenemedi' });
-      }
+    } catch (error) {
+      set({
+        providerProfile: null,
+        opportunities: [],
+        myJobs: [],
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Servis profili yuklenemedi',
+      });
     }
   },
 

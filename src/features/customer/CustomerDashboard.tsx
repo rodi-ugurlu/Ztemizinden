@@ -8,14 +8,12 @@ import {
   Archive,
   ArrowRight,
   Bell,
-  CalendarClock,
   Clock3,
   FileText,
   Layers3,
   Package,
   Plus,
   RadioTower,
-  Sparkles,
   Wrench,
 } from 'lucide-react';
 
@@ -97,7 +95,7 @@ export default function CustomerDashboard() {
                 <Layers3 className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Temizinden</p>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Maintly</p>
                 <h1 className="text-2xl font-black tracking-normal sm:text-3xl">Müşteri Paneli</h1>
               </div>
             </div>
@@ -118,8 +116,8 @@ export default function CustomerDashboard() {
             title={`${assets.length}`}
             description="Toplam varlıklarımız"
             icon={Package}
-            to="/customer/assets"
-            actionLabel="Yeni Varlık Ekle"
+            to="/customer/asset-tree"
+            actionLabel="Varlıkları Yönet"
             actionIcon={Plus}
           />
 
@@ -147,7 +145,7 @@ export default function CustomerDashboard() {
           />
         </section>
 
-        <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.45fr_1.05fr]">
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.45fr]">
           <MetricTile
             value={openedThisMonth}
             title="Bu Ay Açılan Arızalar"
@@ -164,8 +162,6 @@ export default function CustomerDashboard() {
             to="/customer/requests"
             wide
           />
-
-          <ComingSoonTile />
         </section>
 
       </div>
@@ -277,32 +273,6 @@ function MetricTile({
         </CardContent>
       </Card>
     </Link>
-  );
-}
-
-function ComingSoonTile() {
-  return (
-    <Card className="relative h-full overflow-hidden border-2 border-amber-300 bg-amber-50 shadow-md">
-      <CardContent className="flex min-h-[190px] flex-col justify-between p-6">
-        <div className="absolute right-5 top-5 rotate-6 rounded-lg bg-slate-950 px-4 py-3 text-center text-white shadow-lg">
-          <Sparkles className="mx-auto mb-1 h-4 w-4 text-amber-300" />
-          <p className="text-xl font-black leading-none">New</p>
-          <p className="text-lg font-black leading-none">soon</p>
-        </div>
-
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-          <CalendarClock className="h-6 w-6" />
-        </div>
-
-        <div className="mt-10 max-w-[72%] space-y-3">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">Yeni modül</p>
-          <h2 className="text-2xl font-black leading-tight tracking-normal text-amber-950">
-            Periyodik & Otonom Arıza Bakım
-          </h2>
-          <p className="text-sm font-medium text-amber-800">Sonra eklenecek. Şimdilik pasif durumda.</p>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 

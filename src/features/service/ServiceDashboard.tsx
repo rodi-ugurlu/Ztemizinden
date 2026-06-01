@@ -17,8 +17,6 @@ import {
   Inbox,
   RadioTower,
   Send,
-  Sparkles,
-  UsersRound,
 } from 'lucide-react';
 
 export default function ServiceDashboard() {
@@ -97,6 +95,26 @@ export default function ServiceDashboard() {
     );
   }
 
+  if (!providerProfile) {
+    return (
+      <div className="w-full flex-1 bg-slate-50 p-6 lg:p-8">
+        <Card className="mx-auto max-w-3xl border-slate-200 bg-white">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-3">
+              <FileText className="mt-0.5 h-5 w-5 text-slate-500" />
+              <div>
+                <h2 className="font-semibold text-slate-950">Servis profili hazırlanıyor</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Firma bilgileriniz backend üzerinden doğrulanınca paneliniz açılacak.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (isPendingProvider || isSuspendedProvider) {
     return (
       <div className="w-full flex-1 bg-slate-50 p-6 lg:p-8">
@@ -154,7 +172,7 @@ export default function ServiceDashboard() {
                 <BriefcaseBusiness className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-100">Temizinden</p>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-100">Maintly</p>
                 <h1 className="text-2xl font-black tracking-normal sm:text-3xl">Servis Firması Paneli</h1>
               </div>
             </div>
@@ -168,7 +186,7 @@ export default function ServiceDashboard() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr_1fr_1.05fr]">
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <ModuleCard
             tone="green"
             eyebrow={`${opportunities.length} yeni kayıt`}
@@ -199,7 +217,6 @@ export default function ServiceDashboard() {
             actionLabel="İşleri Aç"
           />
 
-          <ComingSoonTile />
         </section>
 
         <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.28fr]">
@@ -302,32 +319,6 @@ function ModuleCard({
         </CardContent>
       </Card>
     </Link>
-  );
-}
-
-function ComingSoonTile() {
-  return (
-    <Card className="relative h-full overflow-hidden border-2 border-amber-300 bg-amber-50 shadow-md">
-      <CardContent className="flex min-h-[180px] flex-col justify-between p-6">
-        <div className="absolute right-5 top-5 rotate-6 rounded-lg bg-slate-950 px-4 py-3 text-center text-white shadow-lg">
-          <Sparkles className="mx-auto mb-1 h-4 w-4 text-amber-300" />
-          <p className="text-xl font-black leading-none">New</p>
-          <p className="text-lg font-black leading-none">soon</p>
-        </div>
-
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-          <UsersRound className="h-6 w-6" />
-        </div>
-
-        <div className="mt-10 max-w-[72%] space-y-3">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">Yeni modül</p>
-          <h2 className="text-2xl font-black leading-tight tracking-normal text-amber-950">
-            İş / Görev / Personel Yönet
-          </h2>
-          <p className="text-sm font-medium text-amber-800">Saha ekibi, görev ve kaynak planlaması sonra eklenecek.</p>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 

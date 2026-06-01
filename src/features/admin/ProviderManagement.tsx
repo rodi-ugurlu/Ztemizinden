@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,6 +49,8 @@ import {
 export default function ProviderManagement() {
   const {
     providers,
+    isLoading,
+    error,
     fetchProviders,
     verifyProvider,
     rejectProvider,
@@ -64,9 +66,13 @@ export default function ProviderManagement() {
   const [documentOpenError, setDocumentOpenError] = useState('');
   const [documentActionError, setDocumentActionError] = useState('');
 
-  useEffect(() => {
-    fetchProviders();
+  const loadProviders = useCallback(() => {
+    void fetchProviders();
   }, [fetchProviders]);
+
+  useEffect(() => {
+    loadProviders();
+  }, [loadProviders]);
 
   const filteredProviders = providers.filter(
     (provider) =>
@@ -128,26 +134,24 @@ export default function ProviderManagement() {
     }
   };
 
-  return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Servis Sağlayıcı Yönetimi</h1>
-          <p className="text-slate-400 mt-1">
-            Kayıtlı servis sağlayıcıları ve doğrulama durumları
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Link to="/admin/dashboard">
-            <Button variant="outline" className="bg-slate-50 border-slate-200 text-slate-700">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Geri
-            </Button>
-          </Link>
-        </div>
-      </div>
+  if (isLoading && providers.length === 0) {
+    return (
+      <ProviderManagementShell>
+        <AdminLoadingState message="Servis sağlayıcıları yükleniyor..." />
+      </ProviderManagementShell>
+    );
+  }
 
+  if (error) {
+    return (
+      <ProviderManagementShell>
+        <AdminErrorState message={error} onRetry={loadProviders} />
+      </ProviderManagementShell>
+    );
+  }
+
+  return (
+    <ProviderManagementShell>
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <StatCard
@@ -499,13 +503,67 @@ export default function ProviderManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ProviderManagementShell>
   );
 }
 
 // ==========================================
 // HELPER COMPONENTS
 // ==========================================
+
+function ProviderManagementShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Servis Sağlayıcı Yönetimi</h1>
+          <p className="text-slate-400 mt-1">
+            Kayıtlı servis sağlayıcıları ve doğrulama durumları
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Link to="/admin/dashboard">
+            <Button variant="outline" className="bg-slate-50 border-slate-200 text-slate-700">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Geri
+            </Button>
+          </Link>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function AdminLoadingState({ message }: { message: string }) {
+  return (
+    <Card className="border-slate-200 bg-white/70">
+      <CardContent className="flex items-center gap-3 p-6 text-slate-600">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-red-600" />
+        <span className="text-sm font-semibold">{message}</span>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Card className="border-red-200 bg-red-50">
+      <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="mt-0.5 h-5 w-5 text-red-600" />
+          <div>
+            <h2 className="font-semibold text-red-950">Servis sağlayıcıları yüklenemedi</h2>
+            <p className="mt-1 text-sm text-red-700">{message}</p>
+          </div>
+        </div>
+        <Button type="button" onClick={onRetry} className="bg-red-600 hover:bg-red-700">
+          Tekrar Dene
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 function getDocumentCounts(documents: ProviderDocument[]) {
   return {

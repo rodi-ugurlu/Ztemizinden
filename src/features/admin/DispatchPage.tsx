@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,7 +54,18 @@ import {
 } from 'lucide-react';
 
 export default function DispatchPage() {
-  const { tickets, providers, assignTicket, getProviderMatches, getSlaStatus, getMetrics } = useAdminStore();
+  const {
+    tickets,
+    providers,
+    isLoading,
+    error,
+    fetchProviders,
+    fetchQueue,
+    assignTicket,
+    getProviderMatches,
+    getSlaStatus,
+    getMetrics,
+  } = useAdminStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -62,15 +73,20 @@ export default function DispatchPage() {
   const [selectedTicket, setSelectedTicket] = useState<GlobalTicket | null>(null);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [assignError, setAssignError] = useState('');
   const metrics = getMetrics();
   const selectedMatches = selectedTicket ? getProviderMatches(selectedTicket.id) : [];
 
+  const loadDispatch = useCallback(async () => {
+    await fetchProviders();
+    if (useAdminStore.getState().error) return;
+    await fetchQueue();
+  }, [fetchProviders, fetchQueue]);
+
   useEffect(() => {
-    void (async () => {
-      await useAdminStore.getState().fetchProviders();
-      await useAdminStore.getState().fetchQueue();
-    })();
-  }, []);
+    void loadDispatch();
+  }, [loadDispatch]);
 
   const filteredTickets = tickets.filter((ticket) => {
     const matchesSearch =
@@ -83,7 +99,7 @@ export default function DispatchPage() {
     return matchesSearch && matchesStatus && matchesCategory && matchesPriority;
   });
 
-  const handleAssignTicket = () => {
+  const handleAssignTicket = async () => {
     if (selectedTicket && selectedProvider) {
       const provider = providers.find((p) => p.id === selectedProvider);
       if (provider) {
@@ -92,10 +108,18 @@ export default function DispatchPage() {
           ? `Ops önerisi: ${match.score}/100 - ${match.reasons.join(', ')}. ETA ${match.etaMinutes} dk.`
           : undefined;
 
-        assignTicket(selectedTicket.id, provider.id, provider.name, opsNote);
-        setIsAssignDialogOpen(false);
-        setSelectedProvider('');
-        setSelectedTicket(null);
+        setIsAssigning(true);
+        setAssignError('');
+        try {
+          await assignTicket(selectedTicket.id, provider.id, provider.name, opsNote);
+          setIsAssignDialogOpen(false);
+          setSelectedProvider('');
+          setSelectedTicket(null);
+        } catch (assignmentError) {
+          setAssignError(assignmentError instanceof Error ? assignmentError.message : 'Atama tamamlanamadı');
+        } finally {
+          setIsAssigning(false);
+        }
       }
     }
   };
@@ -115,27 +139,28 @@ export default function DispatchPage() {
 
     setSelectedTicket(ticket);
     setSelectedProvider(bestMatch?.provider.id ?? '');
+    setAssignError('');
     setIsAssignDialogOpen(true);
   };
 
-  return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Sevk Merkezi</h1>
-          <p className="text-slate-400 mt-1">SLA riski, lokasyon ve servis eşleşmesine göre operasyon yönetimi</p>
-        </div>
-        <div className="flex gap-3">
-          <Link to="/admin/dashboard">
-            <Button variant="outline" className="bg-slate-50 border-slate-200 text-slate-700">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Geri
-            </Button>
-          </Link>
-        </div>
-      </div>
+  if (isLoading && providers.length === 0 && tickets.length === 0) {
+    return (
+      <DispatchPageShell>
+        <AdminLoadingState message="Sevk kuyruğu yükleniyor..." />
+      </DispatchPageShell>
+    );
+  }
 
+  if (error) {
+    return (
+      <DispatchPageShell>
+        <AdminErrorState message={error} onRetry={() => void loadDispatch()} />
+      </DispatchPageShell>
+    );
+  }
+
+  return (
+    <DispatchPageShell>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <OpsMetricCard
           title="Atama Bekleyen"
@@ -428,6 +453,11 @@ export default function DispatchPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {assignError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                  {assignError}
+                </div>
+              )}
             </div>
           )}
 
@@ -437,6 +467,7 @@ export default function DispatchPage() {
               onClick={() => {
                 setIsAssignDialogOpen(false);
                 setSelectedProvider('');
+                setAssignError('');
               }}
               className="bg-transparent border-slate-200 text-slate-700"
             >
@@ -444,22 +475,74 @@ export default function DispatchPage() {
             </Button>
             <Button
               onClick={handleAssignTicket}
-              disabled={!selectedProvider}
+              disabled={!selectedProvider || isAssigning}
               className="bg-red-600 hover:bg-red-700"
             >
               <CheckCircle2 className="w-4 h-4 mr-2" />
-              Ata
+              {isAssigning ? 'Atanıyor...' : 'Ata'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </DispatchPageShell>
   );
 }
 
 // ==========================================
 // HELPER COMPONENTS
 // ==========================================
+
+function DispatchPageShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Sevk Merkezi</h1>
+          <p className="text-slate-400 mt-1">SLA riski, lokasyon ve servis eşleşmesine göre operasyon yönetimi</p>
+        </div>
+        <div className="flex gap-3">
+          <Link to="/admin/dashboard">
+            <Button variant="outline" className="bg-slate-50 border-slate-200 text-slate-700">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Geri
+            </Button>
+          </Link>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function AdminLoadingState({ message }: { message: string }) {
+  return (
+    <Card className="border-slate-200 bg-white/70">
+      <CardContent className="flex items-center gap-3 p-6 text-slate-600">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-red-600" />
+        <span className="text-sm font-semibold">{message}</span>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Card className="border-red-200 bg-red-50">
+      <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 text-red-600" />
+          <div>
+            <h2 className="font-semibold text-red-950">Sevk kuyruğu yüklenemedi</h2>
+            <p className="mt-1 text-sm text-red-700">{message}</p>
+          </div>
+        </div>
+        <Button type="button" onClick={onRetry} className="bg-red-600 hover:bg-red-700">
+          Tekrar Dene
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 function OpsMetricCard({
   title,

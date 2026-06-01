@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { useCustomerStore, type TicketCategory, type TicketPriority } from '@/store/useCustomerStore';
+import { useCustomerStore, type TicketCategory, type TicketPriority, type Asset } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { api, type UploadResponse } from '@/lib/api';
 import {
@@ -64,6 +64,20 @@ export default function CreateTicketPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedAsset = assets.find((a) => a.id === formData.assetId);
+
+  const getAssetPath = (asset: Asset | undefined) => {
+    if (!asset) return '';
+    const parts = [];
+    let current: Asset | undefined = asset;
+    while (current) {
+      parts.unshift(current.name);
+      const pId: string | null | undefined = current.parentId;
+      current = pId
+        ? assets.find((a) => a.id === pId)
+        : undefined;
+    }
+    return parts.join(' › ');
+  };
 
   useEffect(() => {
     if (user?.id) {
@@ -214,35 +228,66 @@ export default function CreateTicketPage() {
                 onValueChange={(v) => setFormData({ ...formData, assetId: v })}
                 required
               >
-                <SelectTrigger className="h-12">
+                <SelectTrigger className="h-12 border-2 border-slate-200 focus:border-red-400 focus:ring-red-100 rounded-xl">
                   <SelectValue placeholder="Bir varlık seçin..." />
                 </SelectTrigger>
-                <SelectContent>
-                  {assets.map((asset) => (
-                    <SelectItem key={asset.id} value={asset.id}>
-                      <div className="flex flex-col items-start">
-                        <span className="font-medium">{asset.name}</span>
-                        <span className="text-xs text-slate-500">{asset.tagNo} • {asset.brand}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[350px]">
+                  {assets.map((asset) => {
+                    const isLocation = !asset.leaf || asset.depth === 0;
+                    const path = getAssetPath(asset);
+                    return (
+                      <SelectItem key={asset.id} value={asset.id} className="py-2.5">
+                        <div className="flex flex-col items-start text-left">
+                          <span className="font-semibold flex items-center gap-1.5 text-slate-800 text-[14px]">
+                            <span>{isLocation ? '📍' : '🔧'}</span>
+                            <span>{asset.name}</span>
+                            {isLocation && (
+                              <span className="text-[9px] tracking-wide bg-indigo-50 text-indigo-700 border border-indigo-200/60 px-1.5 py-0.5 rounded-full font-bold">
+                                Lokasyon
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-1.5">
+                            {asset.parentId && <span className="font-medium text-slate-400">{path} •</span>}
+                            <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1 py-0.2 rounded border border-slate-200/80">{asset.tagNo}</span>
+                            {asset.brand && asset.brand !== 'N/A' && <span>• {asset.brand}</span>}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
 
               {selectedAsset && (
-                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Wrench className="w-5 h-5 text-red-600" />
-                      <div>
-                        <p className="font-medium text-slate-900">{selectedAsset.name}</p>
-                        <p className="text-sm text-slate-500">
-                          {selectedAsset.brand} {selectedAsset.model}
+                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 shadow-sm transition-all duration-300">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-white border border-slate-200 rounded-2xl flex items-center justify-center shrink-0 shadow-sm text-xl">
+                        {(!selectedAsset.leaf || selectedAsset.depth === 0) ? '📍' : '🔧'}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-bold text-slate-900">{selectedAsset.name}</h4>
+                          {(!selectedAsset.leaf || selectedAsset.depth === 0) && (
+                            <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-bold">
+                              Lokasyon / Konteyner
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                          Yol: <span className="text-indigo-700 font-semibold">{getAssetPath(selectedAsset)}</span>
                         </p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 pt-0.5">
+                          <span className="font-mono">Tag: {selectedAsset.tagNo}</span>
+                          {selectedAsset.brand && selectedAsset.brand !== 'N/A' && (
+                            <span>• Marka/Model: {selectedAsset.brand} {selectedAsset.model}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <Badge variant="secondary">
-                      {selectedAsset.location || selectedAsset.department}
+                    <Badge variant="secondary" className="bg-slate-200/80 text-slate-700 px-3.5 py-1.5 rounded-xl font-bold self-start sm:self-center">
+                      {selectedAsset.location || selectedAsset.department || 'Merkez'}
                     </Badge>
                   </div>
                 </div>

@@ -35,7 +35,17 @@ import {
  * Shows all tickets the provider has interacted with or can see.
  */
 export default function ServiceTicketsPage() {
-  const { opportunities, myJobs, fetchOpportunities, fetchMyJobs, currentProviderId, providerProfile, resolveProviderSession } = useServiceStore();
+  const {
+    opportunities,
+    myJobs,
+    fetchOpportunities,
+    fetchMyJobs,
+    currentProviderId,
+    providerProfile,
+    resolveProviderSession,
+    isLoading,
+    error,
+  } = useServiceStore();
   const user = useAuthStore((state) => state.user);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -80,6 +90,61 @@ export default function ServiceTicketsPage() {
     setSelectedTicket(ticket);
     setIsDetailOpen(true);
   };
+
+  if (isLoading && !providerProfile) {
+    return (
+      <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+        <Card className="border-slate-200 bg-white">
+          <CardContent className="flex items-center gap-3 p-6 text-slate-600">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-red-600" />
+            <span className="text-sm font-semibold">Servis profili yükleniyor...</span>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-100 text-red-700">
+                <TicketCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-red-950">Servis profili yüklenemedi</h1>
+                <p className="mt-2 text-sm leading-relaxed text-red-700">{error}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!providerProfile) {
+    return (
+      <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+        <Card className="border-slate-200 bg-white">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-950">Servis profili hazırlanıyor</h1>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  Firma bilgileriniz backend üzerinden doğrulanınca talep listesi açılacak.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (providerProfile?.status === 'Pending Verification' || providerProfile?.status === 'Suspended') {
     const isSuspended = providerProfile.status === 'Suspended';

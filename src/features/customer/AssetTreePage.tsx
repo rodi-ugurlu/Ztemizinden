@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useCustomerStore, type AssetTreeNode } from '@/store/useCustomerStore';
+import { useCustomerStore, type Asset, type AssetTreeNode } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import AssetFormPanel, { type AssetFormData } from './components/AssetFormPanel';
 import AssetTreeView from './components/AssetTreeView';
@@ -20,11 +20,12 @@ export default function AssetTreePage() {
     assetTree,
     fetchAssetTree,
     createAssetInTree,
+    updateAssetInTree,
     deleteAssetFromTree,
   } = useCustomerStore();
   const userId = user?.id;
 
-  const [editingNode, setEditingNode] = useState<{ id: string; name: string } | null>(null);
+  const [editingNode, setEditingNode] = useState<AssetTreeNode | null>(null);
   const [addingToParent, setAddingToParent] = useState<{ id: string; name: string } | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -60,20 +61,67 @@ export default function AssetTreePage() {
       setIsSaving(true);
 
       try {
-        const allLevels = [
-          { name: data.name, isRoot: true },
-          ...data.subLevels.filter((s) => s.name.trim()),
-        ];
+        if (editingNode) {
+          if (!data.tagNo.trim()) {
+            throw new Error('Tag no düzenleme sırasında boş bırakılamaz');
+          }
 
-        let currentParentId: string | undefined = addingToParent?.id ?? undefined;
+          await updateAssetInTree(editingNode.id, {
+            name: data.name,
+            tagNo: data.tagNo,
+            type: data.type,
+            brand: data.brand,
+            model: data.model,
+            serialNumber: data.serialNumber,
+            purchaseDate: editingNode.purchaseDate || undefined,
+            warrantyEndDate: editingNode.warrantyEndDate || undefined,
+            status: editingNode.status,
+            location: data.location || undefined,
+            department: editingNode.department || undefined,
+            description: data.description || undefined,
+          });
 
-        for (let i = 0; i < allLevels.length; i++) {
-          const isLast = i === allLevels.length - 1;
+          await fetchAssetTree(userId);
+          setEditingNode(null);
+          setToast({ type: 'success', message: `"${data.name}" güncellendi` });
+          return;
+        }
+
+        const levelNames = [
+          data.name,
+          ...data.subLevels.map((level) => level.name),
+        ]
+          .map((name) => name.trim())
+          .filter(Boolean);
+
+        if (!levelNames.length) {
+          throw new Error('En az bir varlık adı girilmelidir');
+        }
+
+        const workingTree = cloneTree(assetTree);
+        let currentParentId: string | null = addingToParent?.id ?? null;
+        let createdCount = 0;
+        let lastNodeName = levelNames[levelNames.length - 1];
+
+        for (let index = 0; index < levelNames.length; index++) {
+          const name = levelNames[index];
+          const existingNode = findDirectChildByName(workingTree, currentParentId, name);
+          const isLast = index === levelNames.length - 1;
+
+          if (existingNode) {
+            currentParentId = existingNode.id;
+            lastNodeName = existingNode.name;
+            continue;
+          }
 
           const newAsset = await createAssetInTree({
             ownerId: userId,
-            name: allLevels[i].name,
-            tagNo: isLast && data.tagNo ? data.tagNo : `${data.name.substring(0, 3).toUpperCase()}-${Date.now()}-L${i}`,
+            name,
+            tagNo: isLast && data.tagNo
+              ? data.tagNo
+              : isLast
+              ? generateLeafTag(levelNames)
+              : generateBranchTag(levelNames, index),
             type: data.type,
             brand: data.brand,
             model: data.model,
@@ -88,25 +136,34 @@ export default function AssetTreePage() {
             throw new Error('Varlık kaydı ID dönmedi, hiyerarşi oluşturma durduruldu');
           }
 
+          appendNodeToWorkingTree(workingTree, currentParentId, assetToTreeNode(newAsset, currentParentId));
           currentParentId = newAsset.id;
+          lastNodeName = newAsset.name;
+          createdCount++;
         }
 
         await fetchAssetTree(userId);
         setAddingToParent(null);
-        setToast({ type: 'success', message: `"${data.name}" başarıyla oluşturuldu` });
+        setToast({
+          type: 'success',
+          message: createdCount > 0
+            ? `"${lastNodeName}" oluşturuldu; ortak kırılımlar mevcut dallarla birleştirildi`
+            : 'Bu kırılım zaten mevcut; tekrar oluşturulmadı',
+        });
       } catch (err) {
         console.error('Failed to create asset hierarchy:', err);
         setToast({ type: 'error', message: err instanceof Error ? err.message : 'Varlık oluşturulamadı' });
+        throw err;
       } finally {
         setIsSaving(false);
       }
     },
-    [userId, createAssetInTree, fetchAssetTree, addingToParent]
+    [userId, editingNode, assetTree, createAssetInTree, updateAssetInTree, fetchAssetTree, addingToParent]
   );
 
   // ── Edit handler ────────────────────────────────────────────────
   const handleEdit = useCallback((node: AssetTreeNode) => {
-    setEditingNode({ id: node.id, name: node.name });
+    setEditingNode(node);
     setAddingToParent(null);
     document.getElementById('asset-form-panel')?.scrollIntoView({ behavior: 'smooth' });
   }, []);
@@ -235,6 +292,7 @@ export default function AssetTreePage() {
                      flex flex-col overflow-hidden shrink-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.08)]"
         >
           <AssetFormPanel
+            key={editingNode?.id ?? addingToParent?.id ?? 'new-root-asset'}
             onSubmit={handleFormSubmit}
             editingNode={editingNode}
             onCancelEdit={() => setEditingNode(null)}
@@ -259,4 +317,86 @@ export default function AssetTreePage() {
       </div>
     </div>
   );
+}
+
+function cloneTree(nodes: AssetTreeNode[]): AssetTreeNode[] {
+  return nodes.map((node) => ({
+    ...node,
+    children: cloneTree(node.children ?? []),
+  }));
+}
+
+function findDirectChildByName(nodes: AssetTreeNode[], parentId: string | null, name: string): AssetTreeNode | null {
+  const siblings = parentId ? findNodeById(nodes, parentId)?.children ?? [] : nodes;
+  const normalizedName = normalizeAssetName(name);
+  return siblings.find((node) => normalizeAssetName(node.name) === normalizedName) ?? null;
+}
+
+function findNodeById(nodes: AssetTreeNode[], id: string): AssetTreeNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const childMatch = findNodeById(node.children ?? [], id);
+    if (childMatch) return childMatch;
+  }
+  return null;
+}
+
+function appendNodeToWorkingTree(nodes: AssetTreeNode[], parentId: string | null, node: AssetTreeNode) {
+  if (!parentId) {
+    nodes.push(node);
+    return;
+  }
+
+  const parent = findNodeById(nodes, parentId);
+  if (!parent) return;
+  parent.children = [...(parent.children ?? []), node];
+  parent.leaf = false;
+  parent.childCount = parent.children.length;
+  parent.descendantCount += 1 + node.descendantCount;
+}
+
+function assetToTreeNode(asset: Asset, parentId: string | null): AssetTreeNode {
+  return {
+    ...asset,
+    parentId,
+    children: [],
+    childCount: 0,
+    descendantCount: 0,
+  };
+}
+
+function normalizeAssetName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
+}
+
+function generateBranchTag(levelNames: string[], index: number) {
+  return `${tagPath(levelNames.slice(0, index + 1))}-AUTO-L${index}-${uniqueTagSuffix()}`;
+}
+
+function generateLeafTag(levelNames: string[]) {
+  return `${tagPath(levelNames)}-${uniqueTagSuffix()}`;
+}
+
+function tagPath(levelNames: string[]) {
+  const path = levelNames.map(tagSegment).filter(Boolean).join('-');
+  return path || 'ASSET';
+}
+
+function tagSegment(value: string) {
+  return value
+    .trim()
+    .toLocaleUpperCase('tr-TR')
+    .replace(/İ/g, 'I')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ş/g, 'S')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C')
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 18);
+}
+
+function uniqueTagSuffix() {
+  return `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`.toUpperCase();
 }

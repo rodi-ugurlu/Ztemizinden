@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { AssetType } from '@/store/useCustomerStore';
+import type { AssetTreeNode, AssetType } from '@/store/useCustomerStore';
 import {
   Plus,
   X,
@@ -65,8 +65,8 @@ export interface AssetFormData {
 }
 
 interface AssetFormPanelProps {
-  onSubmit: (data: AssetFormData) => void;
-  editingNode?: { id: string; name: string } | null;
+  onSubmit: (data: AssetFormData) => Promise<void> | void;
+  editingNode?: AssetTreeNode | null;
   onCancelEdit?: () => void;
   isLoading?: boolean;
   parentContext?: { id: string; name: string } | null;
@@ -83,15 +83,16 @@ export default function AssetFormPanel({
   isLoading,
   parentContext,
 }: AssetFormPanelProps) {
-  const [name, setName] = useState('');
-  const [tagNo, setTagNo] = useState('');
-  const [type, setType] = useState<AssetType | ''>('');
-  const [brand, setBrand] = useState('');
-  const [model, setModel] = useState('');
-  const [serialNumber, setSerialNumber] = useState('');
-  const [location, setLocation] = useState('');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState(editingNode?.name ?? '');
+  const [tagNo, setTagNo] = useState(editingNode?.tagNo ?? '');
+  const [type, setType] = useState<AssetType | ''>(editingNode?.type ?? '');
+  const [brand, setBrand] = useState(editingNode?.brand ?? '');
+  const [model, setModel] = useState(editingNode?.model ?? '');
+  const [serialNumber, setSerialNumber] = useState(editingNode?.serialNumber ?? '');
+  const [location, setLocation] = useState(editingNode?.location ?? '');
+  const [description, setDescription] = useState(editingNode?.description ?? '');
   const [subLevels, setSubLevels] = useState<SubAssetLevel[]>([]);
+  const isEditMode = Boolean(editingNode);
 
   const addSubLevel = () => {
     setSubLevels((prev) => [...prev, { id: crypto.randomUUID(), name: '' }]);
@@ -118,30 +119,34 @@ export default function AssetFormPanel({
     onCancelEdit?.();
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !type) return;
 
-    onSubmit({
-      name: name.trim(),
-      tagNo: tagNo.trim(),
-      type: type as AssetType,
-      brand: brand.trim() || 'N/A',
-      model: model.trim() || 'N/A',
-      serialNumber: serialNumber.trim() || 'N/A',
-      location: location.trim(),
-      description: description.trim(),
-      subLevels: subLevels.filter((s) => s.name.trim()),
-    });
+    try {
+      await onSubmit({
+        name: name.trim(),
+        tagNo: tagNo.trim(),
+        type: type as AssetType,
+        brand: brand.trim() || 'N/A',
+        model: model.trim() || 'N/A',
+        serialNumber: serialNumber.trim() || 'N/A',
+        location: location.trim(),
+        description: description.trim(),
+        subLevels: isEditMode ? [] : subLevels.filter((s) => s.name.trim()),
+      });
 
-    clearForm();
+      clearForm();
+    } catch {
+      // Parent page owns the toast; keep the form data in place for correction.
+    }
   };
 
   // Build preview path
   const previewPath = [
     parentContext?.name,
     name || null,
-    ...subLevels.map((s) => s.name || null).filter(Boolean),
+    ...(isEditMode ? [] : subLevels.map((s) => s.name || null).filter(Boolean)),
   ].filter(Boolean).join(' › ');
 
   return (
@@ -185,7 +190,7 @@ export default function AssetFormPanel({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={onCancelEdit}
+            onClick={clearForm}
             className="h-7 w-7 p-0 text-amber-600 hover:text-white hover:bg-amber-500 rounded-lg shrink-0 transition-all"
           >
             <X className="w-3.5 h-3.5" />
@@ -260,67 +265,71 @@ export default function AssetFormPanel({
           </Select>
         </div>
 
-        {/* Divider — Sub Assets */}
-        <div className="relative py-1">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t-2 border-dashed border-slate-200" />
-          </div>
-          <div className="relative flex justify-center">
-            <span className="bg-white px-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
-              Alt Varlıklar
-            </span>
-          </div>
-        </div>
-
-        {/* Sub-asset levels */}
-        <div className="space-y-2.5">
-          {subLevels.map((sub, index) => {
-            const color = getDepthColor(index + 1);
-            return (
-              <div
-                key={sub.id}
-                className={`flex items-center gap-2.5 p-2 rounded-xl border ${color.border} ${color.bg} transition-all duration-300`}
-                style={{ animation: 'slideDown 0.3s ease-out' }}
-              >
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <GripVertical className="w-3 h-3 text-slate-300" />
-                  <div
-                    className={`w-7 h-7 rounded-lg ${color.accent} text-white flex items-center justify-center text-[11px] font-black shadow-sm`}
-                  >
-                    {index + 1}
-                  </div>
-                </div>
-                <Input
-                  value={sub.name}
-                  onChange={(e) => updateSubLevel(sub.id, e.target.value)}
-                  placeholder={`Seviye ${index + 1} — Alt varlık adı`}
-                  className={`flex-1 h-9 border-0 bg-white/80 focus:bg-white rounded-lg text-sm font-medium shadow-sm focus:ring-2 ${color.ring}`}
-                  autoFocus
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeSubLevel(sub.id)}
-                  className="h-7 w-7 p-0 text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-all shrink-0"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
+        {!isEditMode && (
+          <>
+            {/* Divider — Sub Assets */}
+            <div className="relative py-1">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t-2 border-dashed border-slate-200" />
               </div>
-            );
-          })}
+              <div className="relative flex justify-center">
+                <span className="bg-white px-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
+                  Alt Varlıklar
+                </span>
+              </div>
+            </div>
 
-          <button
-            type="button"
-            onClick={addSubLevel}
-            className="w-full py-3.5 border-2 border-dashed border-indigo-200 rounded-xl bg-indigo-50/30
-                       text-indigo-600 text-sm font-bold flex items-center justify-center gap-2
-                       hover:bg-indigo-50 hover:border-indigo-300 hover:shadow-sm transition-all duration-200 group"
-          >
-            <Plus className="w-4 h-4 group-hover:scale-125 transition-transform duration-200" />
-            Alt Varlık Katmanı Ekle
-          </button>
-        </div>
+            {/* Sub-asset levels */}
+            <div className="space-y-2.5">
+              {subLevels.map((sub, index) => {
+                const color = getDepthColor(index + 1);
+                return (
+                  <div
+                    key={sub.id}
+                    className={`flex items-center gap-2.5 p-2 rounded-xl border ${color.border} ${color.bg} transition-all duration-300`}
+                    style={{ animation: 'slideDown 0.3s ease-out' }}
+                  >
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <GripVertical className="w-3 h-3 text-slate-300" />
+                      <div
+                        className={`w-7 h-7 rounded-lg ${color.accent} text-white flex items-center justify-center text-[11px] font-black shadow-sm`}
+                      >
+                        {index + 1}
+                      </div>
+                    </div>
+                    <Input
+                      value={sub.name}
+                      onChange={(e) => updateSubLevel(sub.id, e.target.value)}
+                      placeholder={`Seviye ${index + 1} — Alt varlık adı`}
+                      className={`flex-1 h-9 border-0 bg-white/80 focus:bg-white rounded-lg text-sm font-medium shadow-sm focus:ring-2 ${color.ring}`}
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeSubLevel(sub.id)}
+                      className="h-7 w-7 p-0 text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-all shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={addSubLevel}
+                className="w-full py-3.5 border-2 border-dashed border-indigo-200 rounded-xl bg-indigo-50/30
+                           text-indigo-600 text-sm font-bold flex items-center justify-center gap-2
+                           hover:bg-indigo-50 hover:border-indigo-300 hover:shadow-sm transition-all duration-200 group"
+              >
+                <Plus className="w-4 h-4 group-hover:scale-125 transition-transform duration-200" />
+                Alt Varlık Katmanı Ekle
+              </button>
+            </div>
+          </>
+        )}
 
         {/* Divider — Details */}
         <div className="relative py-1">

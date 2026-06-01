@@ -41,6 +41,8 @@ export default function ServiceTeamPage() {
     fetchMyJobs,
     fetchProviderProfile,
     providerProfile: serviceProviderProfile,
+    isLoading,
+    error: storeError,
   } = useServiceStore();
   const stats = useTicketStats();
   const [documentType, setDocumentType] = useState(providerDocumentTypes[0]);
@@ -60,17 +62,51 @@ export default function ServiceTeamPage() {
     }
   }, [currentProviderId, fetchMyJobs, fetchProviderProfile]);
 
+  if (!serviceProviderProfile) {
+    return (
+      <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Ekip & Profil</h1>
+          <p className="text-slate-500 mt-1">
+            Firma bilgileriniz, ekip üyeleriniz ve performans metrikleri
+          </p>
+        </div>
+        <Card className={storeError ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}>
+          <CardContent className="p-6">
+            <div className="flex items-start gap-3">
+              {storeError ? (
+                <AlertTriangle className="mt-0.5 h-5 w-5 text-red-600" />
+              ) : (
+                <Clock className="mt-0.5 h-5 w-5 text-slate-500" />
+              )}
+              <div>
+                <h2 className={`font-semibold ${storeError ? 'text-red-950' : 'text-slate-950'}`}>
+                  {storeError ? 'Servis profili yüklenemedi' : 'Servis profili hazırlanıyor'}
+                </h2>
+                <p className={`mt-1 text-sm ${storeError ? 'text-red-700' : 'text-slate-600'}`}>
+                  {storeError || (isLoading
+                    ? 'Firma bilgileriniz backend üzerinden doğrulanıyor.'
+                    : 'Firma profili alınana kadar onay durumu gösterilmeyecek.')}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const providerProfile = {
-    companyName: serviceProviderProfile?.name || user?.name || 'Servis sağlayıcı',
-    contactName: serviceProviderProfile?.contactName || '-',
-    email: serviceProviderProfile?.email || user?.email || '-',
-    phone: serviceProviderProfile?.phone || '-',
-    city: serviceProviderProfile?.city || '-',
-    specialties: serviceProviderProfile?.specialties ?? [],
-    rating: serviceProviderProfile?.rating ?? 0,
-    status: serviceProviderProfile?.status ?? 'Verified',
-    memberSince: serviceProviderProfile?.createdAt ? new Date(serviceProviderProfile.createdAt).getFullYear().toString() : '-',
-    documents: serviceProviderProfile?.documents ?? [],
+    companyName: serviceProviderProfile.name || user?.name || 'Servis sağlayıcı',
+    contactName: serviceProviderProfile.contactName || '-',
+    email: serviceProviderProfile.email || user?.email || '-',
+    phone: serviceProviderProfile.phone || '-',
+    city: serviceProviderProfile.city || '-',
+    specialties: serviceProviderProfile.specialties ?? [],
+    rating: serviceProviderProfile.rating ?? 0,
+    status: serviceProviderProfile.status,
+    memberSince: serviceProviderProfile.createdAt ? new Date(serviceProviderProfile.createdAt).getFullYear().toString() : '-',
+    documents: serviceProviderProfile.documents ?? [],
   };
   const providerStatusMeta = getProviderStatusMeta(providerProfile.status);
   const ProviderStatusIcon = providerStatusMeta.icon;
@@ -120,6 +156,13 @@ export default function ServiceTeamPage() {
         </div>
         <ProviderStatusBadge status={providerProfile.status} />
       </div>
+
+      {storeError && (
+        <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl flex items-center gap-3 animate-in fade-in duration-300">
+          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+          <span className="text-sm font-semibold">{storeError}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Company Profile Card */}

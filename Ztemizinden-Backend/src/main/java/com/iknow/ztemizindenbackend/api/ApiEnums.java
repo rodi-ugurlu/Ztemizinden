@@ -15,6 +15,10 @@ final class ApiEnums {
         return parse(AssetType.class, value);
     }
 
+    static AssetStatus assetStatus(String value) {
+        return parse(AssetStatus.class, value);
+    }
+
     static TicketCategory ticketCategory(String value) {
         return parse(TicketCategory.class, value);
     }

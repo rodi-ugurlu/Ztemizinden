@@ -131,6 +131,34 @@ public class Asset extends BaseEntity {
         status = AssetStatus.ACTIVE;
     }
 
+    public void updateDetails(
+            String name,
+            String tagNo,
+            AssetType type,
+            String brand,
+            String model,
+            String serialNumber,
+            LocalDate purchaseDate,
+            LocalDate warrantyEndDate,
+            AssetStatus status,
+            String location,
+            String department,
+            String description
+    ) {
+        this.name = name;
+        this.tagNo = tagNo;
+        this.type = type;
+        this.brand = brand;
+        this.model = model;
+        this.serialNumber = serialNumber;
+        this.purchaseDate = purchaseDate;
+        this.warrantyEndDate = warrantyEndDate;
+        this.status = status;
+        this.location = location;
+        this.department = department;
+        this.description = description;
+    }
+
     // ── Hierarchy domain methods ──────────────────────────────────────
 
     /**

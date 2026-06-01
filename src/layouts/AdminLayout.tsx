@@ -25,7 +25,7 @@ export default function AdminLayout() {
             <Activity className="w-4 h-4 text-white" />
           </div>
           <div>
-            <span className="font-bold text-slate-900 text-lg tracking-tight">Temizinden</span>
+            <span className="font-bold text-slate-900 text-lg tracking-tight">Maintly</span>
             <p className="text-xs text-slate-500">Operasyon Portalı</p>
           </div>
         </div>
@@ -87,7 +87,7 @@ export default function AdminLayout() {
       </main>
 
       <footer className="bg-white border-t border-slate-200 px-6 py-4 text-center text-sm text-slate-500">
-        © 2026 Temizinden. Tüm hakları saklıdır.
+        © 2026 Maintly. Tüm hakları saklıdır.
       </footer>
     </div>
   );

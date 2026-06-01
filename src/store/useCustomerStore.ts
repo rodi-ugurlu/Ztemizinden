@@ -48,6 +48,8 @@ export type CreateAssetInput = {
   description?: string;
 };
 
+export type UpdateAssetInput = Omit<CreateAssetInput, 'ownerId' | 'parentId'>;
+
 export interface AssetTreeNode extends Asset {
   childCount: number;
   descendantCount: number;
@@ -164,6 +166,7 @@ interface CustomerStoreState {
   // Asset Tree Actions
   fetchAssetTree: (customerId: string) => Promise<void>;
   createAssetInTree: (asset: CreateAssetInput) => Promise<Asset>;
+  updateAssetInTree: (assetId: string, asset: UpdateAssetInput) => Promise<Asset>;
   moveAsset: (assetId: string, newParentId: string | null) => Promise<void>;
   deleteAssetFromTree: (assetId: string) => Promise<void>;
   reorderAssets: (parentId: string, orderedIds: string[]) => Promise<void>;
@@ -247,11 +250,15 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
       ...assetData,
       ownerId: assetData.ownerId,
     });
-    // Refresh tree after creation
-    if (assetData.ownerId) {
-      get().fetchAssetTree(assetData.ownerId);
-    }
     return newAsset;
+  },
+
+  updateAssetInTree: async (assetId, assetData) => {
+    const updatedAsset = await api.put<Asset>(`/assets/${assetId}`, assetData);
+    set((state) => ({
+      assets: state.assets.map((asset) => (asset.id === assetId ? updatedAsset : asset)),
+    }));
+    return updatedAsset;
   },
 
   moveAsset: async (assetId, newParentId) => {

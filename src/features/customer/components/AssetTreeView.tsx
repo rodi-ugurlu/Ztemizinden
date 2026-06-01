@@ -257,7 +257,7 @@ function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }:
         </span>
 
         {/* Tag No badge */}
-        {node.tagNo && !node.tagNo.includes('-L0') && !node.tagNo.includes('-L1') && !node.tagNo.includes('-L2') && (
+        {node.tagNo && !isAutoBranchTag(node.tagNo) && (
           <span className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/80 text-amber-800 shrink-0">
             <Hash className="w-3 h-3 text-amber-500" />
             <span className="font-mono text-[10px] font-bold tracking-tight">{node.tagNo}</span>
@@ -335,6 +335,10 @@ function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }:
       )}
     </div>
   );
+}
+
+function isAutoBranchTag(tagNo: string) {
+  return /-AUTO-L\d+-/i.test(tagNo) || /-L\d+$/i.test(tagNo);
 }
 
 // ── Empty State ───────────────────────────────────────────────────

@@ -137,7 +137,7 @@ function BannerSlogans({
   return (
     <div className="animated-auth__banner-copy">
       <span className="animated-auth__banner-eyebrow">{audience}</span>
-      <h3>Temizinden ile daha kolay</h3>
+      <h3>Maintly ile daha kolay</h3>
       <div className="animated-auth__slogan-list">
         {slogans.map((slogan, index) => (
           <div className="animated-auth__slogan-item" key={slogan.tr}>
@@ -211,8 +211,6 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     email: '',
     phone: '',
     city: '',
-    district: '',
-    address: '',
     category: '',
     password: '',
     confirmPassword: '',
@@ -744,34 +742,6 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                         ))}
                       </select>
                     </div>
-                    <div className="animated-auth__input-field animated-auth__input-field--compact">
-                      <FieldIcon name="service" />
-                      <input
-                        name="district"
-                        placeholder="İlçe"
-                        value={serviceRegister.district}
-                        onChange={(event) =>
-                          setServiceRegister((prev) => ({
-                            ...prev,
-                            district: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="animated-auth__input-field animated-auth__input-field--compact">
-                    <FieldIcon name="service" />
-                    <input
-                      name="address"
-                      placeholder="Adres"
-                      value={serviceRegister.address}
-                      onChange={(event) =>
-                        setServiceRegister((prev) => ({
-                          ...prev,
-                          address: event.target.value,
-                        }))
-                      }
-                    />
                   </div>
                   <div className="animated-auth__input-field animated-auth__input-field--compact">
                     <FieldIcon name="service" />

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,39 +33,41 @@ import {
  * Displays global metrics, visualizations, and critical tickets.
  */
 export default function AdminDashboard() {
-  const { fetchProviders, fetchQueue } = useAdminStore();
+  const { providers, tickets, isLoading, error, fetchProviders, fetchQueue } = useAdminStore();
+
+  const loadDashboard = useCallback(async () => {
+    await fetchProviders();
+    if (useAdminStore.getState().error) return;
+    await fetchQueue();
+  }, [fetchProviders, fetchQueue]);
 
   useEffect(() => {
-    void (async () => {
-      await fetchProviders();
-      await fetchQueue();
-    })();
-  }, [fetchProviders, fetchQueue]);
+    void loadDashboard();
+  }, [loadDashboard]);
 
   const metrics = useAdminMetrics();
   const criticalTickets = useCriticalTickets();
   const pendingVerifications = usePendingVerifications();
+  const isInitialLoading = isLoading && providers.length === 0 && tickets.length === 0;
+
+  if (isInitialLoading) {
+    return (
+      <AdminDashboardShell>
+        <AdminLoadingState message="Operasyon verileri yükleniyor..." />
+      </AdminDashboardShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <AdminDashboardShell>
+        <AdminErrorState message={error} onRetry={() => void loadDashboard()} />
+      </AdminDashboardShell>
+    );
+  }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Operasyon Merkezi</h1>
-          <p className="text-slate-400 mt-1">
-            Sistem geneli metrikler ve kritik operasyonlar
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Link to="/admin/dispatch">
-            <Button className="bg-red-600 hover:bg-red-700">
-              <TicketCheck className="w-4 h-4 mr-2" />
-              Tüm Talepler
-            </Button>
-          </Link>
-        </div>
-      </div>
-
+    <AdminDashboardShell>
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
@@ -105,7 +107,6 @@ export default function AdminDashboard() {
           title="Bugün Çözülen"
           value={metrics.ticketsResolvedToday}
           icon={CheckCircle2}
-          trend="+12% dün'e göre"
         />
         <StatCard
           title="SLA İhlali"
@@ -267,30 +268,69 @@ export default function AdminDashboard() {
               </Link>
             </CardContent>
           </Card>
-
-          {/* Product Readiness */}
-          <Card className="bg-white/50 border-slate-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-slate-400">
-                MVP1 Hazırlık Durumu
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <HealthBar label="Frontend Akışları" value={100} color="bg-emerald-500" />
-              <HealthBar label="Backend Entegrasyon" value={95} color="bg-blue-500" />
-              <HealthBar label="API Kontratı" value={90} color="bg-indigo-500" />
-              <HealthBar label="Dosya/Medya Akışı" value={54} color="bg-amber-500" />
-            </CardContent>
-          </Card>
         </div>
       </div>
-    </div>
+    </AdminDashboardShell>
   );
 }
 
 // ==========================================
 // HELPER COMPONENTS
 // ==========================================
+
+function AdminDashboardShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Operasyon Merkezi</h1>
+          <p className="text-slate-400 mt-1">
+            Sistem geneli metrikler ve kritik operasyonlar
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Link to="/admin/dispatch">
+            <Button className="bg-red-600 hover:bg-red-700">
+              <TicketCheck className="w-4 h-4 mr-2" />
+              Tüm Talepler
+            </Button>
+          </Link>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function AdminLoadingState({ message }: { message: string }) {
+  return (
+    <Card className="border-slate-200 bg-white/70">
+      <CardContent className="flex items-center gap-3 p-6 text-slate-600">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-red-600" />
+        <span className="text-sm font-semibold">{message}</span>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Card className="border-red-200 bg-red-50">
+      <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 text-red-600" />
+          <div>
+            <h2 className="font-semibold text-red-950">Operasyon verileri yüklenemedi</h2>
+            <p className="mt-1 text-sm text-red-700">{message}</p>
+          </div>
+        </div>
+        <Button type="button" onClick={onRetry} className="bg-red-600 hover:bg-red-700">
+          Tekrar Dene
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 interface MetricCardProps {
   title: string;
@@ -370,20 +410,6 @@ function StatCard({ title, value, icon: Icon, valueColor = 'text-slate-900', tre
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function HealthBar({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-slate-400">{label}</span>
-        <span className="text-slate-700">{value}%</span>
-      </div>
-      <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full`} style={{ width: `${value}%` }} />
-      </div>
-    </div>
   );
 }
 
