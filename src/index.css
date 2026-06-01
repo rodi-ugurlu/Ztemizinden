@@ -62,48 +62,94 @@
 }
 
 /* ============================================
-   Maintly Landing — Component Styles
+   Scroll Reveal Animations
+   ============================================ */
+
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(36px);
+  transition:
+    opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-reveal].revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-reveal-delay="1"] { transition-delay: 0.1s; }
+[data-reveal-delay="2"] { transition-delay: 0.2s; }
+[data-reveal-delay="3"] { transition-delay: 0.3s; }
+[data-reveal-delay="4"] { transition-delay: 0.4s; }
+
+/* ============================================
+   Gradient Text — Light Mode (dark → red)
+   ============================================ */
+
+.maintly-gradient-text {
+  background: linear-gradient(145deg, #111827 25%, #991b1b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ============================================
+   Badge Glow — Softer for Light
+   ============================================ */
+
+@keyframes maintly-badge-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.06);
+  }
+  50% {
+    box-shadow:
+      0 0 20px rgba(239, 68, 68, 0.12),
+      0 0 40px rgba(239, 68, 68, 0.04);
+  }
+}
+
+.maintly-badge-glow {
+  animation: maintly-badge-pulse 3s ease-in-out infinite;
+}
+
+/* ============================================
+   Maintly Landing — Light Theme Styles
    ============================================ */
 
 @layer components {
+  /* Hero — light gradient with subtle color accents */
   .maintly-hero-scene {
     isolation: isolate;
     background:
-      linear-gradient(100deg, rgb(9 9 11) 0%, rgb(9 9 11) 42%, rgb(24 24 27) 72%, rgb(12 12 14) 100%);
+      radial-gradient(ellipse at 80% 20%, rgba(239, 68, 68, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 15% 80%, rgba(20, 184, 166, 0.04) 0%, transparent 40%),
+      linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   }
 
+  /* Subtle color blobs instead of hero photo */
   .maintly-hero-photo {
     position: absolute;
     inset: 0;
     z-index: 0;
+    pointer-events: none;
     background:
-      linear-gradient(90deg, rgb(9 9 11 / 0.98) 0%, rgb(9 9 11 / 0.9) 34%, rgb(9 9 11 / 0.34) 68%, rgb(9 9 11 / 0.76) 100%),
-      linear-gradient(180deg, rgb(9 9 11 / 0.18) 0%, rgb(9 9 11 / 0.56) 100%),
-      url("./assets/hero.png");
-    background-position:
-      center,
-      center,
-      calc(100% - 9rem) 43%;
-    background-repeat: no-repeat;
-    background-size:
-      cover,
-      cover,
-      min(34vw, 30rem);
-    filter: saturate(0.85) contrast(1.05);
+      radial-gradient(ellipse at 70% 30%, rgba(239, 68, 68, 0.05) 0%, transparent 45%),
+      radial-gradient(ellipse at 25% 70%, rgba(20, 184, 166, 0.03) 0%, transparent 35%);
   }
 
+  /* Light grid overlay */
   .maintly-hero-noise {
     position: absolute;
     inset: 0;
     z-index: 1;
     pointer-events: none;
     background-image:
-      linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px),
-      linear-gradient(110deg, transparent 0%, rgb(239 68 68 / 0.12) 42%, rgb(20 184 166 / 0.09) 58%, transparent 78%);
+      linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px);
     background-position: center;
-    background-size: 46px 46px, 46px 46px, cover;
-    mask-image: linear-gradient(90deg, rgb(0 0 0 / 0.52), black 34%, black 100%);
+    background-size: 48px 48px;
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.3) 30%, rgba(0,0,0,0.5) 100%);
   }
 
   /* ---- Network Scene ---- */
@@ -127,30 +173,30 @@
     overflow: visible;
   }
 
+  /* Light 3D grid floor */
   .maintly-scene-grid::before {
     content: "";
     position: absolute;
     inset: 9% -12% 8% 40%;
-    border: 1px solid rgb(255 255 255 / 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.04);
     background:
-      linear-gradient(115deg, transparent 0%, rgb(255 255 255 / 0.08) 50%, transparent 100%),
-      repeating-linear-gradient(90deg, transparent 0 72px, rgb(255 255 255 / 0.06) 72px 73px);
+      linear-gradient(115deg, transparent 0%, rgba(0, 0, 0, 0.03) 50%, transparent 100%),
+      repeating-linear-gradient(90deg, transparent 0 72px, rgba(0, 0, 0, 0.025) 72px 73px);
     transform: rotateX(58deg) rotateZ(-10deg);
     transform-origin: center;
   }
 
+  /* Light noise texture */
   .maintly-scene-noise {
     position: absolute;
     inset: 0;
     z-index: 0;
     pointer-events: none;
     background-image:
-      linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px),
-      linear-gradient(110deg, transparent 0%, rgb(239 68 68 / 0.12) 42%, rgb(20 184 166 / 0.09) 58%, transparent 78%);
+      linear-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
     background-position: center;
-    background-size: 46px 46px, 46px 46px, cover;
-    mask-image: linear-gradient(90deg, rgb(0 0 0 / 0.52), black 34%, black 100%);
+    background-size: 48px 48px;
   }
 
   /* ---- Network Nodes ---- */
@@ -161,19 +207,19 @@
     animation: maintly-float linear infinite;
   }
 
+  /* Light cards — white bg, subtle shadow */
   .maintly-node-card {
     display: flex;
     width: 16rem;
     flex-shrink: 0;
     align-items: center;
     gap: 0.75rem;
-    border-radius: 0.5rem;
-    border: 1px solid rgb(255 255 255 / 0.14);
-    background: linear-gradient(180deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.075));
+    border-radius: 0.75rem;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: white;
     padding: 0.75rem;
-    box-shadow: 0 26px 70px -36px rgb(0 0 0 / 0.9);
-    backdrop-filter: blur(18px);
-    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
     cursor: default;
   }
 
@@ -183,10 +229,10 @@
 
   .maintly-network-node:hover .maintly-node-card {
     transform: scale(1.06) translateZ(20px);
-    border-color: rgb(239 68 68 / 0.35);
+    border-color: rgba(239, 68, 68, 0.2);
     box-shadow:
-      0 30px 80px -30px rgb(0 0 0 / 0.9),
-      0 0 40px -10px rgb(239 68 68 / 0.25);
+      0 8px 32px rgba(0, 0, 0, 0.1),
+      0 0 24px rgba(239, 68, 68, 0.06);
   }
 }
 
@@ -214,6 +260,14 @@
    ============================================ */
 
 @media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .maintly-badge-glow {
+    animation: none;
+  }
   .maintly-network-node {
     animation: none;
   }
@@ -230,23 +284,12 @@
 }
 
 /* ============================================
-   Responsive — Tablet
+   Responsive — Tablet Landscape (1023px)
    ============================================ */
 
 @media (max-width: 1023px) {
-  .maintly-hero-photo {
-    background-position:
-      center,
-      center,
-      right 6rem;
-    background-size:
-      cover,
-      cover,
-      22rem;
-  }
-
   .maintly-scene {
-    opacity: 0.70;
+    opacity: 0.5;
     mask-image: linear-gradient(180deg, transparent 0%, black 18%, black 78%, transparent 100%);
   }
 
@@ -261,38 +304,70 @@
 }
 
 /* ============================================
-   Responsive — Mobile
+   Responsive — Tablet Portrait (768px)
+   ============================================ */
+
+@media (max-width: 767px) {
+  .maintly-scene {
+    opacity: 0.35;
+    mask-image: linear-gradient(180deg, transparent 5%, black 25%, black 70%, transparent 100%);
+  }
+
+  .maintly-node-card {
+    width: 12rem;
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .maintly-scene-grid::before {
+    opacity: 0.6;
+  }
+}
+
+/* ============================================
+   Responsive — Mobile (640px)
    ============================================ */
 
 @media (max-width: 640px) {
-  .maintly-hero-photo {
-    background-position:
-      center,
-      center,
-      right 5rem;
-    background-size:
-      cover,
-      cover,
-      17rem;
-  }
-
   .maintly-scene {
-    opacity: 0.40;
-    mask-image: linear-gradient(180deg, transparent 0%, black 22%, black 75%, transparent 100%);
+    opacity: 0.15;
+    mask-image: linear-gradient(180deg, transparent 0%, black 25%, black 70%, transparent 100%);
   }
 
   .maintly-scene-grid::before {
     inset: 14% -8% 10% 30%;
+    opacity: 0.4;
   }
 
   .maintly-node-card {
-    width: 12.5rem;
-    backdrop-filter: none;
-    background: linear-gradient(180deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.06));
-    box-shadow: 0 20px 50px -30px rgb(0 0 0 / 0.9);
+    width: 11rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   }
 
   .maintly-svg-overlay {
-    opacity: 0.5;
+    opacity: 0.2;
+  }
+}
+
+/* ============================================
+   Responsive — Extra Small (480px)
+   ============================================ */
+
+@media (max-width: 480px) {
+  .maintly-scene {
+    opacity: 0.08;
+  }
+
+  .maintly-svg-overlay {
+    opacity: 0.1;
+  }
+
+  .maintly-scene-grid::before {
+    display: none;
+  }
+
+  .maintly-node-card {
+    width: 10rem;
+    font-size: 0.7rem;
   }
 }

@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   ArrowUpRight,
   BadgeCheck,
-  Building2,
   CheckCircle2,
   ClipboardList,
   Factory,
@@ -11,7 +11,6 @@ import {
   Link2,
   MapPin,
   RadioTower,
-  ShieldCheck,
   Sparkles,
   Timer,
   UsersRound,
@@ -29,128 +28,196 @@ import {
 } from './data';
 
 /* ============================================
-   MaintlyLandingPage — Engineering-grade landing
+   Hooks
+   ============================================ */
+
+function useScrollReveal() {
+  useEffect(() => {
+    const els = document.querySelectorAll('[data-reveal]');
+    if (!els.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('revealed');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.1, rootMargin: '0px 0px -50px 0px' },
+    );
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+}
+
+function useScrolledNav(threshold = 60) {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > threshold);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [threshold]);
+  return scrolled;
+}
+
+/* ============================================
+   MaintlyLandingPage — Fully Responsive
    ============================================ */
 
 export default function MaintlyLandingPage() {
+  useScrollReveal();
+
   return (
-    <main className="min-h-screen overflow-x-hidden bg-zinc-950 text-white">
+    <main
+      className="min-h-screen overflow-x-hidden bg-white text-gray-900 antialiased"
+      style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
+    >
       <HeroSection />
       <HowItWorksSection />
       <ForWhomSection />
-      <EcosystemBar />
+      <CTASection />
       <FooterSection />
     </main>
   );
 }
 
-/* ---------- Hero ---------- */
+/* ============================================
+   Hero
+   ============================================ */
+
 function HeroSection() {
+  const scrolled = useScrolledNav();
+
   return (
-    <section className="maintly-hero-scene relative min-h-[92svh] overflow-hidden">
-      {/* Layered background photo */}
+    <section className="maintly-hero-scene relative min-h-[100svh] overflow-hidden">
       <div className="maintly-hero-photo" aria-hidden="true" />
       <div className="maintly-hero-noise" aria-hidden="true" />
-
-      {/* 3D Network Graph */}
       <NetworkScene />
 
-      {/* Content */}
-      <div className="relative z-10 flex min-h-[92svh] flex-col">
-        <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
-          <Link to="/" className="group flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-500 text-base font-black text-white shadow-[0_18px_44px_rgba(239,68,68,0.36)] transition group-hover:bg-red-400">
-              M
-            </span>
-            <span>
-              <span className="block text-xl font-black leading-none tracking-normal">Maintly</span>
-              <span className="mt-1 block text-xs font-bold uppercase tracking-[0.18em] text-white/45">
-                Endüstriyel bakım ağı
+      <div className="relative z-10 flex min-h-[100svh] flex-col">
+        {/* ---- Sticky Nav ---- */}
+        <header
+          className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${
+            scrolled
+              ? 'bg-white/80 shadow-sm backdrop-blur-2xl border-b border-gray-200/60'
+              : 'bg-transparent'
+          }`}
+        >
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:gap-3 sm:py-4 md:px-6 lg:px-8">
+            <Link to="/" className="group flex min-w-0 items-center gap-2 sm:gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500 text-sm font-black text-white shadow-lg shadow-red-500/15 transition-shadow group-hover:shadow-red-500/25 sm:h-11 sm:w-11 sm:rounded-xl sm:text-base">
+                M
               </span>
-            </span>
-          </Link>
+              <span className="min-w-0">
+                <span className="block text-base font-black leading-none text-gray-900 sm:text-xl">Maintly</span>
+                <span className="mt-0.5 hidden text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 sm:block sm:mt-1">
+                  Endüstriyel bakım ağı
+                </span>
+              </span>
+            </Link>
 
-          <nav className="flex items-center gap-2">
-            <Link
-              to="/customer/login"
-              className="hidden rounded-lg px-3 py-2 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white sm:inline-flex"
-            >
-              Müşteri Girişi
-            </Link>
-            <Link
-              to="/service/login"
-              className="hidden rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-bold text-white shadow-2xl shadow-black/30 backdrop-blur transition hover:border-red-300/50 hover:bg-white/15 sm:inline-flex"
-            >
-              Servis Girişi
-            </Link>
-            <MobileMenu />
-          </nav>
+            <nav className="flex items-center gap-1.5 sm:gap-2">
+              <Link
+                to="/customer/login"
+                className="hidden rounded-xl px-4 py-2.5 text-sm font-bold text-gray-500 transition-all hover:bg-gray-100 hover:text-gray-900 md:inline-flex"
+              >
+                Müşteri Girişi
+              </Link>
+              <Link
+                to="/service/login"
+                className="hidden rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-600 transition-all hover:bg-red-100 md:inline-flex"
+              >
+                Servis Girişi
+              </Link>
+              <MobileMenu />
+            </nav>
+          </div>
         </header>
 
-        <div className="mx-auto flex w-full max-w-7xl flex-1 items-center px-4 pb-10 pt-8 sm:px-6 lg:px-8">
+        {/* ---- Hero Content ---- */}
+        <div className="mx-auto flex w-full max-w-7xl flex-1 items-center px-4 pb-6 pt-24 sm:px-6 sm:pb-10 sm:pt-28 md:pb-12 md:pt-32 lg:px-8">
           <div className="max-w-3xl">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-red-400/25 bg-red-500/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.18em] text-red-100 shadow-[0_0_60px_rgba(239,68,68,0.22)] backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-red-300" />
-              Türkiye'nin bakım ağı
+            {/* Badge */}
+            <div
+              data-reveal
+              className="maintly-badge-glow mb-4 inline-flex max-w-full items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-red-700 sm:mb-5 sm:gap-2.5 sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.18em]"
+            >
+              <Sparkles className="h-3 w-3 shrink-0 text-red-500 sm:h-3.5 sm:w-3.5" />
+              <span className="min-w-0 truncate">Türkiye'nin bakım ağı</span>
             </div>
 
-            <h1 className="text-balance text-5xl font-black leading-[0.9] tracking-normal text-white sm:text-6xl lg:text-7xl xl:text-8xl">
+            {/* Headline */}
+            <h1
+              data-reveal
+              data-reveal-delay="1"
+              className="maintly-gradient-text text-balance text-4xl font-black leading-none tracking-tight pb-2 sm:text-5xl md:text-7xl lg:text-8xl xl:text-[6.5rem]"
+            >
               Maintly
             </h1>
-            <p className="mt-5 max-w-2xl text-2xl font-black leading-tight text-white sm:text-3xl lg:text-4xl">
+            <p
+              data-reveal
+              data-reveal-delay="2"
+              className="mt-3 max-w-2xl text-xl font-extrabold leading-tight text-gray-900 sm:mt-4 sm:text-2xl md:text-3xl lg:text-4xl"
+            >
               Endüstriyel bakımın güvenilir ağı.
             </p>
-            <p className="mt-5 max-w-xl text-base font-medium leading-7 text-zinc-300 sm:text-lg">
-              Fabrikalar, tesisler ve uzman servis ekipleri Maintly'de buluşur. Bakım ihtiyaçlarınız
-              için doğru ekipleri keşfedin, servis süreçlerinizi daha görünür ve hızlı yönetin.
+            <p
+              data-reveal
+              data-reveal-delay="3"
+              className="mt-4 max-w-xl text-sm font-medium leading-6 text-gray-500 sm:mt-5 sm:text-base sm:leading-7 md:text-lg"
+            >
+              Fabrikalar, tesisler ve uzman servis ekipleri Maintly'de buluşur.
+              Bakım ihtiyaçlarınız için doğru ekipleri keşfedin, servis
+              süreçlerinizi daha görünür ve hızlı yönetin.
             </p>
 
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            {/* CTAs */}
+            <div data-reveal data-reveal-delay="4" className="mt-6 flex flex-col gap-2.5 sm:mt-8 sm:flex-row sm:gap-3">
               <Link
                 to="/customer/register"
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-red-500 px-5 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(239,68,68,0.32)] transition hover:bg-red-400"
+                className="group inline-flex min-h-[2.75rem] w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-5 py-3 text-xs font-black text-white shadow-lg shadow-red-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-red-600 hover:shadow-xl hover:shadow-red-500/30 sm:min-h-[3.25rem] sm:w-auto sm:gap-2.5 sm:px-6 sm:py-3.5 sm:text-sm"
               >
                 Fabrikanızı Ekleyin
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1 sm:h-4 sm:w-4" />
               </Link>
               <Link
                 to="/service/register"
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/10 px-5 py-3 text-sm font-black text-white backdrop-blur transition hover:border-teal-300/50 hover:bg-white/15"
+                className="group inline-flex min-h-[2.75rem] w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-xs font-black text-gray-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-red-200 hover:text-red-600 hover:shadow-md sm:min-h-[3.25rem] sm:w-auto sm:gap-2.5 sm:px-6 sm:py-3.5 sm:text-sm"
               >
                 Servis Olarak Katılın
-                <Wrench className="h-4 w-4" />
+                <Wrench className="h-3.5 w-3.5 transition-transform duration-300 group-hover:rotate-12 sm:h-4 sm:w-4" />
               </Link>
             </div>
 
-            <div className="mt-8 grid max-w-xl grid-cols-3 gap-2 sm:gap-3">
-              {stats.map((item) => (
-                <div key={item.label} className="border-l border-white/15 pl-3 sm:pl-4">
-                  <p className="text-3xl font-black leading-none text-white sm:text-4xl">{item.value}</p>
-                  <p className="mt-2 text-[10px] font-black uppercase leading-4 tracking-[0.16em] text-white/50 sm:text-xs">
-                    {item.label}
-                  </p>
-                </div>
+            {/* Stats */}
+            <div className="mt-8 grid max-w-xl grid-cols-3 gap-1.5 sm:mt-10 sm:gap-3 md:gap-4">
+              {stats.map((item, i) => (
+                <AnimatedStat key={item.label} value={item.value} label={item.label} delay={i * 250} />
               ))}
             </div>
           </div>
         </div>
 
-        {/* Bottom proof bar */}
-        <div className="border-y border-white/10 bg-zinc-950/55 backdrop-blur-xl">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-zinc-950">
-                <UsersRound className="h-5 w-5" />
+        {/* ---- Proof Bar ---- */}
+        <div className="border-t border-gray-200 bg-white/80 backdrop-blur-xl">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+            <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-500 sm:h-10 sm:w-10 sm:rounded-xl">
+                <UsersRound className="h-4 w-4 sm:h-5 sm:w-5" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-red-200">Maintly Kullanıcıları</p>
-                <p className="mt-1 truncate text-sm font-bold text-white/80">
-                  Bakım ihtiyacı olan işletmeler ile uzman servis ekipleri aynı ağda buluşuyor.
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-red-600 sm:text-[10px] sm:tracking-[0.2em]">
+                  Maintly Ağı
+                </p>
+                <p className="mt-0.5 text-xs font-medium leading-4 text-gray-500 sm:text-sm sm:leading-5">
+                  İşletmeler ile uzman servis ekipleri aynı ağda buluşuyor.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="flex gap-1.5 overflow-x-auto pb-0.5 sm:grid sm:grid-cols-3 sm:gap-2 sm:overflow-visible sm:pb-0">
               {proofPoints.map((point) => {
                 const Icon =
                   point.key === 'network'
@@ -158,9 +225,7 @@ function HeroSection() {
                     : point.key === 'verified'
                       ? BadgeCheck
                       : Zap;
-                return (
-                  <SignalPill key={point.label} icon={Icon} label={point.label} />
-                );
+                return <SignalPill key={point.label} icon={Icon} label={point.label} />;
               })}
             </div>
           </div>
@@ -170,43 +235,46 @@ function HeroSection() {
   );
 }
 
-/* ---------- How It Works ---------- */
+/* ============================================
+   How It Works
+   ============================================ */
+
 function HowItWorksSection() {
+  const stepIcons = [ClipboardList, Link2, FileText];
+
   return (
-    <section id="how-it-works" className="relative bg-zinc-950 px-4 py-20 sm:px-6 lg:px-8">
+    <section id="how-it-works" className="relative bg-slate-50 px-4 py-14 sm:px-6 sm:py-18 md:py-24 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-14 max-w-2xl">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-red-500">Süreç</p>
-          <h2 className="mt-3 text-balance text-3xl font-black tracking-normal text-white sm:text-4xl">
+        <div data-reveal className="mb-10 max-w-2xl sm:mb-14 md:mb-16">
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-red-500 sm:text-xs">Süreç</p>
+          <h2 className="mt-3 text-balance text-2xl font-black tracking-tight text-gray-900 sm:mt-4 sm:text-3xl md:text-4xl lg:text-5xl">
             Nasıl Çalışır?
           </h2>
-          <p className="mt-4 text-base font-medium leading-7 text-zinc-400">
-            Bakım talebinden iş emrinin kapanışına kadar tüm süreç tek platformda. Karmaşık
-            koordinasyonlar yerine odaklanmış, hızlı ve şeffaf bir iş akışı.
+          <p className="mt-3 text-sm font-medium leading-6 text-gray-500 sm:mt-5 sm:text-base sm:leading-7 md:text-lg">
+            Bakım talebinden iş emrinin kapanışına kadar tüm süreç tek
+            platformda. Karmaşık koordinasyonlar yerine odaklanmış, hızlı ve
+            şeffaf bir iş akışı.
           </p>
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {howItWorks.map((step) => {
-            const Icon =
-              step.step === '01'
-                ? ClipboardList
-                : step.step === '02'
-                  ? Link2
-                  : FileText;
+        <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6">
+          {howItWorks.map((step, i) => {
+            const Icon = stepIcons[i] ?? FileText;
             return (
               <div
                 key={step.step}
-                className="group relative rounded-xl border border-white/8 bg-white/[0.03] p-6 transition hover:border-white/15 hover:bg-white/[0.05]"
+                data-reveal
+                data-reveal-delay={step.step}
+                className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-500 hover:border-red-200 hover:shadow-lg sm:rounded-2xl sm:p-7"
               >
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg bg-red-500/10 text-red-400 transition group-hover:bg-red-500/20">
-                  <Icon className="h-5 w-5" />
+                <div className="relative z-10 mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-red-50 text-red-500 transition-all duration-300 group-hover:bg-red-100 group-hover:shadow-md group-hover:shadow-red-100 sm:mb-6 sm:h-13 sm:w-13 sm:rounded-xl">
+                  <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
-                <span className="absolute right-5 top-5 text-5xl font-black leading-none text-white/[0.04]">
+                <span className="pointer-events-none absolute right-4 top-3 select-none text-5xl font-black leading-none text-gray-100 transition-colors duration-500 group-hover:text-red-50 sm:right-5 sm:top-4 sm:text-7xl">
                   {step.step}
                 </span>
-                <h3 className="text-lg font-black text-white">{step.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-zinc-400">{step.desc}</p>
+                <h3 className="relative z-10 text-base font-extrabold text-gray-900 sm:text-lg">{step.title}</h3>
+                <p className="relative z-10 mt-2 text-xs leading-5 text-gray-500 sm:mt-3 sm:text-sm sm:leading-6">{step.desc}</p>
               </div>
             );
           })}
@@ -216,35 +284,43 @@ function HowItWorksSection() {
   );
 }
 
-/* ---------- For Whom ---------- */
+/* ============================================
+   For Whom
+   ============================================ */
+
 function ForWhomSection() {
   return (
-    <section id="for-whom" className="relative bg-zinc-900 px-4 py-20 sm:px-6 lg:px-8">
+    <section id="for-whom" className="relative bg-white px-4 py-14 sm:px-6 sm:py-18 md:py-24 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-14 max-w-2xl">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-red-500">Platform</p>
-          <h2 className="mt-3 text-balance text-3xl font-black tracking-normal text-white sm:text-4xl">
+        <div data-reveal className="mb-10 max-w-2xl sm:mb-14 md:mb-16">
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-red-500 sm:text-xs">Platform</p>
+          <h2 className="mt-3 text-balance text-2xl font-black tracking-tight text-gray-900 sm:mt-4 sm:text-3xl md:text-4xl lg:text-5xl">
             Kimler İçin?
           </h2>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="relative overflow-hidden rounded-xl border border-white/8 bg-zinc-950 p-7">
-            <div className="absolute right-0 top-0 h-32 w-32 translate-x-8 translate-y-[-30%] rounded-full bg-red-500/10 blur-3xl" />
-            <div className="relative flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-500 text-white">
-                <Factory className="h-5 w-5" />
+        <div className="grid gap-4 sm:gap-5 lg:grid-cols-2 lg:gap-6">
+          {/* ---- Factory Card ---- */}
+          <div
+            data-reveal
+            className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-500 hover:border-red-200 hover:shadow-lg sm:rounded-2xl sm:p-6 md:p-8"
+          >
+            <div className="pointer-events-none absolute -right-8 -top-8 h-36 w-36 rounded-full bg-red-50 blur-3xl transition-all duration-700 group-hover:bg-red-100/80 group-hover:scale-125 sm:h-44 sm:w-44" />
+
+            <div className="relative flex items-center gap-3 sm:gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500 text-white shadow-lg shadow-red-500/15 sm:h-14 sm:w-14 sm:rounded-2xl">
+                <Factory className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
-              <div>
-                <h3 className="text-xl font-black text-white">Fabrikalar ve Tesisler</h3>
-                <p className="text-sm font-medium text-zinc-400">Bakım ihtiyacı olan işletmeler</p>
+              <div className="min-w-0">
+                <h3 className="text-base font-black text-gray-900 sm:text-xl">Fabrikalar ve Tesisler</h3>
+                <p className="text-xs font-medium text-gray-400 sm:text-sm">Bakım ihtiyacı olan işletmeler</p>
               </div>
             </div>
 
-            <ul className="relative mt-6 space-y-3">
+            <ul className="relative mt-5 space-y-2.5 sm:mt-7 sm:space-y-3.5">
               {forFactories.map((item) => (
-                <li key={item} className="flex items-start gap-3 text-sm font-medium text-zinc-300">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                <li key={item} className="flex items-start gap-2.5 text-xs font-medium text-gray-600 sm:gap-3 sm:text-sm">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500 sm:h-4 sm:w-4" />
                   {item}
                 </li>
               ))}
@@ -252,29 +328,35 @@ function ForWhomSection() {
 
             <Link
               to="/customer/register"
-              className="relative mt-7 inline-flex items-center gap-2 text-sm font-black text-red-400 transition hover:text-red-300"
+              className="group/link relative mt-6 inline-flex items-center gap-2 text-xs font-black text-red-500 transition-all duration-300 hover:gap-3 hover:text-red-600 sm:mt-8 sm:text-sm"
             >
               Fabrikanızı Ekleyin
-              <ArrowUpRight className="h-4 w-4" />
+              <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5 sm:h-4 sm:w-4" />
             </Link>
           </div>
 
-          <div className="relative overflow-hidden rounded-xl border border-white/8 bg-zinc-950 p-7">
-            <div className="absolute right-0 top-0 h-32 w-32 translate-x-8 translate-y-[-30%] rounded-full bg-teal-500/10 blur-3xl" />
-            <div className="relative flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-500 text-zinc-950">
-                <Wrench className="h-5 w-5" />
+          {/* ---- Service Card ---- */}
+          <div
+            data-reveal
+            data-reveal-delay="1"
+            className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-500 hover:border-teal-200 hover:shadow-lg sm:rounded-2xl sm:p-6 md:p-8"
+          >
+            <div className="pointer-events-none absolute -right-8 -top-8 h-36 w-36 rounded-full bg-teal-50 blur-3xl transition-all duration-700 group-hover:bg-teal-100/80 group-hover:scale-125 sm:h-44 sm:w-44" />
+
+            <div className="relative flex items-center gap-3 sm:gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-500 text-white shadow-lg shadow-teal-500/15 sm:h-14 sm:w-14 sm:rounded-2xl">
+                <Wrench className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
-              <div>
-                <h3 className="text-xl font-black text-white">Servis Ekipleri</h3>
-                <p className="text-sm font-medium text-zinc-400">Uzman bakım ve onarım firmaları</p>
+              <div className="min-w-0">
+                <h3 className="text-base font-black text-gray-900 sm:text-xl">Servis Ekipleri</h3>
+                <p className="text-xs font-medium text-gray-400 sm:text-sm">Uzman bakım ve onarım firmaları</p>
               </div>
             </div>
 
-            <ul className="relative mt-6 space-y-3">
+            <ul className="relative mt-5 space-y-2.5 sm:mt-7 sm:space-y-3.5">
               {forServices.map((item) => (
-                <li key={item} className="flex items-start gap-3 text-sm font-medium text-zinc-300">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-teal-400" />
+                <li key={item} className="flex items-start gap-2.5 text-xs font-medium text-gray-600 sm:gap-3 sm:text-sm">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-500 sm:h-4 sm:w-4" />
                   {item}
                 </li>
               ))}
@@ -282,10 +364,10 @@ function ForWhomSection() {
 
             <Link
               to="/service/register"
-              className="relative mt-7 inline-flex items-center gap-2 text-sm font-black text-teal-400 transition hover:text-teal-300"
+              className="group/link relative mt-6 inline-flex items-center gap-2 text-xs font-black text-teal-500 transition-all duration-300 hover:gap-3 hover:text-teal-600 sm:mt-8 sm:text-sm"
             >
               Servis Olarak Katılın
-              <ArrowUpRight className="h-4 w-4" />
+              <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5 sm:h-4 sm:w-4" />
             </Link>
           </div>
         </div>
@@ -294,24 +376,60 @@ function ForWhomSection() {
   );
 }
 
-/* ---------- Ecosystem Bar ---------- */
-function EcosystemBar() {
+/* ============================================
+   CTA Section
+   ============================================ */
+
+function CTASection() {
   return (
-    <section className="bg-zinc-100 px-4 py-4 text-zinc-950 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-red-600">Bakım ekosistemi büyüyor</p>
-          <p className="mt-1 text-sm font-bold text-zinc-600">
-            Yeni firmalar, tesisler ve servis ekipleri Maintly ağında daha görünür hale geliyor.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <section className="relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-red-500 to-red-600" />
+      <div
+        className="absolute inset-0 opacity-[0.12]"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.18) 1px, transparent 0)',
+          backgroundSize: '20px 20px',
+        }}
+      />
+
+      <div className="relative mx-auto max-w-4xl px-4 py-14 text-center sm:px-6 sm:py-20 md:py-28 lg:px-8">
+        <p data-reveal className="text-[10px] font-black uppercase tracking-[0.25em] text-red-100/50 sm:text-xs sm:tracking-[0.3em]">
+          Bakım ekosistemi büyüyor
+        </p>
+        <h2
+          data-reveal
+          data-reveal-delay="1"
+          className="mt-4 text-balance text-2xl font-black text-white sm:mt-5 sm:text-3xl md:text-4xl lg:text-5xl"
+        >
+          Doğru zamanda, doğru ekiple buluşun.
+        </h2>
+        <p
+          data-reveal
+          data-reveal-delay="2"
+          className="mx-auto mt-4 max-w-xl text-sm font-medium leading-6 text-red-100/70 sm:mt-5 sm:text-base sm:leading-7"
+        >
+          Yeni firmalar, tesisler ve servis ekipleri Maintly ağına katılıyor.
+          Siz de yerinizi alın.
+        </p>
+        <div
+          data-reveal
+          data-reveal-delay="3"
+          className="mt-8 flex flex-col items-center gap-3 sm:mt-10 sm:flex-row sm:justify-center sm:gap-4"
+        >
           <Link
-            to="/customer/login"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-950 px-4 py-3 text-sm font-bold text-white transition hover:bg-zinc-800"
+            to="/customer/register"
+            className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3.5 text-xs font-black text-red-600 shadow-xl shadow-black/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl sm:w-auto sm:gap-2.5 sm:px-7 sm:py-4 sm:text-sm"
           >
-            Portala Giriş
-            <ArrowRight className="h-4 w-4" />
+            Tesisinizi Ekleyin
+            <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1 sm:h-4 sm:w-4" />
+          </Link>
+          <Link
+            to="/service/register"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-white/30 px-5 py-3.5 text-xs font-black text-white transition-all duration-300 hover:border-white hover:bg-white/10 sm:w-auto sm:gap-2.5 sm:px-7 sm:py-4 sm:text-sm"
+          >
+            Servis Olarak Katılın
+            <Wrench className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </Link>
         </div>
       </div>
@@ -319,77 +437,67 @@ function EcosystemBar() {
   );
 }
 
-/* ---------- Footer ---------- */
+/* ============================================
+   Footer
+   ============================================ */
+
 function FooterSection() {
   return (
-    <footer className="border-t border-white/8 bg-zinc-950 px-4 py-14 text-white/70 sm:px-6 lg:px-8">
+    <footer className="border-t border-gray-200 bg-slate-50 px-4 py-10 sm:px-6 sm:py-14 md:py-16 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-8 sm:grid-cols-2 sm:gap-10 lg:grid-cols-4 lg:gap-12">
           <div className="sm:col-span-2 lg:col-span-1">
-            <Link to="/" className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500 text-sm font-black text-white">M</span>
-              <span className="text-lg font-black text-white">Maintly</span>
+            <Link to="/" className="flex items-center gap-2.5 sm:gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500 text-xs font-black text-white sm:h-10 sm:w-10 sm:rounded-xl sm:text-sm">
+                M
+              </span>
+              <span className="text-base font-black text-gray-900 sm:text-lg">Maintly</span>
             </Link>
-            <p className="mt-4 max-w-xs text-sm leading-6 text-zinc-400">
-              Endüstriyel bakımın güvenilir ağı. Fabrikalar ve servis ekipleri için tasarlanmış,
-              modern bakım yönetimi platformu.
+            <p className="mt-4 max-w-xs text-xs leading-5 text-gray-400 sm:mt-5 sm:text-sm sm:leading-6">
+              Endüstriyel bakımın güvenilir ağı. Fabrikalar ve servis ekipleri
+              için tasarlanmış, modern bakım yönetimi platformu.
             </p>
           </div>
 
           <div>
-            <h4 className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Ürün</h4>
-            <ul className="mt-4 space-y-2">
+            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 sm:text-xs">Ürün</h4>
+            <ul className="mt-3 space-y-2 sm:mt-5 sm:space-y-3">
               {footerLinks.product.map((l) => (
                 <li key={l.label}>
-                  <Link
-                    to={l.href}
-                    className="text-sm font-medium text-zinc-400 transition hover:text-white"
-                  >
-                    {l.label}
-                  </Link>
+                  <Link to={l.href} className="text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 sm:text-sm">{l.label}</Link>
                 </li>
               ))}
             </ul>
           </div>
 
           <div>
-            <h4 className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Şirket</h4>
-            <ul className="mt-4 space-y-2">
+            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 sm:text-xs">Şirket</h4>
+            <ul className="mt-3 space-y-2 sm:mt-5 sm:space-y-3">
               {footerLinks.company.map((l) => (
                 <li key={l.label}>
-                  <Link
-                    to={l.href}
-                    className="text-sm font-medium text-zinc-400 transition hover:text-white"
-                  >
-                    {l.label}
-                  </Link>
+                  <Link to={l.href} className="text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 sm:text-sm">{l.label}</Link>
                 </li>
               ))}
             </ul>
           </div>
 
           <div>
-            <h4 className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Yasal</h4>
-            <ul className="mt-4 space-y-2">
+            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 sm:text-xs">Yasal</h4>
+            <ul className="mt-3 space-y-2 sm:mt-5 sm:space-y-3">
               {footerLinks.legal.map((l) => (
                 <li key={l.label}>
-                  <Link
-                    to={l.href}
-                    className="text-sm font-medium text-zinc-400 transition hover:text-white"
-                  >
-                    {l.label}
-                  </Link>
+                  <Link to={l.href} className="text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 sm:text-sm">{l.label}</Link>
                 </li>
               ))}
             </ul>
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/8 pt-8 sm:flex-row">
-          <p className="text-xs font-medium text-zinc-500">
+        <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-gray-200 pt-6 sm:mt-14 sm:flex-row sm:gap-5 sm:pt-8">
+          <p className="text-[10px] font-medium text-gray-400 sm:text-xs">
             © {new Date().getFullYear()} Maintly. Tüm hakları saklıdır.
           </p>
-          <div className="flex items-center gap-5 text-xs font-medium text-zinc-500">
+          <div className="flex items-center gap-4 text-[10px] font-medium text-gray-400 sm:gap-6 sm:text-xs">
             <span className="inline-flex items-center gap-1">
               <MapPin className="h-3 w-3" /> İstanbul, Türkiye
             </span>
@@ -403,38 +511,84 @@ function FooterSection() {
   );
 }
 
-/* ---------- Mobile Menu ---------- */
+/* ============================================
+   Sub-components
+   ============================================ */
+
+function AnimatedStat({ value, label, delay = 0 }: { value: string; label: string; delay?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [displayed, setDisplayed] = useState('0');
+  const started = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let tid: ReturnType<typeof setTimeout>;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started.current) {
+          started.current = true;
+          observer.disconnect();
+          const numStr = value.replace(/\./g, '').replace(/[^0-9]/g, '');
+          const target = parseInt(numStr, 10);
+          const suffix = value.includes('+') ? '+' : '';
+          const useLocale = target >= 1000;
+          if (isNaN(target) || target === 0) { setDisplayed(value); return; }
+
+          tid = setTimeout(() => {
+            const duration = 2000;
+            const startTime = performance.now();
+            const tick = (now: number) => {
+              const progress = Math.min((now - startTime) / duration, 1);
+              const eased = 1 - Math.pow(1 - progress, 4);
+              const current = Math.round(eased * target);
+              const formatted = useLocale ? current.toLocaleString('tr-TR') : current.toString();
+              setDisplayed(formatted + suffix);
+              if (progress < 1) requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          }, delay);
+        }
+      },
+      { threshold: 0.3 },
+    );
+    observer.observe(el);
+    return () => { observer.disconnect(); clearTimeout(tid); };
+  }, [value, delay]);
+
+  return (
+    <div ref={ref} className="border-l border-gray-200 pl-2.5 sm:pl-4 md:pl-5">
+      <p className="text-2xl font-black leading-none text-gray-900 sm:text-3xl md:text-4xl lg:text-5xl">{displayed}</p>
+      <p className="mt-1.5 text-[8px] font-bold uppercase leading-3 tracking-[0.14em] text-gray-400 sm:mt-2.5 sm:text-[10px] sm:leading-4 sm:tracking-[0.16em] md:text-xs">{label}</p>
+    </div>
+  );
+}
+
+function SignalPill({ icon: Icon, label }: { icon: React.ComponentType<{ className?: string }>; label: string }) {
+  return (
+    <div className="inline-flex min-h-9 w-auto min-w-0 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 text-[10px] font-bold text-gray-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 sm:min-h-10 sm:w-full sm:gap-2 sm:rounded-xl sm:px-3 sm:text-xs">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-red-500 sm:h-4 sm:w-4" />
+      <span className="whitespace-nowrap sm:truncate">{label}</span>
+    </div>
+  );
+}
+
 function MobileMenu() {
   return (
-    <div className="flex items-center gap-2 sm:hidden">
+    <div className="flex items-center gap-1 md:hidden">
       <Link
         to="/customer/login"
-        className="rounded-lg px-2 py-2 text-xs font-bold text-white/70 transition hover:bg-white/10 hover:text-white"
+        className="rounded-lg px-2.5 py-2 text-[11px] font-bold text-gray-500 transition-all hover:bg-gray-100 hover:text-gray-900 sm:text-xs"
       >
         Müşteri
       </Link>
       <Link
         to="/service/login"
-        className="rounded-lg border border-white/15 bg-white/10 px-2 py-2 text-xs font-bold text-white backdrop-blur transition hover:border-red-300/50 hover:bg-white/15"
+        className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-[11px] font-bold text-red-600 transition-all hover:bg-red-100 sm:text-xs"
       >
         Servis
       </Link>
-    </div>
-  );
-}
-
-/* ---------- SignalPill ---------- */
-function SignalPill({
-  icon: Icon,
-  label,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}) {
-  return (
-    <div className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/[0.08] px-3 text-xs font-black text-white/80 backdrop-blur">
-      <Icon className="h-4 w-4 text-red-300" />
-      <span className="truncate">{label}</span>
     </div>
   );
 }

@@ -225,6 +225,13 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isServiceMode = activeRole === 'service';
+  const activeView = isServiceMode ? serviceView : customerView;
+  const authClassName = [
+    'animated-auth',
+    isServiceMode ? 'animated-auth--service' : 'animated-auth--customer',
+    `animated-auth--${activeView}`,
+    `animated-auth--${activeRole}-${activeView}`,
+  ].join(' ');
 
   const clearFeedback = () => {
     setLocalError(null);
@@ -385,7 +392,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   };
 
   return (
-    <div className={`animated-auth${isServiceMode ? ' animated-auth--service' : ''}`}>
+    <div className={authClassName}>
       <div className="animated-auth__forms-container">
         <div className="animated-auth__form-stage">
           <form

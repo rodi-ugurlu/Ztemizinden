@@ -208,6 +208,7 @@ export default function ProviderManagement() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-slate-200">
@@ -388,6 +389,7 @@ export default function ProviderManagement() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

@@ -115,9 +115,9 @@ export default function NetworkScene() {
       <svg className="maintly-svg-overlay">
         <defs>
           <linearGradient id="conn-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="rgba(239,68,68,0.40)" />
-            <stop offset="55%" stopColor="rgba(20,184,166,0.25)" />
-            <stop offset="100%" stopColor="rgba(20,184,166,0.10)" />
+            <stop offset="0%" stopColor="rgba(239,68,68,0.30)" />
+            <stop offset="55%" stopColor="rgba(20,184,166,0.20)" />
+            <stop offset="100%" stopColor="rgba(20,184,166,0.08)" />
           </linearGradient>
           <filter id="conn-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="2" result="blur" />
@@ -127,7 +127,7 @@ export default function NetworkScene() {
             </feMerge>
           </filter>
         </defs>
-        {lines.map((l) => (
+        {lines.map((l, index) => (
           <g key={l.key}>
             <line
               x1={l.x1}
@@ -150,9 +150,9 @@ export default function NetworkScene() {
               />
             </line>
             {/* Pulse dot at midpoint */}
-            <circle r="2.5" fill="rgba(239,68,68,0.9)" filter="url(#conn-glow)">
+            <circle r="2.5" fill="rgba(239,68,68,0.7)" filter="url(#conn-glow)">
               <animateMotion
-                dur={`${2.5 + Math.random()}s`}
+                dur={`${2.5 + (index % 4) * 0.28}s`}
                 repeatCount="indefinite"
                 path={`M${l.x1},${l.y1} L${l.x2},${l.y2}`}
               />
@@ -189,10 +189,10 @@ export default function NetworkScene() {
               {node.initials}
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-sm font-black text-white">
+              <span className="block truncate text-sm font-black text-gray-900">
                 {node.name}
               </span>
-              <span className="mt-1 flex items-center gap-1 text-[11px] font-bold text-white/65">
+              <span className="mt-1 flex items-center gap-1 text-[11px] font-bold text-gray-400">
                 {node.type === 'Servis' ? (
                   <ShieldCheck className="h-3 w-3" />
                 ) : (

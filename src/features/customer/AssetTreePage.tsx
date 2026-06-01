@@ -197,7 +197,7 @@ export default function AssetTreePage() {
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-73px)] relative">
+    <div className="relative flex min-h-[calc(100svh-73px)] flex-col lg:h-[calc(100vh-73px)]">
       {/* ── Toast Notification ──────────────────────────────────── */}
       {toast && (
         <div
@@ -284,12 +284,12 @@ export default function AssetTreePage() {
       )}
 
       {/* ── Split layout ───────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-visible lg:overflow-hidden">
         {/* Left panel — Form */}
         <div
           id="asset-form-panel"
           className="w-full lg:w-[420px] xl:w-[460px] bg-white border-b lg:border-b-0 lg:border-r border-slate-200/80
-                     flex flex-col overflow-hidden shrink-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.08)]"
+                     flex flex-col lg:overflow-hidden shrink-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.08)]"
         >
           <AssetFormPanel
             key={editingNode?.id ?? addingToParent?.id ?? 'new-root-asset'}
@@ -302,7 +302,7 @@ export default function AssetTreePage() {
         </div>
 
         {/* Right panel — Tree */}
-        <div className="flex-1 overflow-hidden flex flex-col min-h-0"
+        <div className="flex min-h-[520px] flex-1 flex-col overflow-hidden lg:min-h-0"
           style={{
             background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #eef2f7 100%)',
           }}

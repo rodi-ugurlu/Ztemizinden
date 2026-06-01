@@ -264,6 +264,7 @@ export default function DispatchPage() {
       {/* Tickets Table */}
       <Card className="bg-white/50 border-slate-200">
         <CardContent className="p-0">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-slate-200 hover:bg-transparent">
@@ -355,6 +356,7 @@ export default function DispatchPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

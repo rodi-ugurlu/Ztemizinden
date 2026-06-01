@@ -163,46 +163,48 @@ export default function AdminDashboard() {
               </Link>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-slate-200">
-                    <TableHead className="text-slate-400">Talep ID</TableHead>
-                    <TableHead className="text-slate-400">Müşteri</TableHead>
-                    <TableHead className="text-slate-400">Konu</TableHead>
-                    <TableHead className="text-slate-400">Durum</TableHead>
-                    <TableHead className="text-slate-400">Yanıt Süresi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {criticalTickets.map((ticket) => (
-                    <TableRow key={ticket.id} className="border-slate-200">
-                      <TableCell className="font-mono text-xs text-slate-500">
-                        #{ticket.id.split('-')[1]}
-                      </TableCell>
-                      <TableCell className="text-slate-700">
-                        <div>{ticket.customerCompany}</div>
-                        <div className="text-xs text-slate-500">{ticket.customerName}</div>
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate text-slate-700">
-                        {ticket.title}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={ticket.status} />
-                      </TableCell>
-                      <TableCell>
-                        <ResponseTimeBadge responseTime={ticket.responseTime} />
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-200">
+                      <TableHead className="text-slate-400">Talep ID</TableHead>
+                      <TableHead className="text-slate-400">Müşteri</TableHead>
+                      <TableHead className="text-slate-400">Konu</TableHead>
+                      <TableHead className="text-slate-400">Durum</TableHead>
+                      <TableHead className="text-slate-400">Yanıt Süresi</TableHead>
                     </TableRow>
-                  ))}
-                  {criticalTickets.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-slate-500">
-                        Kritik talep bulunmuyor
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {criticalTickets.map((ticket) => (
+                      <TableRow key={ticket.id} className="border-slate-200">
+                        <TableCell className="font-mono text-xs text-slate-500">
+                          #{ticket.id.split('-')[1]}
+                        </TableCell>
+                        <TableCell className="text-slate-700">
+                          <div>{ticket.customerCompany}</div>
+                          <div className="text-xs text-slate-500">{ticket.customerName}</div>
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate text-slate-700">
+                          {ticket.title}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={ticket.status} />
+                        </TableCell>
+                        <TableCell>
+                          <ResponseTimeBadge responseTime={ticket.responseTime} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {criticalTickets.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                          Kritik talep bulunmuyor
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </div>
