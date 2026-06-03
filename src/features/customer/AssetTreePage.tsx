@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCustomerStore, type Asset, type AssetTreeNode } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { createClientUuid } from '@/lib/utils';
 import AssetFormPanel, { type AssetFormData } from './components/AssetFormPanel';
 import AssetTreeView from './components/AssetTreeView';
 import { Layers, TreePine, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
@@ -15,6 +17,7 @@ import { Layers, TreePine, Sparkles, CheckCircle2, AlertCircle } from 'lucide-re
  * - "Add child" from tree nodes
  */
 export default function AssetTreePage() {
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const {
     assetTree,
@@ -175,6 +178,12 @@ export default function AssetTreePage() {
     document.getElementById('asset-form-panel')?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
+  // ── Create ticket from selected asset ──────────────────────────
+  const handleCreateTicket = useCallback((node: AssetTreeNode) => {
+    const params = new URLSearchParams({ assetId: node.id });
+    navigate(`/customer/tickets/create?${params.toString()}`);
+  }, [navigate]);
+
   // ── Delete handler ──────────────────────────────────────────────
   const handleDelete = useCallback(
     async (node: AssetTreeNode) => {
@@ -312,6 +321,7 @@ export default function AssetTreePage() {
             onEdit={handleEdit}
             onDelete={handleDelete}
             onAddChild={handleAddChild}
+            onCreateTicket={handleCreateTicket}
           />
         </div>
       </div>
@@ -398,5 +408,5 @@ function tagSegment(value: string) {
 }
 
 function uniqueTagSuffix() {
-  return `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`.toUpperCase();
+  return `${Date.now().toString(36)}-${createClientUuid().slice(0, 8)}`.toUpperCase();
 }

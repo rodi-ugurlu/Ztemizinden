@@ -249,6 +249,8 @@ function normalizeServiceProvider(provider: ServiceProvider): ServiceProvider {
     status: displayProviderStatus(provider.status),
     trusted: provider.trusted ?? provider.isTrusted ?? false,
     isTrusted: provider.isTrusted ?? provider.trusted ?? false,
+    specialties: provider.specialties ?? [],
+    expertiseTags: provider.expertiseTags ?? [],
     documents: provider.documents ?? [],
   };
 }

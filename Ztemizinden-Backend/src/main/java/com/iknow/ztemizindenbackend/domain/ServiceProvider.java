@@ -15,8 +15,11 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -60,6 +63,11 @@ public class ServiceProvider extends BaseEntity {
     @Column(name = "specialty", nullable = false)
     private Set<TicketCategory> specialties = new HashSet<>();
 
+    @ElementCollection
+    @CollectionTable(name = "service_provider_expertise_tags", joinColumns = @JoinColumn(name = "provider_id"))
+    @Column(name = "tag", nullable = false, length = 120)
+    private Set<String> expertiseTags = new LinkedHashSet<>();
+
     @OneToMany(mappedBy = "provider", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ProviderDocument> documents = new ArrayList<>();
 
@@ -69,7 +77,8 @@ public class ServiceProvider extends BaseEntity {
             String email,
             String phone,
             String city,
-            Set<TicketCategory> specialties
+            Set<TicketCategory> specialties,
+            Set<String> expertiseTags
     ) {
         this.name = name;
         this.contactName = contactName;
@@ -77,6 +86,7 @@ public class ServiceProvider extends BaseEntity {
         this.phone = phone;
         this.city = city;
         this.specialties = new HashSet<>(specialties);
+        this.expertiseTags = normalizeExpertiseTags(expertiseTags);
     }
 
     public void verify() {
@@ -114,5 +124,16 @@ public class ServiceProvider extends BaseEntity {
 
     private String normalizeEmail(String value) {
         return value == null ? null : value.trim().toLowerCase();
+    }
+
+    private Set<String> normalizeExpertiseTags(Set<String> values) {
+        if (values == null) {
+            return new LinkedHashSet<>();
+        }
+        return values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> value.trim().replaceAll("\\s+", " "))
+                .map(value -> value.toLowerCase(Locale.forLanguageTag("tr-TR")))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 }

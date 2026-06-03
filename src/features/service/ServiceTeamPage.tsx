@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { api, type UploadResponse } from '@/lib/api';
+import { serviceSpecialtyLabel } from '@/lib/serviceExpertise';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useServiceStore, useTicketStats } from '@/store/useServiceStore';
 import {
@@ -103,6 +104,7 @@ export default function ServiceTeamPage() {
     phone: serviceProviderProfile.phone || '-',
     city: serviceProviderProfile.city || '-',
     specialties: serviceProviderProfile.specialties ?? [],
+    expertiseTags: serviceProviderProfile.expertiseTags ?? [],
     rating: serviceProviderProfile.rating ?? 0,
     status: serviceProviderProfile.status,
     memberSince: serviceProviderProfile.createdAt ? new Date(serviceProviderProfile.createdAt).getFullYear().toString() : '-',
@@ -250,10 +252,23 @@ export default function ServiceTeamPage() {
                     className="bg-red-50 text-red-600 border-red-200/30 px-3 py-1"
                   >
                     <SpecialtyIcon specialty={specialty} className="w-3 h-3 mr-1.5" />
-                    {specialty}
+                    {serviceSpecialtyLabel(specialty)}
                   </Badge>
                 ))}
               </div>
+              {providerProfile.expertiseTags.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {providerProfile.expertiseTags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="outline"
+                      className="border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Documents */}

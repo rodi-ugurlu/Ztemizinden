@@ -30,6 +30,7 @@ export interface ServiceProvider {
   rating: number;
   completedJobs: number;
   specialties: TicketCategory[];
+  expertiseTags: string[];
   documents: ProviderDocument[];
   createdAt: string;
   updatedAt: string;
@@ -309,6 +310,8 @@ function normalizeProvider(provider: ServiceProvider): ServiceProvider {
     status: displayProviderStatus(provider.status),
     trusted: provider.trusted ?? provider.isTrusted ?? false,
     isTrusted: provider.isTrusted ?? provider.trusted ?? false,
+    specialties: provider.specialties ?? [],
+    expertiseTags: provider.expertiseTags ?? [],
     documents: provider.documents ?? [],
   };
 }
@@ -360,6 +363,7 @@ function normalizeProviderMatch(match: BackendProviderMatch, providers: ServiceP
       rating: 0,
       completedJobs: 0,
       specialties: [],
+      expertiseTags: [],
       documents: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

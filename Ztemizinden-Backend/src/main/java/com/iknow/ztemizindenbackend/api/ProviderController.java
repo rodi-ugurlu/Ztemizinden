@@ -90,6 +90,7 @@ public class ProviderController {
                 request.phone(),
                 request.city(),
                 request.specialties().stream().map(ApiEnums::ticketCategory).collect(Collectors.toSet()),
+                request.expertiseTags() == null ? Set.of() : request.expertiseTags(),
                 request.password()
         ));
     }
@@ -158,6 +159,7 @@ public class ProviderController {
             @NotBlank String phone,
             @NotBlank String city,
             @NotEmpty Set<String> specialties,
+            Set<String> expertiseTags,
             @NotBlank String password
     ) {
     }
@@ -181,6 +183,7 @@ public class ProviderController {
             BigDecimal rating,
             int completedJobs,
             Set<String> specialties,
+            Set<String> expertiseTags,
             List<ProviderDocumentResponse> documents,
             Instant createdAt,
             Instant updatedAt
@@ -199,6 +202,7 @@ public class ProviderController {
                     provider.getRating(),
                     provider.getCompletedJobs(),
                     provider.getSpecialties().stream().map(ApiEnums::display).collect(Collectors.toSet()),
+                    provider.getExpertiseTags() == null ? Set.of() : provider.getExpertiseTags(),
                     provider.getDocuments().stream().map(ProviderDocumentResponse::from).toList(),
                     provider.getCreatedAt(),
                     provider.getUpdatedAt()

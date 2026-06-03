@@ -47,7 +47,8 @@ public class ProviderService {
                 command.email(),
                 command.phone(),
                 command.city(),
-                command.specialties()
+                command.specialties(),
+                command.expertiseTags()
         );
 
         ServiceProvider savedProvider = serviceProviderRepository.save(provider);
@@ -118,6 +119,7 @@ public class ProviderService {
             String phone,
             String city,
             Set<TicketCategory> specialties,
+            Set<String> expertiseTags,
             String password
     ) {
     }

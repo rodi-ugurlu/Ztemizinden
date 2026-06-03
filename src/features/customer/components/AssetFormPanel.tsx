@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { createClientUuid } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -95,7 +96,7 @@ export default function AssetFormPanel({
   const isEditMode = Boolean(editingNode);
 
   const addSubLevel = () => {
-    setSubLevels((prev) => [...prev, { id: crypto.randomUUID(), name: '' }]);
+    setSubLevels((prev) => [...prev, { id: createClientUuid(), name: '' }]);
   };
 
   const removeSubLevel = (id: string) => {

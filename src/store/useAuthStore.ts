@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { getApiBaseUrl } from '@/lib/backendUrl';
+import { createClientUuid } from '@/lib/utils';
 
 export type UserRole = 'customer' | 'service' | 'admin' | null;
 
@@ -61,7 +62,7 @@ export const useAuthStore = create<AuthState>()(
         const resolvedRole = resolveDemoRole(userData.email) ?? role;
         const demoProfile = getDemoProfile(userData.email);
         const user: User = {
-          id: userData.id || demoProfile?.id || crypto.randomUUID(),
+          id: userData.id || demoProfile?.id || createClientUuid(),
           email: userData.email || '',
           name: userData.name || demoProfile?.name || 'User',
           role: resolvedRole,
@@ -220,8 +221,8 @@ function resolveRoleFromClaims(claims: JwtClaims): Exclude<UserRole, null> | nul
 function resolvePrincipalId(email: string, claims: JwtClaims, role: UserRole) {
   const demoProfile = getDemoProfile(email);
   if (demoProfile) return demoProfile.id;
-  if (role === 'customer') return claims.customerId ?? claims.sub ?? crypto.randomUUID();
-  if (role === 'service') return claims.providerId ?? claims.sub ?? crypto.randomUUID();
+  if (role === 'customer') return claims.customerId ?? claims.sub ?? createClientUuid();
+  if (role === 'service') return claims.providerId ?? claims.sub ?? createClientUuid();
   return claims.sub ?? 'admin-001';
 }
 

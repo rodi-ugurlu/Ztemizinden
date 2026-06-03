@@ -9,6 +9,7 @@ import com.iknow.ztemizindenbackend.domain.Ticket;
 import com.iknow.ztemizindenbackend.domain.TicketRepository;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,6 +59,8 @@ public class DispatchService {
             score += 45;
         }
 
+        score += expertiseScore(provider, ticket);
+
         if (provider.getCity().equalsIgnoreCase(cityOf(ticket.getCustomerLocation()))) {
             score += 25;
         }
@@ -86,12 +89,60 @@ public class DispatchService {
         );
     }
 
+    private int expertiseScore(ServiceProvider provider, Ticket ticket) {
+        if (provider.getExpertiseTags() == null || provider.getExpertiseTags().isEmpty()) {
+            return 0;
+        }
+
+        String context = normalizeSearchText(String.join(" ",
+                text(ticket.getTitle()),
+                text(ticket.getDescription()),
+                text(ticket.getAsset().getName()),
+                text(ticket.getAsset().getTagNo()),
+                text(ticket.getAsset().getBrand()),
+                text(ticket.getAsset().getModel()),
+                text(ticket.getAsset().getSerialNumber()),
+                text(ticket.getAsset().getLocation()),
+                text(ticket.getAsset().getDepartment()),
+                text(ticket.getAsset().getDescription())
+        ));
+
+        int matches = 0;
+        String paddedContext = " " + context + " ";
+        for (String tag : provider.getExpertiseTags()) {
+            String normalizedTag = normalizeSearchText(tag);
+            if (!normalizedTag.isBlank() && paddedContext.contains(" " + normalizedTag + " ")) {
+                matches++;
+            }
+        }
+
+        return Math.min(matches * 8, 24);
+    }
+
     private String cityOf(String location) {
         if (location == null || location.isBlank()) {
             return "";
         }
 
         return location.split(",")[0].trim();
+    }
+
+    private String text(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String normalizeSearchText(String value) {
+        return text(value)
+                .toLocaleLowerCase(Locale.forLanguageTag("tr-TR"))
+                .replace("ı", "i")
+                .replace("ğ", "g")
+                .replace("ü", "u")
+                .replace("ş", "s")
+                .replace("ö", "o")
+                .replace("ç", "c")
+                .replaceAll("[^\\p{L}\\p{Nd}]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     public record ProviderMatch(

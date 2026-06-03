@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { downloadProtectedFile } from '@/lib/api';
+import { normalizeSearchText, serviceSpecialtyLabel } from '@/lib/serviceExpertise';
 import {
   Dialog,
   DialogContent,
@@ -65,6 +66,7 @@ export default function ProviderManagement() {
   const [documentNotes, setDocumentNotes] = useState('');
   const [documentOpenError, setDocumentOpenError] = useState('');
   const [documentActionError, setDocumentActionError] = useState('');
+  const normalizedSearchQuery = normalizeSearchText(searchQuery);
 
   const loadProviders = useCallback(() => {
     void fetchProviders();
@@ -76,10 +78,13 @@ export default function ProviderManagement() {
 
   const filteredProviders = providers.filter(
     (provider) =>
-      provider.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      provider.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      provider.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      provider.specialties.some((specialty) => specialty.toLowerCase().includes(searchQuery.toLowerCase()))
+      normalizeSearchText(provider.name).includes(normalizedSearchQuery) ||
+      normalizeSearchText(provider.city).includes(normalizedSearchQuery) ||
+      normalizeSearchText(provider.contactName).includes(normalizedSearchQuery) ||
+      provider.specialties.some((specialty) =>
+        normalizeSearchText(serviceSpecialtyLabel(specialty)).includes(normalizedSearchQuery)
+      ) ||
+      provider.expertiseTags.some((tag) => normalizeSearchText(tag).includes(normalizedSearchQuery))
   );
   const pendingProviders = providers.filter((p) => p.status === 'Pending Verification');
   const documentReviewCount = pendingProviders.filter(
@@ -283,10 +288,23 @@ export default function ProviderManagement() {
                             className="border-slate-200 text-slate-400 bg-slate-50/40"
                           >
                             <Wrench className="w-3 h-3 mr-1" />
-                            {specialty}
+                            {serviceSpecialtyLabel(specialty)}
                           </Badge>
                         ))}
                       </div>
+                      {provider.expertiseTags.length > 0 && (
+                        <div className="flex max-w-64 flex-wrap gap-1">
+                          {provider.expertiseTags.map((tag) => (
+                            <Badge
+                              key={tag}
+                              variant="outline"
+                              className="border-red-100 bg-red-50/60 text-red-600"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>

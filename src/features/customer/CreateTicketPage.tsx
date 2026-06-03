@@ -1,17 +1,10 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useCustomerStore, type TicketCategory, type TicketPriority, type Asset } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -22,12 +15,18 @@ import {
   ImageIcon,
   Video,
   CheckCircle2,
+  Check,
+  ChevronsUpDown,
   Wrench,
   Zap,
   Droplets,
   Settings,
   Camera,
   Loader2,
+  Search,
+  Package,
+  Hash,
+  MapPin,
 } from 'lucide-react';
 
 /**
@@ -223,41 +222,12 @@ export default function CreateTicketPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <Select
-                value={formData.assetId}
-                onValueChange={(v) => setFormData({ ...formData, assetId: v })}
-                required
-              >
-                <SelectTrigger className="h-12 border-2 border-slate-200 focus:border-red-400 focus:ring-red-100 rounded-xl">
-                  <SelectValue placeholder="Bir varlık seçin..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-[350px]">
-                  {assets.map((asset) => {
-                    const isLocation = !asset.leaf || asset.depth === 0;
-                    const path = getAssetPath(asset);
-                    return (
-                      <SelectItem key={asset.id} value={asset.id} className="py-2.5">
-                        <div className="flex flex-col items-start text-left">
-                          <span className="font-semibold flex items-center gap-1.5 text-slate-800 text-[14px]">
-                            <span>{isLocation ? '📍' : '🔧'}</span>
-                            <span>{asset.name}</span>
-                            {isLocation && (
-                              <span className="text-[9px] tracking-wide bg-indigo-50 text-indigo-700 border border-indigo-200/60 px-1.5 py-0.5 rounded-full font-bold">
-                                Lokasyon
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-1.5">
-                            {asset.parentId && <span className="font-medium text-slate-400">{path} •</span>}
-                            <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1 py-0.2 rounded border border-slate-200/80">{asset.tagNo}</span>
-                            {asset.brand && asset.brand !== 'N/A' && <span>• {asset.brand}</span>}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+              <AssetSearchPicker
+                assets={assets}
+                selectedAssetId={formData.assetId}
+                getAssetPath={getAssetPath}
+                onSelect={(assetId) => setFormData({ ...formData, assetId })}
+              />
 
               {selectedAsset && (
                 <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 shadow-sm transition-all duration-300">
@@ -567,6 +537,336 @@ const priorities = [
   { value: 'High' as TicketPriority, label: 'Yüksek', selectedClass: 'bg-orange-100 text-orange-800 ring-orange-300' },
   { value: 'Critical' as TicketPriority, label: 'Kritik', selectedClass: 'bg-red-100 text-red-800 ring-red-300' },
 ];
+
+interface AssetSearchPickerProps {
+  assets: Asset[];
+  selectedAssetId: string;
+  getAssetPath: (asset: Asset) => string;
+  onSelect: (assetId: string) => void;
+}
+
+function AssetSearchPicker({ assets, selectedAssetId, getAssetPath, onSelect }: AssetSearchPickerProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const selectedAsset = assets.find((asset) => asset.id === selectedAssetId);
+  const [query, setQuery] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, []);
+
+  const results = useMemo(() => {
+    return rankAssets(assets, query, getAssetPath).slice(0, query.trim() ? 10 : 8);
+  }, [assets, getAssetPath, query]);
+
+  const inputValue = isOpen || !selectedAsset ? query : selectedAsset.name;
+  const activeIndex = Math.min(highlightedIndex, Math.max(results.length - 1, 0));
+
+  const chooseAsset = (asset: Asset) => {
+    onSelect(asset.id);
+    setQuery(asset.name);
+    setIsOpen(false);
+  };
+
+  const clearSelection = () => {
+    onSelect('');
+    setQuery('');
+    setHighlightedIndex(0);
+    setIsOpen(true);
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setIsOpen(true);
+      setHighlightedIndex((index) => Math.min(index + 1, Math.max(results.length - 1, 0)));
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setIsOpen(true);
+      setHighlightedIndex((index) => Math.max(index - 1, 0));
+      return;
+    }
+
+    if (event.key === 'Enter' && isOpen && results[activeIndex]) {
+      event.preventDefault();
+      chooseAsset(results[activeIndex].asset);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <div
+        className={`relative rounded-2xl border-2 bg-white transition-all ${
+          isOpen
+            ? 'border-red-300 ring-4 ring-red-50'
+            : selectedAsset
+            ? 'border-emerald-200'
+            : 'border-slate-200'
+        }`}
+      >
+        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          ref={inputRef}
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-controls="asset-search-results"
+          value={inputValue}
+          disabled={assets.length === 0}
+          onFocus={() => {
+            setQuery(selectedAsset ? selectedAsset.name : query);
+            setHighlightedIndex(0);
+            setIsOpen(true);
+            window.setTimeout(() => inputRef.current?.select(), 0);
+          }}
+          onChange={(event) => {
+            const nextQuery = event.target.value;
+            setQuery(nextQuery);
+            setHighlightedIndex(0);
+            if (selectedAsset && nextQuery !== selectedAsset.name) {
+              onSelect('');
+            }
+            setIsOpen(true);
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder={assets.length === 0 ? 'Önce varlık ekleyin' : 'Varlık adı, yol, tag no veya lokasyon yazın...'}
+          className="h-[52px] border-0 bg-transparent pl-11 pr-20 text-[15px] font-semibold text-slate-900 shadow-none focus-visible:ring-0 disabled:cursor-not-allowed"
+        />
+        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+          {selectedAsset && (
+            <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={clearSelection}
+            className="h-8 w-8 rounded-lg p-0 text-slate-400 hover:bg-red-50 hover:text-red-600"
+            aria-label="Seçimi temizle"
+          >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              setIsOpen(!isOpen);
+              if (!isOpen) {
+                inputRef.current?.focus();
+              }
+            }}
+            className="h-8 w-8 rounded-lg p-0 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Varlık listesini aç"
+          >
+            <ChevronsUpDown className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div
+          id="asset-search-results"
+          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-40 max-h-[360px] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/10"
+        >
+          {results.length > 0 ? (
+            <div className="space-y-1">
+              {results.map(({ asset, path, matchedFields }, index) => {
+                const isHighlighted = index === activeIndex;
+                const isSelected = asset.id === selectedAssetId;
+                const isLocation = !asset.leaf || asset.depth === 0;
+
+                return (
+                  <button
+                    key={asset.id}
+                    type="button"
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => chooseAsset(asset)}
+                    className={`w-full rounded-xl border px-3 py-3 text-left transition-all ${
+                      isHighlighted
+                        ? 'border-red-200 bg-red-50'
+                        : 'border-transparent hover:border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                          isLocation ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-600'
+                        }`}
+                      >
+                        {isLocation ? <MapPin className="h-4 w-4" /> : <Package className="h-4 w-4" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="truncate text-sm font-black text-slate-900">{asset.name}</span>
+                          {isLocation && (
+                            <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                              Lokasyon
+                            </span>
+                          )}
+                          {isSelected && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                              <Check className="h-3 w-3" />
+                              Seçili
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 truncate text-xs font-medium text-slate-500">{path}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[10px] font-bold text-slate-600">
+                            <Hash className="h-3 w-3 text-slate-400" />
+                            {asset.tagNo}
+                          </span>
+                          {asset.brand && asset.brand !== 'N/A' && (
+                            <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">
+                              {asset.brand} {asset.model && asset.model !== 'N/A' ? asset.model : ''}
+                            </span>
+                          )}
+                          {asset.location && (
+                            <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">
+                              {asset.location}
+                            </span>
+                          )}
+                          {matchedFields.length > 0 && (
+                            <span className="rounded-lg bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">
+                              {matchedFields.join(', ')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                <Search className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-bold text-slate-700">Eşleşen varlık bulunamadı</p>
+              <p className="mt-1 max-w-xs text-xs leading-5 text-slate-500">
+                Farklı bir ekipman adı, tag no veya hiyerarşi kelimesi deneyin.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function rankAssets(assets: Asset[], query: string, getAssetPath: (asset: Asset) => string) {
+  const terms = tokenizeSearch(query);
+
+  return assets
+    .map((asset) => {
+      const path = getAssetPath(asset);
+      const haystack = normalizeSearchText([
+        asset.name,
+        path,
+        asset.tagNo,
+        asset.brand,
+        asset.model,
+        asset.serialNumber,
+        asset.location,
+        asset.department,
+        asset.description,
+      ].filter(Boolean).join(' '));
+      const matchesAllTerms = terms.every((term) => haystack.includes(term));
+
+      return {
+        asset,
+        path,
+        matchedFields: terms.length ? matchedAssetFields(asset, path, terms) : [],
+        score: terms.length ? scoreAsset(asset, path, terms) : defaultAssetScore(asset),
+        matches: terms.length === 0 || matchesAllTerms,
+      };
+    })
+    .filter((item) => item.matches)
+    .sort((first, second) => second.score - first.score || first.asset.depth - second.asset.depth || first.asset.name.localeCompare(second.asset.name, 'tr-TR'));
+}
+
+function scoreAsset(asset: Asset, path: string, terms: string[]) {
+  const name = normalizeSearchText(asset.name);
+  const tagNo = normalizeSearchText(asset.tagNo);
+  const normalizedPath = normalizeSearchText(path);
+  const brandModel = normalizeSearchText([asset.brand, asset.model, asset.serialNumber].filter(Boolean).join(' '));
+  const location = normalizeSearchText([asset.location, asset.department].filter(Boolean).join(' '));
+
+  return terms.reduce((score, term) => {
+    let nextScore = score;
+    if (name.startsWith(term)) nextScore += 70;
+    else if (name.includes(term)) nextScore += 48;
+    if (tagNo.startsWith(term)) nextScore += 56;
+    else if (tagNo.includes(term)) nextScore += 42;
+    if (normalizedPath.includes(term)) nextScore += 28;
+    if (location.includes(term)) nextScore += 18;
+    if (brandModel.includes(term)) nextScore += 12;
+    return nextScore;
+  }, asset.leaf ? 8 : 2) - asset.depth;
+}
+
+function defaultAssetScore(asset: Asset) {
+  return (asset.leaf ? 10 : 4) - asset.depth;
+}
+
+function matchedAssetFields(asset: Asset, path: string, terms: string[]) {
+  const fields = [
+    { label: 'isim', value: asset.name },
+    { label: 'yol', value: path },
+    { label: 'tag', value: asset.tagNo },
+    { label: 'lokasyon', value: [asset.location, asset.department].filter(Boolean).join(' ') },
+    { label: 'marka/model', value: [asset.brand, asset.model, asset.serialNumber].filter(Boolean).join(' ') },
+  ];
+
+  return fields
+    .filter((field) => {
+      const normalized = normalizeSearchText(field.value);
+      return terms.some((term) => normalized.includes(term));
+    })
+    .map((field) => field.label)
+    .slice(0, 3);
+}
+
+function tokenizeSearch(value: string) {
+  return normalizeSearchText(value)
+    .split(/[^a-z0-9]+/)
+    .map((term) => term.trim())
+    .filter(Boolean);
+}
+
+function normalizeSearchText(value: string | undefined) {
+  return (value ?? '')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 Bytes';

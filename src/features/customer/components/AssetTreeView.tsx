@@ -15,6 +15,7 @@ import {
   Hash,
   PlusCircle,
   ChevronDown,
+  Wrench,
 } from 'lucide-react';
 
 // ── Depth Colors ──────────────────────────────────────────────────
@@ -80,13 +81,14 @@ interface AssetTreeViewProps {
   onEdit: (node: AssetTreeNode) => void;
   onDelete: (node: AssetTreeNode) => void;
   onAddChild?: (node: AssetTreeNode) => void;
+  onCreateTicket?: (node: AssetTreeNode) => void;
 }
 
 /**
  * Premium interactive tree component with animated accordion nodes.
  * Each depth level has a distinct color scheme.
  */
-export default function AssetTreeView({ nodes, onEdit, onDelete, onAddChild }: AssetTreeViewProps) {
+export default function AssetTreeView({ nodes, onEdit, onDelete, onAddChild, onCreateTicket }: AssetTreeViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -197,6 +199,7 @@ export default function AssetTreeView({ nodes, onEdit, onDelete, onAddChild }: A
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onAddChild={onAddChild}
+                onCreateTicket={onCreateTicket}
               />
             ))}
           </div>
@@ -215,9 +218,10 @@ interface TreeNodeProps {
   onEdit: (node: AssetTreeNode) => void;
   onDelete: (node: AssetTreeNode) => void;
   onAddChild?: (node: AssetTreeNode) => void;
+  onCreateTicket?: (node: AssetTreeNode) => void;
 }
 
-function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }: TreeNodeProps) {
+function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild, onCreateTicket }: TreeNodeProps) {
   const isExpanded = expandedIds.has(node.id);
   const hasChildren = node.children && node.children.length > 0;
   const style = getDepthStyle(node.depth);
@@ -272,7 +276,19 @@ function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }:
         )}
 
         {/* Action buttons (show on hover) */}
-        <div className="flex gap-1 opacity-0 group-hover/tree:opacity-100 transition-opacity duration-200 shrink-0">
+        <div className="flex gap-1 opacity-100 transition-opacity duration-200 shrink-0 sm:opacity-0 sm:group-hover/tree:opacity-100 sm:focus-within:opacity-100">
+          {onCreateTicket && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); onCreateTicket(node); }}
+              className="h-7 w-7 p-0 text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-all"
+              title="Arıza kaydı aç"
+              aria-label={`${node.name} için arıza kaydı aç`}
+            >
+              <Wrench className="w-3.5 h-3.5" />
+            </Button>
+          )}
           {onAddChild && (
             <Button
               variant="ghost"
@@ -280,6 +296,7 @@ function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }:
               onClick={(e) => { e.stopPropagation(); onAddChild(node); }}
               className="h-7 w-7 p-0 text-emerald-400 hover:text-white hover:bg-emerald-500 rounded-lg transition-all"
               title="Alt varlık ekle"
+              aria-label={`${node.name} altına varlık ekle`}
             >
               <PlusCircle className="w-3.5 h-3.5" />
             </Button>
@@ -290,6 +307,7 @@ function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }:
             onClick={(e) => { e.stopPropagation(); onEdit(node); }}
             className="h-7 w-7 p-0 text-blue-400 hover:text-white hover:bg-blue-500 rounded-lg transition-all"
             title="Düzenle"
+            aria-label={`${node.name} varlığını düzenle`}
           >
             <Pencil className="w-3 h-3" />
           </Button>
@@ -299,6 +317,7 @@ function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }:
             onClick={(e) => { e.stopPropagation(); onDelete(node); }}
             className="h-7 w-7 p-0 text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-all"
             title="Sil"
+            aria-label={`${node.name} varlığını sil`}
           >
             <Trash2 className="w-3 h-3" />
           </Button>
@@ -328,6 +347,7 @@ function TreeNode({ node, expandedIds, onToggle, onEdit, onDelete, onAddChild }:
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onAddChild={onAddChild}
+                onCreateTicket={onCreateTicket}
               />
             </div>
           ))}

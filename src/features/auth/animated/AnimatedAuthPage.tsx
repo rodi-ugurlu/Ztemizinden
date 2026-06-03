@@ -1,6 +1,13 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import {
+  normalizeExpertiseTag,
+  normalizeSearchText,
+  serviceSpecialtyCategories,
+  suggestedExpertiseTags,
+} from '@/lib/serviceExpertise';
+import type { TicketCategory } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import loginImage from './assets/login.svg';
 import registerImage from './assets/register.svg';
@@ -45,16 +52,6 @@ const serviceSlogans = [
     tr: 'DOĞRU MÜŞTERİYE, DOĞRU ZAMANDA ULAŞIN',
     en: 'Reach the Right Customer at the Right Time',
   },
-];
-
-const serviceCategories = [
-  { value: 'electric', label: 'Elektrik' },
-  { value: 'mechanic', label: 'Mekanik' },
-  { value: 'pneumatic', label: 'Pnomatik' },
-  { value: 'hydraulic', label: 'Hidrolik' },
-  { value: 'hvac', label: 'HVAC / İklimlendirme' },
-  { value: 'software', label: 'Yazılım / Otomasyon' },
-  { value: 'general', label: 'Genel Bakım' },
 ];
 
 const serviceDocumentFields = [
@@ -211,7 +208,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     email: '',
     phone: '',
     city: '',
-    category: '',
+    specialties: [] as TicketCategory[],
+    expertiseTags: [] as string[],
     password: '',
     confirmPassword: '',
     taxCertificate: null as File | null,
@@ -223,6 +221,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   const [localError, setLocalError] = useState<string | null>(null);
   const [localNotice, setLocalNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [serviceExpertiseQuery, setServiceExpertiseQuery] = useState('');
 
   const isServiceMode = activeRole === 'service';
   const activeView = isServiceMode ? serviceView : customerView;
@@ -232,6 +231,57 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     `animated-auth--${activeView}`,
     `animated-auth--${activeRole}-${activeView}`,
   ].join(' ');
+
+  const filteredExpertiseSuggestions = useMemo(() => {
+    const normalizedQuery = normalizeSearchText(serviceExpertiseQuery);
+    return suggestedExpertiseTags
+      .filter((tag) => !serviceRegister.expertiseTags.includes(tag))
+      .filter((tag) => !normalizedQuery || normalizeSearchText(tag).includes(normalizedQuery))
+      .slice(0, 10);
+  }, [serviceExpertiseQuery, serviceRegister.expertiseTags]);
+
+  const toggleServiceSpecialty = (specialty: TicketCategory) => {
+    setServiceRegister((prev) => ({
+      ...prev,
+      specialties: prev.specialties.includes(specialty)
+        ? prev.specialties.filter((item) => item !== specialty)
+        : [...prev.specialties, specialty],
+    }));
+  };
+
+  const addExpertiseTag = (value: string) => {
+    const tag = normalizeExpertiseTag(value);
+    if (!tag) return;
+
+    setServiceRegister((prev) =>
+      prev.expertiseTags.includes(tag)
+        ? prev
+        : { ...prev, expertiseTags: [...prev.expertiseTags, tag] }
+    );
+    setServiceExpertiseQuery('');
+  };
+
+  const removeExpertiseTag = (tag: string) => {
+    setServiceRegister((prev) => ({
+      ...prev,
+      expertiseTags: prev.expertiseTags.filter((item) => item !== tag),
+    }));
+  };
+
+  const handleExpertiseKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' || event.key === ',') {
+      event.preventDefault();
+      addExpertiseTag(serviceExpertiseQuery);
+      return;
+    }
+
+    if (event.key === 'Backspace' && !serviceExpertiseQuery) {
+      setServiceRegister((prev) => ({
+        ...prev,
+        expertiseTags: prev.expertiseTags.slice(0, -1),
+      }));
+    }
+  };
 
   const clearFeedback = () => {
     setLocalError(null);
@@ -328,6 +378,22 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       return;
     }
 
+    const pendingExpertiseTag = normalizeExpertiseTag(serviceExpertiseQuery);
+    const expertiseTags =
+      pendingExpertiseTag && !serviceRegister.expertiseTags.includes(pendingExpertiseTag)
+        ? [...serviceRegister.expertiseTags, pendingExpertiseTag]
+        : serviceRegister.expertiseTags;
+
+    if (serviceRegister.specialties.length === 0) {
+      setLocalError('En az bir ana uzmanlık alanı seçmelisiniz');
+      return;
+    }
+
+    if (expertiseTags.length === 0) {
+      setLocalError('En az bir detay uzmanlık etiketi eklemelisiniz');
+      return;
+    }
+
     const hasDocument = serviceDocumentFields.some((field) => Boolean(serviceRegister[field.key]));
     if (!hasDocument) {
       setLocalError('Başvuru için en az bir resmi belge yüklemelisiniz');
@@ -343,7 +409,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
         email: serviceRegister.email,
         phone: serviceRegister.phone,
         city: serviceRegister.city,
-        specialties: [toBackendSpecialty(serviceRegister.category)],
+        specialties: serviceRegister.specialties,
+        expertiseTags,
         password: serviceRegister.password,
       };
       const formData = new FormData();
@@ -750,26 +817,66 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                       </select>
                     </div>
                   </div>
-                  <div className="animated-auth__input-field animated-auth__input-field--compact">
-                    <FieldIcon name="service" />
-                    <select
-                      name="categories"
-                      required
-                      value={serviceRegister.category}
-                      onChange={(event) =>
-                        setServiceRegister((prev) => ({
-                          ...prev,
-                          category: event.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Hizmet Kategorisi</option>
-                      {serviceCategories.map((category) => (
-                        <option value={category.value} key={category.value}>
-                          {category.label}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="animated-auth__specialty-block">
+                    <div className="animated-auth__section-label">Ana uzmanlık alanları</div>
+                    <div className="animated-auth__specialty-grid">
+                      {serviceSpecialtyCategories.map((category) => {
+                        const selected = serviceRegister.specialties.includes(category.value);
+                        return (
+                          <button
+                            key={category.value}
+                            type="button"
+                            className={`animated-auth__specialty-choice${
+                              selected ? ' animated-auth__specialty-choice--selected' : ''
+                            }`}
+                            aria-pressed={selected}
+                            onClick={() => toggleServiceSpecialty(category.value)}
+                          >
+                            {category.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="animated-auth__tag-block">
+                    <div className="animated-auth__section-label">Detay uzmanlıklar</div>
+                    <div className="animated-auth__tag-input-wrap">
+                      <FieldIcon name="service" />
+                      <div className="animated-auth__tag-input-content">
+                        {serviceRegister.expertiseTags.length > 0 && (
+                          <div className="animated-auth__tag-chip-row">
+                            {serviceRegister.expertiseTags.map((tag) => (
+                              <button
+                                key={tag}
+                                type="button"
+                                className="animated-auth__tag-chip"
+                                onClick={() => removeExpertiseTag(tag)}
+                              >
+                                <span>{tag}</span>
+                                <span aria-hidden="true">×</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <input
+                          name="expertiseTags"
+                          type="text"
+                          placeholder="Vana, pompa, rulman..."
+                          value={serviceExpertiseQuery}
+                          onChange={(event) => setServiceExpertiseQuery(event.target.value)}
+                          onKeyDown={handleExpertiseKeyDown}
+                        />
+                      </div>
+                    </div>
+                    {serviceExpertiseQuery.trim().length > 0 && filteredExpertiseSuggestions.length > 0 && (
+                      <div className="animated-auth__tag-suggestions">
+                        {filteredExpertiseSuggestions.map((tag) => (
+                          <button key={tag} type="button" onClick={() => addExpertiseTag(tag)}>
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="animated-auth__form-grid">
                     <div className="animated-auth__input-field animated-auth__input-field--compact">
@@ -906,17 +1013,4 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
 
 function dashboardPathForRole(role: AuthRole | 'admin') {
   return `/${role}/dashboard`;
-}
-
-function toBackendSpecialty(value: string) {
-  const map: Record<string, string> = {
-    electric: 'Electric',
-    mechanic: 'Mechanic',
-    pneumatic: 'Pneumatic',
-    hydraulic: 'Hydraulic',
-    software: 'Software',
-    general: 'General',
-    hvac: 'General',
-  };
-  return map[value] ?? 'General';
 }
