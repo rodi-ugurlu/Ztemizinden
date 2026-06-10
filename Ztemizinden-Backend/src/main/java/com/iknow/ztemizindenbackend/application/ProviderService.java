@@ -36,6 +36,25 @@ public class ProviderService {
     }
 
     @Transactional
+    public ServiceProvider updateProfileByEmail(String email, UpdateProviderProfileCommand command) {
+        ServiceProvider provider = getByEmail(email);
+        provider.updateProfile(
+                command.name(),
+                command.contactName(),
+                command.phone(),
+                command.city(),
+                command.district(),
+                command.address(),
+                command.taxNumber(),
+                command.logoUrl(),
+                command.specialties(),
+                command.expertiseTags(),
+                command.coverageDistricts()
+        );
+        return provider;
+    }
+
+    @Transactional
     public ServiceProvider create(CreateProviderCommand command) {
         if (serviceProviderRepository.existsByEmailIgnoreCase(command.email())) {
             throw new IllegalStateException("Provider email is already registered");
@@ -47,8 +66,10 @@ public class ProviderService {
                 command.email(),
                 command.phone(),
                 command.city(),
+                command.district(),
                 command.specialties(),
-                command.expertiseTags()
+                command.expertiseTags(),
+                command.coverageDistricts()
         );
 
         ServiceProvider savedProvider = serviceProviderRepository.save(provider);
@@ -118,9 +139,26 @@ public class ProviderService {
             String email,
             String phone,
             String city,
+            String district,
             Set<TicketCategory> specialties,
             Set<String> expertiseTags,
+            Set<String> coverageDistricts,
             String password
+    ) {
+    }
+
+    public record UpdateProviderProfileCommand(
+            String name,
+            String contactName,
+            String phone,
+            String city,
+            String district,
+            String address,
+            String taxNumber,
+            String logoUrl,
+            Set<TicketCategory> specialties,
+            Set<String> expertiseTags,
+            Set<String> coverageDistricts
     ) {
     }
 

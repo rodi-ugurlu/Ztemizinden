@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.util.StringUtils;
 
 @Getter
 @Entity
@@ -43,6 +44,18 @@ public class ServiceProvider extends BaseEntity {
 
     @Column(nullable = false)
     private String city;
+
+    @Column(nullable = false)
+    private String district;
+
+    @Column(length = 1_000)
+    private String logoUrl;
+
+    @Column(length = 500)
+    private String address;
+
+    @Column(length = 100)
+    private String taxNumber;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -68,6 +81,11 @@ public class ServiceProvider extends BaseEntity {
     @Column(name = "tag", nullable = false, length = 120)
     private Set<String> expertiseTags = new LinkedHashSet<>();
 
+    @ElementCollection
+    @CollectionTable(name = "service_provider_coverage_districts", joinColumns = @JoinColumn(name = "provider_id"))
+    @Column(name = "district", nullable = false, length = 120)
+    private Set<String> coverageDistricts = new LinkedHashSet<>();
+
     @OneToMany(mappedBy = "provider", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ProviderDocument> documents = new ArrayList<>();
 
@@ -85,8 +103,32 @@ public class ServiceProvider extends BaseEntity {
         this.email = normalizeEmail(email);
         this.phone = phone;
         this.city = city;
+        this.district = "Belirtilmedi";
         this.specialties = new HashSet<>(specialties);
         this.expertiseTags = normalizeExpertiseTags(expertiseTags);
+        this.coverageDistricts = normalizeDistricts(Set.of(this.district));
+    }
+
+    public ServiceProvider(
+            String name,
+            String contactName,
+            String email,
+            String phone,
+            String city,
+            String district,
+            Set<TicketCategory> specialties,
+            Set<String> expertiseTags,
+            Set<String> coverageDistricts
+    ) {
+        this.name = name;
+        this.contactName = contactName;
+        this.email = normalizeEmail(email);
+        this.phone = phone;
+        this.city = city;
+        this.district = required(district, "Provider district is required");
+        this.specialties = new HashSet<>(specialties);
+        this.expertiseTags = normalizeExpertiseTags(expertiseTags);
+        this.coverageDistricts = normalizeDistricts(withDefaultDistrict(coverageDistricts, this.district));
     }
 
     public void verify() {
@@ -99,6 +141,38 @@ public class ServiceProvider extends BaseEntity {
 
     public void setTrusted(boolean trusted) {
         this.trusted = trusted;
+    }
+
+    public void updateProfile(
+            String name,
+            String contactName,
+            String phone,
+            String city,
+            String district,
+            String address,
+            String taxNumber,
+            String logoUrl,
+            Set<TicketCategory> specialties,
+            Set<String> expertiseTags,
+            Set<String> coverageDistricts
+    ) {
+        this.name = required(name, "Provider name is required");
+        this.contactName = required(contactName, "Provider contact name is required");
+        this.phone = required(phone, "Provider phone is required");
+        this.city = required(city, "Provider city is required");
+        this.district = required(district, "Provider district is required");
+        this.address = optional(address);
+        this.taxNumber = optional(taxNumber);
+        this.logoUrl = optional(logoUrl);
+        if (specialties != null && !specialties.isEmpty()) {
+            this.specialties = new HashSet<>(specialties);
+        }
+        if (expertiseTags != null) {
+            this.expertiseTags = normalizeExpertiseTags(expertiseTags);
+        }
+        if (coverageDistricts != null) {
+            this.coverageDistricts = normalizeDistricts(withDefaultDistrict(coverageDistricts, this.district));
+        }
     }
 
     public ProviderDocument addDocument(String type, String url, String originalFileName) {
@@ -126,6 +200,17 @@ public class ServiceProvider extends BaseEntity {
         return value == null ? null : value.trim().toLowerCase();
     }
 
+    private String required(String value, String message) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
+    }
+
+    private String optional(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
     private Set<String> normalizeExpertiseTags(Set<String> values) {
         if (values == null) {
             return new LinkedHashSet<>();
@@ -134,6 +219,24 @@ public class ServiceProvider extends BaseEntity {
                 .filter(value -> value != null && !value.isBlank())
                 .map(value -> value.trim().replaceAll("\\s+", " "))
                 .map(value -> value.toLowerCase(Locale.forLanguageTag("tr-TR")))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private Set<String> withDefaultDistrict(Set<String> values, String fallback) {
+        Set<String> districts = values == null ? new LinkedHashSet<>() : new LinkedHashSet<>(values);
+        if (districts.stream().noneMatch(StringUtils::hasText)) {
+            districts.add(fallback);
+        }
+        return districts;
+    }
+
+    private Set<String> normalizeDistricts(Set<String> values) {
+        if (values == null) {
+            return new LinkedHashSet<>();
+        }
+        return values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> value.trim().replaceAll("\\s+", " "))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 }

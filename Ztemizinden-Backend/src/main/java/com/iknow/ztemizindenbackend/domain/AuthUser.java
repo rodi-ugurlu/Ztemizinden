@@ -48,6 +48,15 @@ public class AuthUser extends BaseEntity {
         enabled = false;
     }
 
+    public void restore(String email, String passwordHash, AuthRole role, String customerId, String providerId) {
+        this.email = normalizeEmail(email);
+        this.passwordHash = passwordHash;
+        this.role = role;
+        this.customerId = customerId;
+        this.providerId = providerId;
+        enable();
+    }
+
     private String normalizeEmail(String value) {
         return value == null ? null : value.trim().toLowerCase();
     }

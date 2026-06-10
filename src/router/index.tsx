@@ -21,11 +21,13 @@ const CustomerDashboard = lazy(() => import('@/features/customer/CustomerDashboa
 const AssetTreePage = lazy(() => import('@/features/customer/AssetTreePage'));
 const CreateTicketPage = lazy(() => import('@/features/customer/CreateTicketPage'));
 const RequestsPage = lazy(() => import('@/features/customer/RequestsPage'));
+const CustomerProfilePage = lazy(() => import('@/features/customer/CustomerProfilePage'));
 
 // Service Portal Pages
 const ServiceDashboard = lazy(() => import('@/features/service/ServiceDashboard'));
 const ServiceTicketsPage = lazy(() => import('@/features/service/ServiceTicketsPage'));
 const ServiceTeamPage = lazy(() => import('@/features/service/ServiceTeamPage'));
+const ServiceProfilePage = lazy(() => import('@/features/service/ServiceProfilePage'));
 
 // Admin Portal Pages
 const AdminDashboard = lazy(() => import('@/features/admin/AdminDashboard'));
@@ -190,6 +192,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'profile',
+        element: withPageLoader(
+          <ProtectedRoute requiredRole="customer">
+            <CustomerProfilePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: 'asset-tree',
         element: withPageLoader(
           <ProtectedRoute requiredRole="customer">
@@ -253,6 +263,14 @@ export const router = createBrowserRouter([
         element: withPageLoader(
           <ProtectedRoute requiredRole="service">
             <ServiceTeamPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'profile',
+        element: withPageLoader(
+          <ProtectedRoute requiredRole="service">
+            <ServiceProfilePage />
           </ProtectedRoute>
         ),
       },

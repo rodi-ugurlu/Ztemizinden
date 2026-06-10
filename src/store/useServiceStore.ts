@@ -1,10 +1,24 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
-import type { Ticket, TicketOffer, OfferType } from '@/store/useCustomerStore';
+import type { Ticket, TicketOffer, OfferType, TicketCategory } from '@/store/useCustomerStore';
 import type { ProviderStatus, ServiceProvider } from '@/store/useAdminStore';
 import type { User } from '@/store/useAuthStore';
 
 export type ServiceTicket = Ticket;
+
+export type UpdateProviderProfileInput = {
+  name: string;
+  contactName: string;
+  phone: string;
+  city: string;
+  district: string;
+  logoUrl?: string | null;
+  address?: string | null;
+  taxNumber?: string | null;
+  specialties: TicketCategory[];
+  expertiseTags: string[];
+  coverageDistricts: string[];
+};
 
 // ==========================================
 // STORE INTERFACE
@@ -25,6 +39,7 @@ interface ServiceStoreState {
   fetchOpportunities: () => Promise<void>;
   fetchMyJobs: () => Promise<void>;
   fetchProviderProfile: () => Promise<void>;
+  updateProviderProfile: (profile: UpdateProviderProfileInput) => Promise<ServiceProvider>;
   
   submitProposal: (
     ticketId: string,
@@ -156,6 +171,17 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
     }
   },
 
+  updateProviderProfile: async (profileData) => {
+    const provider = await api.put<ServiceProvider>('/providers/me', profileData);
+    const normalizedProvider = normalizeServiceProvider(provider);
+    set({
+      providerProfile: normalizedProvider,
+      currentProviderId: normalizedProvider.id,
+      currentProviderName: normalizedProvider.name,
+    });
+    return normalizedProvider;
+  },
+
   submitProposal: async (ticketId, proposalData) => {
     if (!canAccessJobs(get().providerProfile)) {
       throw new Error('Servis hesabı operasyon onayı bekliyor');
@@ -251,6 +277,7 @@ function normalizeServiceProvider(provider: ServiceProvider): ServiceProvider {
     isTrusted: provider.isTrusted ?? provider.trusted ?? false,
     specialties: provider.specialties ?? [],
     expertiseTags: provider.expertiseTags ?? [],
+    coverageDistricts: provider.coverageDistricts ?? [],
     documents: provider.documents ?? [],
   };
 }

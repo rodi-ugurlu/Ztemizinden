@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { api, type UploadResponse } from '@/lib/api';
+import { formatLocation } from '@/lib/locations';
 import { serviceSpecialtyLabel } from '@/lib/serviceExpertise';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useServiceStore, useTicketStats } from '@/store/useServiceStore';
@@ -103,6 +104,8 @@ export default function ServiceTeamPage() {
     email: serviceProviderProfile.email || user?.email || '-',
     phone: serviceProviderProfile.phone || '-',
     city: serviceProviderProfile.city || '-',
+    district: serviceProviderProfile.district || '',
+    coverageDistricts: serviceProviderProfile.coverageDistricts ?? [],
     specialties: serviceProviderProfile.specialties ?? [],
     expertiseTags: serviceProviderProfile.expertiseTags ?? [],
     rating: serviceProviderProfile.rating ?? 0,
@@ -178,7 +181,7 @@ export default function ServiceTeamPage() {
                 <CardTitle className="text-xl">{providerProfile.companyName}</CardTitle>
                 <CardDescription className="flex items-center gap-2 mt-1">
                   <MapPin className="w-3 h-3" />
-                  {providerProfile.city}
+                  {formatLocation(providerProfile.city, providerProfile.district) || providerProfile.city}
                 </CardDescription>
               </div>
               <div className="ml-auto flex items-center gap-1 bg-amber-50 px-3 py-1.5 rounded-full">
@@ -232,11 +235,27 @@ export default function ServiceTeamPage() {
                   <MapPin className="w-4 h-4 text-slate-500" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400">Şehir</p>
-                  <p className="font-medium text-slate-700">{providerProfile.city}</p>
+                  <p className="text-xs text-slate-400">Merkez lokasyon</p>
+                  <p className="font-medium text-slate-700">{formatLocation(providerProfile.city, providerProfile.district) || providerProfile.city}</p>
                 </div>
               </div>
             </div>
+
+            {providerProfile.coverageDistricts.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-red-600" />
+                  Hizmet Verilen İlçeler
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {providerProfile.coverageDistricts.map((district) => (
+                    <Badge key={district} variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 px-3 py-1">
+                      {district}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Specialties */}
             <div>

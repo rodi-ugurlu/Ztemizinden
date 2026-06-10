@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
-import { Wrench, LogOut, TicketCheck, Users } from 'lucide-react';
+import { Building2, Wrench, LogOut, TicketCheck, Users } from 'lucide-react';
 
 /**
  * ServiceLayout Component
@@ -65,6 +65,16 @@ export default function ServiceLayout() {
               }
             >
               <Users className="w-4 h-4" /> Ekip
+            </NavLink>
+            <NavLink
+              to="/service/profile"
+              className={({ isActive }) =>
+                `flex items-center gap-2 text-sm font-medium transition-colors ${
+                  isActive ? 'text-red-600' : 'text-slate-600 hover:text-slate-900'
+                }`
+              }
+            >
+              <Building2 className="w-4 h-4" /> Profil
             </NavLink>
 
             <div className="flex items-center gap-2 sm:gap-4 ml-auto lg:ml-4 border-l border-slate-200 pl-3 sm:pl-6">

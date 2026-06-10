@@ -104,7 +104,12 @@ function resolveUrl(endpoint: string) {
   if (/^https?:\/\//i.test(endpoint)) {
     return endpoint;
   }
-  if (endpoint.startsWith('/uploads/') && !endpoint.endsWith('/ticket-media') && !endpoint.endsWith('/provider-documents')) {
+  if (
+    endpoint.startsWith('/uploads/') &&
+    !endpoint.endsWith('/ticket-media') &&
+    !endpoint.endsWith('/provider-documents') &&
+    !endpoint.endsWith('/profile-logo')
+  ) {
     return `${API_ROOT_URL}${endpoint}`;
   }
   return `${BASE_URL}${endpoint}`;

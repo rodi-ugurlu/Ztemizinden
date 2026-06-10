@@ -7,6 +7,7 @@ import {
   serviceSpecialtyCategories,
   suggestedExpertiseTags,
 } from '@/lib/serviceExpertise';
+import { cities, districtsForCity, firstDistrictForCity, normalizeDistrictList } from '@/lib/locations';
 import type { TicketCategory } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import loginImage from './assets/login.svg';
@@ -62,30 +63,6 @@ const serviceDocumentFields = [
 ] as const;
 
 type ServiceDocumentKey = (typeof serviceDocumentFields)[number]['key'];
-
-const cities = [
-  'Adana',
-  'Ankara',
-  'Antalya',
-  'Bursa',
-  'Denizli',
-  'Diyarbakır',
-  'Eskişehir',
-  'Gaziantep',
-  'Hatay',
-  'İstanbul',
-  'İzmir',
-  'Kayseri',
-  'Kocaeli',
-  'Konya',
-  'Malatya',
-  'Manisa',
-  'Mersin',
-  'Sakarya',
-  'Samsun',
-  'Tekirdağ',
-  'Trabzon',
-];
 
 function FieldIcon({ name }: { name: IconName }) {
   return (
@@ -208,6 +185,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     email: '',
     phone: '',
     city: '',
+    district: '',
+    coverageDistricts: [] as string[],
     specialties: [] as TicketCategory[],
     expertiseTags: [] as string[],
     password: '',
@@ -239,6 +218,17 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       .filter((tag) => !normalizedQuery || normalizeSearchText(tag).includes(normalizedQuery))
       .slice(0, 10);
   }, [serviceExpertiseQuery, serviceRegister.expertiseTags]);
+  const serviceDistricts = useMemo(() => districtsForCity(serviceRegister.city), [serviceRegister.city]);
+
+  const handleServiceCityChange = (city: string) => {
+    const district = firstDistrictForCity(city);
+    setServiceRegister((prev) => ({
+      ...prev,
+      city,
+      district,
+      coverageDistricts: district ? [district] : [],
+    }));
+  };
 
   const toggleServiceSpecialty = (specialty: TicketCategory) => {
     setServiceRegister((prev) => ({
@@ -246,6 +236,15 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       specialties: prev.specialties.includes(specialty)
         ? prev.specialties.filter((item) => item !== specialty)
         : [...prev.specialties, specialty],
+    }));
+  };
+
+  const toggleServiceCoverageDistrict = (district: string) => {
+    setServiceRegister((prev) => ({
+      ...prev,
+      coverageDistricts: prev.coverageDistricts.includes(district)
+        ? prev.coverageDistricts.filter((item) => item !== district)
+        : [...prev.coverageDistricts, district],
     }));
   };
 
@@ -378,6 +377,16 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       return;
     }
 
+    if (!serviceRegister.city || !serviceRegister.district) {
+      setLocalError('Servis merkezi için il ve ilçe seçmelisiniz');
+      return;
+    }
+
+    if (serviceRegister.coverageDistricts.length === 0) {
+      setLocalError('Hizmet vereceğiniz en az bir ilçe seçmelisiniz');
+      return;
+    }
+
     const pendingExpertiseTag = normalizeExpertiseTag(serviceExpertiseQuery);
     const expertiseTags =
       pendingExpertiseTag && !serviceRegister.expertiseTags.includes(pendingExpertiseTag)
@@ -409,8 +418,10 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
         email: serviceRegister.email,
         phone: serviceRegister.phone,
         city: serviceRegister.city,
+        district: serviceRegister.district,
         specialties: serviceRegister.specialties,
         expertiseTags,
+        coverageDistricts: normalizeDistrictList(serviceRegister.coverageDistricts),
         password: serviceRegister.password,
       };
       const formData = new FormData();
@@ -801,12 +812,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                         name="city"
                         required
                         value={serviceRegister.city}
-                        onChange={(event) =>
-                          setServiceRegister((prev) => ({
-                            ...prev,
-                            city: event.target.value,
-                          }))
-                        }
+                        onChange={(event) => handleServiceCityChange(event.target.value)}
                       >
                         <option value="">Şehir</option>
                         {cities.map((city) => (
@@ -815,6 +821,49 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="animated-auth__input-field animated-auth__input-field--compact">
+                      <FieldIcon name="service" />
+                      <select
+                        name="district"
+                        required
+                        value={serviceRegister.district}
+                        disabled={!serviceRegister.city}
+                        onChange={(event) =>
+                          setServiceRegister((prev) => ({
+                            ...prev,
+                            district: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">İlçe</option>
+                        {serviceDistricts.map((district) => (
+                          <option value={district} key={district}>
+                            {district}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="animated-auth__specialty-block">
+                    <div className="animated-auth__section-label">Hizmet verilen ilçeler</div>
+                    <div className="animated-auth__specialty-grid">
+                      {serviceDistricts.map((district) => {
+                        const selected = serviceRegister.coverageDistricts.includes(district);
+                        return (
+                          <button
+                            key={district}
+                            type="button"
+                            className={`animated-auth__specialty-choice${
+                              selected ? ' animated-auth__specialty-choice--selected' : ''
+                            }`}
+                            aria-pressed={selected}
+                            onClick={() => toggleServiceCoverageDistrict(district)}
+                          >
+                            {district}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="animated-auth__specialty-block">

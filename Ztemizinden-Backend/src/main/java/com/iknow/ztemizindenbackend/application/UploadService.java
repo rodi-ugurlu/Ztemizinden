@@ -15,9 +15,12 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class UploadService {
     private static final Set<String> TICKET_MEDIA_PREFIXES = Set.of("image/", "video/");
+    private static final Set<String> PROFILE_LOGO_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+    private static final Set<String> PROFILE_LOGO_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".webp");
     private static final Set<String> PROVIDER_DOCUMENT_TYPES = Set.of("application/pdf", "image/jpeg", "image/png");
     private static final Set<String> PROVIDER_DOCUMENT_EXTENSIONS = Set.of(".pdf", ".jpg", ".jpeg", ".png");
     private static final long MAX_TICKET_MEDIA_BYTES = 50L * 1024L * 1024L;
+    private static final long MAX_PROFILE_LOGO_BYTES = 5L * 1024L * 1024L;
     private static final long MAX_PROVIDER_DOCUMENT_BYTES = 10L * 1024L * 1024L;
 
     private final Path rootDir;
@@ -36,6 +39,17 @@ public class UploadService {
             throw new IllegalArgumentException("Ticket media must be an image or video");
         }
         return store(file, "ticket-media", MAX_TICKET_MEDIA_BYTES);
+    }
+
+    public StoredUpload storeProfileLogo(MultipartFile file) {
+        String contentType = contentType(file);
+        if (!PROFILE_LOGO_TYPES.contains(contentType)) {
+            throw new IllegalArgumentException("Profile logo must be JPG, PNG, or WEBP");
+        }
+        if (!hasAllowedProfileLogoExtension(file)) {
+            throw new IllegalArgumentException("Profile logo file extension must be JPG, JPEG, PNG, or WEBP");
+        }
+        return store(file, "profile-logos", MAX_PROFILE_LOGO_BYTES);
     }
 
     public StoredUpload storeProviderDocument(MultipartFile file) {
@@ -96,6 +110,11 @@ public class UploadService {
     private boolean hasAllowedProviderDocumentExtension(MultipartFile file) {
         String fileName = safeFileName(file == null ? null : file.getOriginalFilename()).toLowerCase(Locale.ROOT);
         return PROVIDER_DOCUMENT_EXTENSIONS.stream().anyMatch(fileName::endsWith);
+    }
+
+    private boolean hasAllowedProfileLogoExtension(MultipartFile file) {
+        String fileName = safeFileName(file == null ? null : file.getOriginalFilename()).toLowerCase(Locale.ROOT);
+        return PROFILE_LOGO_EXTENSIONS.stream().anyMatch(fileName::endsWith);
     }
 
     public record StoredUpload(String originalFileName, String storedFileName, String contentType, long size, String url) {

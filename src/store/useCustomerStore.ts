@@ -62,6 +62,34 @@ export interface AssetBreadcrumbItem {
   depth: number;
 }
 
+export type CustomerStatus = 'ACTIVE' | 'SUSPENDED';
+
+export interface CustomerProfile {
+  id: string;
+  name: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  companyName: string;
+  city: string;
+  district: string;
+  logoUrl?: string | null;
+  address?: string | null;
+  taxNumber?: string | null;
+  status: CustomerStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type UpdateCustomerProfileInput = Pick<
+  CustomerProfile,
+  'contactName' | 'companyName' | 'phone' | 'city' | 'district'
+> & {
+  logoUrl?: string | null;
+  address?: string | null;
+  taxNumber?: string | null;
+};
+
 export type TicketCategory = 'Electric' | 'Mechanic' | 'Pneumatic' | 'Hydraulic' | 'General' | 'Software';
 export type TicketPriority = 'Low' | 'Medium' | 'High' | 'Critical';
 export type TicketStatus = 'OPEN' | 'OFFERED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
@@ -108,6 +136,9 @@ export interface Ticket {
   customerName: string;
   customerCompany: string;
   customerLocation: string;
+  customerCity?: string | null;
+  customerDistrict?: string | null;
+  customerAddress?: string | null;
   assetId: string;
   assetName?: string;
   assetTagNo?: string;
@@ -141,6 +172,9 @@ type CreateTicketInput = Pick<Ticket, 'assetId' | 'title' | 'description' | 'cat
   customerName?: string;
   customerCompany?: string;
   customerLocation?: string;
+  customerCity?: string;
+  customerDistrict?: string;
+  customerAddress?: string;
 };
 
 // ==========================================
@@ -151,12 +185,15 @@ interface CustomerStoreState {
   assets: Asset[];
   assetTree: AssetTreeNode[];
   tickets: Ticket[];
+  customerProfile: CustomerProfile | null;
   isLoading: boolean;
   error: string | null;
 
   // Actions
   fetchAssets: (customerId: string) => Promise<void>;
   fetchTickets: (customerId: string) => Promise<void>;
+  fetchCustomerProfile: () => Promise<CustomerProfile | null>;
+  updateCustomerProfile: (profile: UpdateCustomerProfileInput) => Promise<CustomerProfile>;
   
   // Asset Actions (flat)
   addAsset: (asset: CreateAssetInput) => Promise<Asset>;
@@ -194,6 +231,7 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
   assets: [],
   assetTree: [],
   tickets: [],
+  customerProfile: null,
   isLoading: false,
   error: null,
 
@@ -215,6 +253,24 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Talepler yuklenemedi', isLoading: false });
     }
+  },
+
+  fetchCustomerProfile: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const customerProfile = await api.get<CustomerProfile>('/customers/me');
+      set({ customerProfile, isLoading: false });
+      return customerProfile;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Müşteri profili yüklenemedi', isLoading: false });
+      return null;
+    }
+  },
+
+  updateCustomerProfile: async (profileData) => {
+    const customerProfile = await api.put<CustomerProfile>('/customers/me', profileData);
+    set({ customerProfile });
+    return customerProfile;
   },
 
   addAsset: async (assetData) => {
@@ -287,6 +343,9 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
       customerName: ticketData.customerName,
       customerCompany: ticketData.customerCompany ?? ticketData.customerName ?? 'Müşteri',
       customerLocation: ticketData.customerLocation ?? 'Belirtilmedi',
+      customerCity: ticketData.customerCity,
+      customerDistrict: ticketData.customerDistrict,
+      customerAddress: ticketData.customerAddress,
       assetId: ticketData.assetId,
       title: ticketData.title,
       description: ticketData.description,

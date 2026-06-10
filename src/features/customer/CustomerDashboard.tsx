@@ -18,14 +18,15 @@ import {
 } from 'lucide-react';
 
 export default function CustomerDashboard() {
-  const { assets, tickets, isLoading, error, fetchAssets, fetchTickets } = useCustomerStore();
+  const { assets, tickets, customerProfile, isLoading, error, fetchAssets, fetchTickets, fetchCustomerProfile } = useCustomerStore();
   const user = useAuthStore((state) => state.user);
 
   useEffect(() => {
     if (!user?.id) return;
     fetchAssets(user.id);
     fetchTickets(user.id);
-  }, [fetchAssets, fetchTickets, user?.id]);
+    fetchCustomerProfile();
+  }, [fetchAssets, fetchTickets, fetchCustomerProfile, user?.id]);
 
   const pendingOfferTickets = tickets.filter((ticket) =>
     ticket.offers.some((offer) => offer.status === 'PENDING')
@@ -96,7 +97,12 @@ export default function CustomerDashboard() {
               </div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Maintly</p>
-                <h1 className="text-2xl font-black tracking-normal sm:text-3xl">Müşteri Paneli</h1>
+                <h1 className="text-2xl font-black tracking-normal sm:text-3xl">
+                  {customerProfile?.companyName ?? 'Müşteri Paneli'}
+                </h1>
+                {customerProfile?.companyName && (
+                  <p className="mt-1 text-xs font-medium text-slate-300">Müşteri Paneli</p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-3">

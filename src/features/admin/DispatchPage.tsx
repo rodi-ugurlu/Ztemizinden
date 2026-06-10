@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatLocation } from '@/lib/locations';
 import {
   Select,
   SelectContent,
@@ -415,7 +416,9 @@ export default function DispatchPage() {
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <p className="text-sm font-medium text-slate-900">{match.provider.name}</p>
-                          <p className="text-xs text-slate-500">{match.provider.city} · ETA {match.etaMinutes} dk</p>
+                          <p className="text-xs text-slate-500">
+                            {formatLocation(match.provider.city, match.provider.district) || match.provider.city} · ETA {match.etaMinutes} dk
+                          </p>
                         </div>
                         <Badge className="bg-blue-50 text-blue-600 border-blue-200/30">
                           {match.score}/100
@@ -610,6 +613,9 @@ function RecommendedProvider({ match }: { match: ProviderMatch }) {
         <ShieldCheck className="w-4 h-4 text-red-600" />
         <span className="text-sm text-slate-700 truncate">{match.provider.name}</span>
       </div>
+      <p className="mt-1 truncate text-xs text-slate-500">
+        {formatLocation(match.provider.city, match.provider.district) || match.provider.city}
+      </p>
       <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
         <span>{match.score}/100</span>
         <span>ETA {match.etaMinutes} dk</span>

@@ -27,6 +27,22 @@ public class CustomerService {
     }
 
     @Transactional
+    public Customer updateProfileByEmail(String email, UpdateCustomerProfileCommand command) {
+        Customer customer = getByEmail(email);
+        customer.updateProfile(
+                command.contactName(),
+                command.companyName(),
+                command.phone(),
+                command.city(),
+                command.district(),
+                command.address(),
+                command.taxNumber(),
+                command.logoUrl()
+        );
+        return customer;
+    }
+
+    @Transactional
     public Customer create(CreateCustomerCommand command) {
         if (customerRepository.existsByEmailIgnoreCase(command.email())) {
             throw new IllegalStateException("Customer email is already registered");
@@ -37,7 +53,8 @@ public class CustomerService {
                 required(command.email(), "Customer email is required"),
                 required(command.phone(), "Customer phone is required"),
                 defaultValue(command.companyName(), command.name()),
-                defaultValue(command.city(), "Istanbul")
+                defaultValue(command.city(), "Istanbul"),
+                defaultValue(command.district(), "Belirtilmedi")
         );
 
         Customer savedCustomer = customerRepository.save(customer);
@@ -62,7 +79,20 @@ public class CustomerService {
             String phone,
             String companyName,
             String city,
+            String district,
             String password
+    ) {
+    }
+
+    public record UpdateCustomerProfileCommand(
+            String contactName,
+            String companyName,
+            String phone,
+            String city,
+            String district,
+            String address,
+            String taxNumber,
+            String logoUrl
     ) {
     }
 }

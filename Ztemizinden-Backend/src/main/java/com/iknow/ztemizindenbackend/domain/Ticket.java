@@ -44,6 +44,12 @@ public class Ticket extends BaseEntity {
     @Column(nullable = false)
     private String customerLocation;
 
+    private String customerCity;
+    private String customerDistrict;
+
+    @Column(length = 500)
+    private String customerAddress;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "asset_id", nullable = false)
     private Asset asset;
@@ -122,10 +128,31 @@ public class Ticket extends BaseEntity {
             TicketPriority priority,
             List<String> mediaUrls
     ) {
+        this(customerId, customerName, customerCompany, customerLocation, null, null, null, asset, title, description, category, priority, mediaUrls);
+    }
+
+    public Ticket(
+            String customerId,
+            String customerName,
+            String customerCompany,
+            String customerLocation,
+            String customerCity,
+            String customerDistrict,
+            String customerAddress,
+            Asset asset,
+            String title,
+            String description,
+            TicketCategory category,
+            TicketPriority priority,
+            List<String> mediaUrls
+    ) {
         this.customerId = customerId;
         this.customerName = customerName;
         this.customerCompany = customerCompany;
         this.customerLocation = customerLocation;
+        this.customerCity = customerCity;
+        this.customerDistrict = customerDistrict;
+        this.customerAddress = customerAddress;
         this.asset = asset;
         this.title = title;
         this.description = description;

@@ -31,6 +31,12 @@ public class UploadController {
         return UploadResponse.from(uploadService.storeTicketMedia(file), null);
     }
 
+    @PostMapping("/profile-logo")
+    @ResponseStatus(HttpStatus.CREATED)
+    public UploadResponse uploadProfileLogo(@RequestParam("file") MultipartFile file) {
+        return UploadResponse.from(uploadService.storeProfileLogo(file), null);
+    }
+
     @PostMapping("/provider-documents")
     @ResponseStatus(HttpStatus.CREATED)
     public UploadResponse uploadProviderDocument(

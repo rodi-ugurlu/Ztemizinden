@@ -53,7 +53,12 @@ public class DispatchService {
 
     private ProviderMatch score(ServiceProvider provider, Ticket ticket) {
         int score = 0;
-        int etaMinutes = provider.getCity().equalsIgnoreCase(cityOf(ticket.getCustomerLocation())) ? 60 : 180;
+        String ticketCity = locationCity(ticket);
+        String ticketDistrict = text(ticket.getCustomerDistrict());
+        boolean sameCity = normalizedEquals(provider.getCity(), ticketCity);
+        boolean sameDistrict = sameCity && normalizedEquals(provider.getDistrict(), ticketDistrict);
+        boolean coversDistrict = sameCity && containsNormalized(provider.getCoverageDistricts(), ticketDistrict);
+        int etaMinutes = coversDistrict ? 45 : sameDistrict ? 60 : sameCity ? 90 : 180;
 
         if (provider.getSpecialties().contains(ticket.getCategory())) {
             score += 45;
@@ -61,8 +66,12 @@ public class DispatchService {
 
         score += expertiseScore(provider, ticket);
 
-        if (provider.getCity().equalsIgnoreCase(cityOf(ticket.getCustomerLocation()))) {
+        if (coversDistrict) {
+            score += 35;
+        } else if (sameDistrict) {
             score += 25;
+        } else if (sameCity) {
+            score += 15;
         }
 
         if (provider.isTrusted()) {
@@ -83,6 +92,8 @@ public class DispatchService {
                 provider.getId(),
                 provider.getName(),
                 provider.getCity(),
+                provider.getDistrict(),
+                provider.getCoverageDistricts() == null ? List.of() : provider.getCoverageDistricts().stream().toList(),
                 Math.min(score, 100),
                 etaMinutes,
                 provider.isTrusted()
@@ -127,13 +138,35 @@ public class DispatchService {
         return location.split(",")[0].trim();
     }
 
+    private String locationCity(Ticket ticket) {
+        String city = text(ticket.getCustomerCity());
+        return city.isBlank() ? cityOf(ticket.getCustomerLocation()) : city;
+    }
+
+    private boolean normalizedEquals(String left, String right) {
+        return normalizeSearchText(left).equals(normalizeSearchText(right));
+    }
+
+    private boolean containsNormalized(Iterable<String> values, String needle) {
+        String normalizedNeedle = normalizeSearchText(needle);
+        if (normalizedNeedle.isBlank() || values == null) {
+            return false;
+        }
+        for (String value : values) {
+            if (normalizeSearchText(value).equals(normalizedNeedle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private String text(String value) {
         return value == null ? "" : value;
     }
 
     private String normalizeSearchText(String value) {
         return text(value)
-                .toLocaleLowerCase(Locale.forLanguageTag("tr-TR"))
+                .toLowerCase(Locale.forLanguageTag("tr-TR"))
                 .replace("ı", "i")
                 .replace("ğ", "g")
                 .replace("ü", "u")
@@ -149,6 +182,8 @@ public class DispatchService {
             String providerId,
             String providerName,
             String city,
+            String district,
+            List<String> coverageDistricts,
             int score,
             int etaMinutes,
             boolean trusted

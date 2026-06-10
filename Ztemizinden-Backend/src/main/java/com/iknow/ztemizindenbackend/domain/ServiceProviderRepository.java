@@ -8,18 +8,18 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ServiceProviderRepository extends JpaRepository<ServiceProvider, String> {
     @Override
-    @EntityGraph(attributePaths = {"specialties", "documents"})
+    @EntityGraph(attributePaths = {"specialties", "expertiseTags", "coverageDistricts", "documents"})
     List<ServiceProvider> findAll();
 
     @Override
-    @EntityGraph(attributePaths = {"specialties", "documents"})
+    @EntityGraph(attributePaths = {"specialties", "expertiseTags", "coverageDistricts", "documents"})
     Optional<ServiceProvider> findById(String id);
 
-    @EntityGraph(attributePaths = {"specialties", "documents"})
+    @EntityGraph(attributePaths = {"specialties", "expertiseTags", "coverageDistricts", "documents"})
     Optional<ServiceProvider> findByEmailIgnoreCase(String email);
 
     boolean existsByEmailIgnoreCase(String email);
 
-    @EntityGraph(attributePaths = {"specialties", "documents"})
+    @EntityGraph(attributePaths = {"specialties", "expertiseTags", "coverageDistricts", "documents"})
     List<ServiceProvider> findByStatusOrderByCreatedAtDesc(ProviderStatus status);
 }

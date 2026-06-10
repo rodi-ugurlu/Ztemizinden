@@ -24,6 +24,10 @@ export interface ServiceProvider {
   email: string;
   phone: string;
   city: string;
+  district: string;
+  logoUrl?: string | null;
+  address?: string | null;
+  taxNumber?: string | null;
   status: ProviderStatus;
   trusted: boolean;
   isTrusted: boolean;
@@ -31,6 +35,7 @@ export interface ServiceProvider {
   completedJobs: number;
   specialties: TicketCategory[];
   expertiseTags: string[];
+  coverageDistricts: string[];
   documents: ProviderDocument[];
   createdAt: string;
   updatedAt: string;
@@ -49,6 +54,8 @@ export interface GlobalTicket extends Omit<Ticket, 'status'> {
   responseTime: number;
   opsNote?: string;
   customerCity?: string;
+  customerDistrict?: string;
+  customerAddress?: string;
 }
 
 export interface GlobalMetrics {
@@ -77,6 +84,8 @@ interface BackendProviderMatch {
   providerId: string;
   providerName: string;
   city: string;
+  district?: string;
+  coverageDistricts?: string[];
   score: number;
   etaMinutes: number;
   trusted: boolean;
@@ -300,7 +309,9 @@ function normalizeTicket(ticket: Ticket): GlobalTicket {
     offers: ticket.offers ?? [],
     messages: ticket.messages ?? [],
     responseTime: minutesSince(ticket.createdAt),
-    customerCity: cityOf(ticket.customerLocation),
+    customerCity: ticket.customerCity ?? cityOf(ticket.customerLocation),
+    customerDistrict: ticket.customerDistrict ?? '',
+    customerAddress: ticket.customerAddress ?? ticket.customerLocation,
   };
 }
 
@@ -312,6 +323,7 @@ function normalizeProvider(provider: ServiceProvider): ServiceProvider {
     isTrusted: provider.isTrusted ?? provider.trusted ?? false,
     specialties: provider.specialties ?? [],
     expertiseTags: provider.expertiseTags ?? [],
+    coverageDistricts: provider.coverageDistricts ?? [],
     documents: provider.documents ?? [],
   };
 }
@@ -357,6 +369,7 @@ function normalizeProviderMatch(match: BackendProviderMatch, providers: ServiceP
       email: '',
       phone: '',
       city: match.city,
+      district: match.district ?? '',
       status: 'Verified',
       trusted: match.trusted,
       isTrusted: match.trusted,
@@ -364,6 +377,7 @@ function normalizeProviderMatch(match: BackendProviderMatch, providers: ServiceP
       completedJobs: 0,
       specialties: [],
       expertiseTags: [],
+      coverageDistricts: match.coverageDistricts ?? [],
       documents: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -372,6 +386,7 @@ function normalizeProviderMatch(match: BackendProviderMatch, providers: ServiceP
   const reasons = [
     `${match.score}/100 uygunluk`,
     `ETA ${match.etaMinutes} dk`,
+    ...(match.district ? [`Merkez: ${match.district}`] : []),
     ...(match.trusted ? ['Guvenilir servis'] : []),
   ];
 

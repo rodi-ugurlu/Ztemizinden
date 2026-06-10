@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { downloadProtectedFile } from '@/lib/api';
+import { formatLocation } from '@/lib/locations';
 import { normalizeSearchText, serviceSpecialtyLabel } from '@/lib/serviceExpertise';
 import {
   Dialog,
@@ -80,6 +81,8 @@ export default function ProviderManagement() {
     (provider) =>
       normalizeSearchText(provider.name).includes(normalizedSearchQuery) ||
       normalizeSearchText(provider.city).includes(normalizedSearchQuery) ||
+      normalizeSearchText(provider.district).includes(normalizedSearchQuery) ||
+      provider.coverageDistricts.some((district) => normalizeSearchText(district).includes(normalizedSearchQuery)) ||
       normalizeSearchText(provider.contactName).includes(normalizedSearchQuery) ||
       provider.specialties.some((specialty) =>
         normalizeSearchText(serviceSpecialtyLabel(specialty)).includes(normalizedSearchQuery)
@@ -196,7 +199,7 @@ export default function ProviderManagement() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="Firma adı, şehir, yetkili veya uzmanlık ara..."
+              placeholder="Firma adı, ilçe, şehir, yetkili veya uzmanlık ara..."
               className="pl-10 bg-slate-50 border-slate-200 text-slate-900"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -251,7 +254,7 @@ export default function ProviderManagement() {
                         </div>
                         <div className="text-xs text-slate-500 flex items-center gap-2">
                           <MapPin className="w-3 h-3" />
-                          {provider.city}
+                          {formatLocation(provider.city, provider.district) || provider.city}
                         </div>
                       </div>
                     </div>

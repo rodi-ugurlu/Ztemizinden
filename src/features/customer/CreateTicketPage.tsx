@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { useCustomerStore, type TicketCategory, type TicketPriority, type Asset } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { api, type UploadResponse } from '@/lib/api';
+import { formatLocation } from '@/lib/locations';
 import {
   ArrowLeft,
   X,
@@ -40,7 +41,7 @@ export default function CreateTicketPage() {
   const [searchParams] = useSearchParams();
   const preselectedAssetId = searchParams.get('assetId');
 
-  const { assets, createTicket, fetchAssets } = useCustomerStore();
+  const { assets, customerProfile, createTicket, fetchAssets, fetchCustomerProfile } = useCustomerStore();
   const user = useAuthStore((state) => state.user);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -81,8 +82,9 @@ export default function CreateTicketPage() {
   useEffect(() => {
     if (user?.id) {
       fetchAssets(user.id);
+      fetchCustomerProfile();
     }
-  }, [fetchAssets, user?.id]);
+  }, [fetchAssets, fetchCustomerProfile, user?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,11 +95,17 @@ export default function CreateTicketPage() {
 
     try {
       const mediaUrls = await Promise.all(uploadedFiles.map(uploadTicketMedia));
+      const ticketAddress = selectedAsset?.location || customerProfile?.address || '';
+      const ticketCity = customerProfile?.city || '';
+      const ticketDistrict = customerProfile?.district || '';
       await createTicket({
         customerId: user?.id,
-        customerName: user?.name,
-        customerCompany: user?.name,
-        customerLocation: selectedAsset?.location || 'Belirtilmedi',
+        customerName: customerProfile?.contactName || user?.name,
+        customerCompany: customerProfile?.companyName || user?.name,
+        customerLocation: formatLocation(ticketCity, ticketDistrict, ticketAddress) || 'Belirtilmedi',
+        customerCity: ticketCity,
+        customerDistrict: ticketDistrict,
+        customerAddress: ticketAddress,
         assetId: formData.assetId,
         title: formData.title,
         description: formData.description || formData.title,

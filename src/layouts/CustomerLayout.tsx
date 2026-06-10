@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
-import { Home, LogOut } from 'lucide-react';
+import { Building2, Home, LogOut } from 'lucide-react';
 
 /**
  * CustomerLayout Component
@@ -60,6 +60,14 @@ export default function CustomerLayout() {
               }
             >
               Talepler
+            </NavLink>
+            <NavLink
+              to="/customer/profile"
+              className={({ isActive }) =>
+                `flex items-center gap-2 text-sm font-medium transition-colors ${isActive ? 'text-red-600' : 'text-slate-600 hover:text-slate-900'}`
+              }
+            >
+              <Building2 className="w-4 h-4" /> Profil
             </NavLink>
 
             <div className="flex items-center gap-2 sm:gap-4 ml-auto lg:ml-4 border-l border-slate-200 pl-3 sm:pl-6">

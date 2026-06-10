@@ -4,6 +4,7 @@ import com.iknow.ztemizindenbackend.application.CurrentUser;
 import com.iknow.ztemizindenbackend.application.ProviderService;
 import com.iknow.ztemizindenbackend.application.ProviderService.AddDocumentCommand;
 import com.iknow.ztemizindenbackend.application.ProviderService.CreateProviderCommand;
+import com.iknow.ztemizindenbackend.application.ProviderService.UpdateProviderProfileCommand;
 import com.iknow.ztemizindenbackend.application.UploadService;
 import com.iknow.ztemizindenbackend.application.UploadService.StoredUpload;
 import com.iknow.ztemizindenbackend.domain.BadRequestException;
@@ -56,6 +57,28 @@ public class ProviderController {
         return ProviderResponse.from(providerService.getByEmail(email));
     }
 
+    @PutMapping("/me")
+    public ProviderResponse updateMe(@Valid @RequestBody UpdateProviderProfileRequest request) {
+        String email = currentUser.email();
+        if (email == null) {
+            throw new BadRequestException("Provider email is missing from token");
+        }
+        ServiceProvider provider = providerService.updateProfileByEmail(email, new UpdateProviderProfileCommand(
+                request.name(),
+                request.contactName(),
+                request.phone(),
+                request.city(),
+                request.district(),
+                request.address(),
+                request.taxNumber(),
+                request.logoUrl(),
+                request.specialties().stream().map(ApiEnums::ticketCategory).collect(Collectors.toSet()),
+                request.expertiseTags() == null ? Set.of() : request.expertiseTags(),
+                request.coverageDistricts() == null ? Set.of() : request.coverageDistricts()
+        ));
+        return ProviderResponse.from(provider);
+    }
+
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public ProviderResponse create(@Valid @RequestBody CreateProviderRequest request) {
@@ -89,8 +112,10 @@ public class ProviderController {
                 request.email(),
                 request.phone(),
                 request.city(),
+                request.district(),
                 request.specialties().stream().map(ApiEnums::ticketCategory).collect(Collectors.toSet()),
                 request.expertiseTags() == null ? Set.of() : request.expertiseTags(),
+                request.coverageDistricts() == null ? Set.of() : request.coverageDistricts(),
                 request.password()
         ));
     }
@@ -158,9 +183,26 @@ public class ProviderController {
             @Email @NotBlank String email,
             @NotBlank String phone,
             @NotBlank String city,
+            @NotBlank String district,
             @NotEmpty Set<String> specialties,
             Set<String> expertiseTags,
+            Set<String> coverageDistricts,
             @NotBlank String password
+    ) {
+    }
+
+    public record UpdateProviderProfileRequest(
+            @NotBlank String name,
+            @NotBlank String contactName,
+            @NotBlank String phone,
+            @NotBlank String city,
+            @NotBlank String district,
+            String address,
+            String taxNumber,
+            String logoUrl,
+            @NotEmpty Set<String> specialties,
+            Set<String> expertiseTags,
+            Set<String> coverageDistricts
     ) {
     }
 
@@ -177,6 +219,10 @@ public class ProviderController {
             String email,
             String phone,
             String city,
+            String district,
+            String logoUrl,
+            String address,
+            String taxNumber,
             ProviderStatus status,
             boolean trusted,
             boolean isTrusted,
@@ -184,6 +230,7 @@ public class ProviderController {
             int completedJobs,
             Set<String> specialties,
             Set<String> expertiseTags,
+            Set<String> coverageDistricts,
             List<ProviderDocumentResponse> documents,
             Instant createdAt,
             Instant updatedAt
@@ -196,6 +243,10 @@ public class ProviderController {
                     provider.getEmail(),
                     provider.getPhone(),
                     provider.getCity(),
+                    provider.getDistrict(),
+                    provider.getLogoUrl(),
+                    provider.getAddress(),
+                    provider.getTaxNumber(),
                     provider.getStatus(),
                     provider.isTrusted(),
                     provider.isTrusted(),
@@ -203,6 +254,7 @@ public class ProviderController {
                     provider.getCompletedJobs(),
                     provider.getSpecialties().stream().map(ApiEnums::display).collect(Collectors.toSet()),
                     provider.getExpertiseTags() == null ? Set.of() : provider.getExpertiseTags(),
+                    provider.getCoverageDistricts() == null ? Set.of() : provider.getCoverageDistricts(),
                     provider.getDocuments().stream().map(ProviderDocumentResponse::from).toList(),
                     provider.getCreatedAt(),
                     provider.getUpdatedAt()
