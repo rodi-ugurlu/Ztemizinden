@@ -4,7 +4,9 @@ import com.iknow.ztemizindenbackend.application.TicketService;
 import com.iknow.ztemizindenbackend.application.TicketService.AddOfferCommand;
 import com.iknow.ztemizindenbackend.application.TicketService.CreateTicketCommand;
 import com.iknow.ztemizindenbackend.application.TicketService.DisputeBillingCommand;
+import com.iknow.ztemizindenbackend.application.TicketService.MessageResult;
 import com.iknow.ztemizindenbackend.application.TicketService.SubmitBillingCommand;
+import com.iknow.ztemizindenbackend.application.TicketMessageBroadcaster;
 import com.iknow.ztemizindenbackend.application.CurrentUser;
 import com.iknow.ztemizindenbackend.domain.Enums.BillingStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferStatus;
@@ -20,6 +22,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -38,29 +41,33 @@ import org.springframework.web.bind.annotation.RestController;
 public class TicketController {
     private final TicketService ticketService;
     private final CurrentUser currentUser;
+    private final TicketMessageBroadcaster ticketMessageBroadcaster;
 
     @GetMapping
     public List<TicketResponse> list(@RequestParam String customerId) {
-        return ticketService.listForCustomer(currentUser.customerId(customerId)).stream().map(TicketResponse::from).toList();
+        return ticketService.listForCustomer(currentUser.customerId(customerId)).stream().map(TicketResponse::fromForCustomer).toList();
     }
 
     @GetMapping("/opportunities")
     public List<TicketResponse> listOpportunities(@RequestParam String providerId) {
-        return ticketService.listOpportunities(currentUser.providerId(providerId)).stream().map(TicketResponse::from).toList();
+        return ticketService.listOpportunities(currentUser.providerId(providerId)).stream().map(TicketResponse::fromForService).toList();
     }
 
     @GetMapping("/provider")
     public List<TicketResponse> listForProvider(@RequestParam String providerId) {
-        return ticketService.listForProvider(currentUser.providerId(providerId)).stream().map(TicketResponse::from).toList();
+        return ticketService.listForProvider(currentUser.providerId(providerId)).stream().map(TicketResponse::fromForService).toList();
     }
 
     @GetMapping("/{ticketId}")
     public TicketResponse get(@PathVariable String ticketId) {
+        if (currentUser.isService()) {
+            return TicketResponse.fromForService(ticketService.getForProvider(ticketId, currentUser.providerId(null)));
+        }
+
         Ticket ticket = ticketService.get(ticketId);
         if (currentUser.isCustomer()) {
             currentUser.requireCustomerTicket(ticket);
-        } else if (currentUser.isService() && ticket.getAssignedProviderId() != null) {
-            currentUser.requireProviderTicket(ticket);
+            return TicketResponse.fromForCustomer(ticket);
         }
         return TicketResponse.from(ticket);
     }
@@ -83,7 +90,7 @@ public class TicketController {
                 ApiEnums.ticketPriority(request.priority()),
                 request.mediaUrls() == null ? List.of() : request.mediaUrls()
         ));
-        return TicketResponse.from(ticket);
+        return TicketResponse.fromForCustomer(ticket);
     }
 
     @PostMapping("/{ticketId}/offers")
@@ -103,25 +110,25 @@ public class TicketController {
     @PostMapping("/{ticketId}/offers/{offerId}/accept")
     public TicketResponse acceptOffer(@PathVariable String ticketId, @PathVariable String offerId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.from(ticketService.acceptOffer(ticketId, offerId));
+        return TicketResponse.fromForCustomer(ticketService.acceptOffer(ticketId, offerId));
     }
 
     @PostMapping("/{ticketId}/offers/{offerId}/reject")
     public TicketResponse rejectOffer(@PathVariable String ticketId, @PathVariable String offerId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.from(ticketService.rejectOffer(ticketId, offerId));
+        return TicketResponse.fromForCustomer(ticketService.rejectOffer(ticketId, offerId));
     }
 
     @PostMapping("/{ticketId}/cancel")
     public TicketResponse cancel(@PathVariable String ticketId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.from(ticketService.cancel(ticketId));
+        return TicketResponse.fromForCustomer(ticketService.cancel(ticketId));
     }
 
     @PostMapping("/{ticketId}/billing")
     public TicketResponse submitBilling(@PathVariable String ticketId, @Valid @RequestBody SubmitBillingRequest request) {
         currentUser.requireProviderTicket(ticketService.get(ticketId));
-        return TicketResponse.from(ticketService.submitFinalBilling(
+        return TicketResponse.fromForService(ticketService.submitFinalBilling(
                 ticketId,
                 new SubmitBillingCommand(request.actualCost(), request.notes())
         ));
@@ -130,13 +137,13 @@ public class TicketController {
     @PostMapping("/{ticketId}/billing/approve")
     public TicketResponse approveBilling(@PathVariable String ticketId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.from(ticketService.approveFinalBilling(ticketId));
+        return TicketResponse.fromForCustomer(ticketService.approveFinalBilling(ticketId));
     }
 
     @PostMapping("/{ticketId}/billing/dispute")
     public TicketResponse disputeBilling(@PathVariable String ticketId, @Valid @RequestBody DisputeBillingRequest request) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.from(ticketService.disputeFinalBilling(
+        return TicketResponse.fromForCustomer(ticketService.disputeFinalBilling(
                 ticketId,
                 new DisputeBillingCommand(request.reason())
         ));
@@ -147,19 +154,37 @@ public class TicketController {
         Ticket ticket = ticketService.get(ticketId);
         if (currentUser.isService()) {
             currentUser.requireProviderTicket(ticket);
-            return TicketResponse.from(ticketService.addServiceMessage(
+            MessageResult result = ticketService.addServiceMessage(
                     ticketId,
                     currentUser.displayName(ticket.getAssignedProviderName()),
                     request.body()
-            ));
+            );
+            ticketMessageBroadcaster.publish(result.message());
+            return TicketResponse.fromForService(result.ticket());
         }
 
         currentUser.requireCustomerTicket(ticket);
-        return TicketResponse.from(ticketService.addCustomerMessage(
+        MessageResult result = ticketService.addCustomerMessage(
                 ticketId,
                 currentUser.displayName(ticket.getCustomerName()),
                 request.body()
-        ));
+        );
+        ticketMessageBroadcaster.publish(result.message());
+        return TicketResponse.fromForCustomer(result.ticket());
+    }
+
+    @PostMapping("/{ticketId}/messages/read")
+    public TicketResponse markMessagesRead(@PathVariable String ticketId) {
+        if (currentUser.isService()) {
+            ticketService.getForProvider(ticketId, currentUser.providerId(null));
+            return TicketResponse.fromForService(ticketService.markMessagesReadByService(ticketId));
+        }
+
+        Ticket ticket = ticketService.get(ticketId);
+        if (currentUser.isCustomer()) {
+            currentUser.requireCustomerTicket(ticket);
+        }
+        return TicketResponse.fromForCustomer(ticketService.markMessagesReadByCustomer(ticketId));
     }
 
     public record CreateTicketRequest(
@@ -228,11 +253,29 @@ public class TicketController {
             BillingStatus billingStatus,
             String finalBillingNotes,
             List<OfferResponse> offers,
-            List<MessageResponse> messages,
+            List<TicketMessagePayload> messages,
+            int unreadMessageCount,
+            TicketMessagePayload lastMessage,
             Instant createdAt,
             Instant updatedAt
     ) {
         static TicketResponse from(Ticket ticket) {
+            return from(ticket, Viewer.ADMIN);
+        }
+
+        static TicketResponse fromForCustomer(Ticket ticket) {
+            return from(ticket, Viewer.CUSTOMER);
+        }
+
+        static TicketResponse fromForService(Ticket ticket) {
+            return from(ticket, Viewer.SERVICE);
+        }
+
+        private static TicketResponse from(Ticket ticket, Viewer viewer) {
+            List<TicketMessagePayload> messages = scopedMessages(ticket).stream()
+                    .map(TicketMessagePayload::from)
+                    .toList();
+
             return new TicketResponse(
                     ticket.getId(),
                     ticket.getCustomerId(),
@@ -262,16 +305,60 @@ public class TicketController {
                     ticket.getFinalActualCost(),
                     ticket.getBillingStatus(),
                     ticket.getFinalBillingNotes(),
-                    ticket.getOffers().stream().map(OfferResponse::from).toList(),
-                    ticket.getMessages().stream().map(MessageResponse::from).toList(),
+                    ticket.getOffers().stream()
+                            .filter(offer -> ticket.getId().equals(offer.getTicket().getId()))
+                            .map(OfferResponse::from)
+                            .toList(),
+                    messages,
+                    unreadMessageCount(ticket, viewer),
+                    latestConversationMessage(ticket),
                     ticket.getCreatedAt(),
                     ticket.getUpdatedAt()
             );
+        }
+
+        private static List<TicketMessage> scopedMessages(Ticket ticket) {
+            return ticket.getMessages().stream()
+                    .filter(message -> ticket.getId().equals(message.getTicket().getId()))
+                    .sorted(Comparator
+                            .comparing(TicketMessage::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                            .thenComparing(TicketMessage::getSenderRole, Comparator.nullsLast(String::compareTo))
+                            .thenComparing(TicketMessage::getSenderName, Comparator.nullsLast(String::compareTo))
+                            .thenComparing(TicketMessage::getId, Comparator.nullsLast(String::compareTo)))
+                    .toList();
+        }
+
+        private static int unreadMessageCount(Ticket ticket, Viewer viewer) {
+            return (int) scopedMessages(ticket).stream()
+                    .filter(message -> switch (viewer) {
+                        case CUSTOMER -> message.isUnreadForCustomer();
+                        case SERVICE -> message.isUnreadForService();
+                        case ADMIN -> false;
+                    })
+                    .count();
+        }
+
+        private static TicketMessagePayload latestConversationMessage(Ticket ticket) {
+            return scopedMessages(ticket).stream()
+                    .filter(message -> !"system".equals(message.getSenderRole()))
+                    .max(Comparator.comparing(
+                            TicketMessage::getCreatedAt,
+                            Comparator.nullsFirst(Comparator.naturalOrder())
+                    ))
+                    .map(TicketMessagePayload::from)
+                    .orElse(null);
+        }
+
+        private enum Viewer {
+            ADMIN,
+            CUSTOMER,
+            SERVICE
         }
     }
 
     public record OfferResponse(
             String id,
+            String ticketId,
             String providerId,
             String providerName,
             OfferType type,
@@ -285,6 +372,7 @@ public class TicketController {
         static OfferResponse from(TicketOffer offer) {
             return new OfferResponse(
                     offer.getId(),
+                    offer.getTicket().getId(),
                     offer.getProviderId(),
                     offer.getProviderName(),
                     offer.getType(),
@@ -298,23 +386,4 @@ public class TicketController {
         }
     }
 
-    public record MessageResponse(
-            String id,
-            String ticketId,
-            String senderRole,
-            String senderName,
-            String body,
-            Instant createdAt
-    ) {
-        static MessageResponse from(TicketMessage message) {
-            return new MessageResponse(
-                    message.getId(),
-                    message.getTicket().getId(),
-                    message.getSenderRole(),
-                    message.getSenderName(),
-                    message.getBody(),
-                    message.getCreatedAt()
-            );
-        }
-    }
 }

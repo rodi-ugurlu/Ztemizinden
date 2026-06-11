@@ -1,6 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  DashboardMessagePanel,
+  DashboardMessageToast,
+  type DashboardMessageToastData,
+} from '@/components/messages/DashboardMessagePanel';
+import { subscribeToTicketMessages } from '@/lib/realtime';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useServiceStore } from '@/store/useServiceStore';
 import type { Ticket } from '@/store/useCustomerStore';
@@ -28,10 +34,14 @@ export default function ServiceDashboard() {
     fetchOpportunities,
     fetchMyJobs,
     resolveProviderSession,
+    receiveTicketMessage,
     isLoading,
     error,
   } = useServiceStore();
   const user = useAuthStore((state) => state.user);
+  const seenMessageIdsRef = useRef(new Set<string>());
+  const ticketMetaRef = useRef(new Map<string, { title: string }>());
+  const [messageToast, setMessageToast] = useState<DashboardMessageToastData | null>(null);
   const providerStatus = providerProfile?.status;
   const isPendingProvider = providerStatus === 'Pending Verification';
   const isSuspendedProvider = providerStatus === 'Suspended';
@@ -45,6 +55,47 @@ export default function ServiceDashboard() {
     void fetchOpportunities();
     void fetchMyJobs();
   }, [currentProviderId, fetchOpportunities, fetchMyJobs]);
+
+  useEffect(() => {
+    myJobs.forEach((ticket) => {
+      ticketMetaRef.current.set(ticket.id, { title: ticket.title });
+      (ticket.messages ?? []).forEach((message) => seenMessageIdsRef.current.add(message.id));
+    });
+  }, [myJobs]);
+
+  const subscriptionKey = useMemo(
+    () =>
+      myJobs
+        .filter((ticket) => ticket.status !== 'CANCELLED')
+        .map((ticket) => ticket.id)
+        .sort()
+        .join('|'),
+    [myJobs]
+  );
+
+  useEffect(() => {
+    if (!subscriptionKey) return;
+    const subscriptions = subscriptionKey.split('|').map((ticketId) =>
+      subscribeToTicketMessages(ticketId, (incomingMessage) => {
+        if (seenMessageIdsRef.current.has(incomingMessage.id)) return;
+        seenMessageIdsRef.current.add(incomingMessage.id);
+        receiveTicketMessage(incomingMessage);
+
+        if (incomingMessage.senderRole === 'customer') {
+          const ticketMeta = ticketMetaRef.current.get(incomingMessage.ticketId);
+          setMessageToast({
+            ticketId: incomingMessage.ticketId,
+            title: ticketMeta?.title ?? 'Servis talebi',
+            senderName: incomingMessage.senderName,
+            body: incomingMessage.body,
+            path: `/service/tickets?ticketId=${encodeURIComponent(incomingMessage.ticketId)}`,
+          });
+        }
+      })
+    );
+
+    return () => subscriptions.forEach((unsubscribe) => unsubscribe());
+  }, [receiveTicketMessage, subscriptionKey]);
 
   const visibleTickets = uniqueTickets([...opportunities, ...myJobs]);
   const proposedTickets = visibleTickets.filter((ticket) => hasProviderOffer(ticket, currentProviderId));
@@ -164,105 +215,111 @@ export default function ServiceDashboard() {
         }}
       />
 
-      <div className="relative mx-auto flex min-h-[calc(100vh-145px)] w-full max-w-7xl flex-col gap-7 p-4 sm:p-6 lg:p-8">
-        <section className="overflow-hidden rounded-lg border border-emerald-900 bg-emerald-900 shadow-xl">
-          <div className="flex flex-col gap-5 px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between lg:px-7">
-            <div className="flex items-center gap-4">
-              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/10 shadow-lg">
-                <BriefcaseBusiness className="h-5 w-5" />
+      <DashboardMessageToast toast={messageToast} tone="green" onClose={() => setMessageToast(null)} />
+
+      <div className="relative mx-auto grid min-h-[calc(100vh-145px)] w-full max-w-[1500px] grid-cols-1 gap-7 p-4 sm:p-6 lg:p-8 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-7">
+          <section className="overflow-hidden rounded-lg border border-emerald-900 bg-emerald-900 shadow-xl">
+            <div className="flex flex-col gap-5 px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between lg:px-7">
+              <div className="flex items-center gap-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/10 shadow-lg">
+                  <BriefcaseBusiness className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-100">Maintly</p>
+                  <h1 className="text-2xl font-black tracking-normal sm:text-3xl">Servis Firması Paneli</h1>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-100">Maintly</p>
-                <h1 className="text-2xl font-black tracking-normal sm:text-3xl">Servis Firması Paneli</h1>
+              <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/10 px-4 py-3">
+                <RadioTower className="h-4 w-4 text-emerald-100" />
+                <div className="text-right">
+                  <p className="text-xs text-emerald-100">Maintenance 6.0</p>
+                  <p className="text-sm font-semibold text-white">Canlı servis akışı</p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/10 px-4 py-3">
-              <RadioTower className="h-4 w-4 text-emerald-100" />
-              <div className="text-right">
-                <p className="text-xs text-emerald-100">Maintenance 6.0</p>
-                <p className="text-sm font-semibold text-white">Canlı servis akışı</p>
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-          <ModuleCard
-            tone="green"
-            eyebrow={`${opportunities.length} yeni kayıt`}
-            title="Yeni Gelen Talepler"
-            description="Fabrikalardan yeni gelen servis talepleri"
-            icon={Inbox}
-            to="/service/tickets"
-            actionLabel="Talepleri Aç"
-          />
+          <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+            <ModuleCard
+              tone="green"
+              eyebrow={`${opportunities.length} yeni kayıt`}
+              title="Yeni Gelen Talepler"
+              description="Fabrikalardan yeni gelen servis talepleri"
+              icon={Inbox}
+              to="/service/tickets"
+              actionLabel="Talepleri Aç"
+            />
 
-          <ModuleCard
-            tone="blue"
-            eyebrow={`${proposedTickets.length} teklif`}
-            title="Teklif Verilen Talepler"
-            description="Teklif gönderilmiş, onay bekleyen işler"
-            icon={Send}
-            to="/service/tickets"
-            actionLabel="Teklifleri Gör"
-          />
+            <ModuleCard
+              tone="blue"
+              eyebrow={`${proposedTickets.length} teklif`}
+              title="Teklif Verilen Talepler"
+              description="Teklif gönderilmiş, onay bekleyen işler"
+              icon={Send}
+              to="/service/tickets"
+              actionLabel="Teklifleri Gör"
+            />
 
-          <ModuleCard
-            tone="red"
-            eyebrow={`${acceptedTickets.length} kabul`}
-            title="Kabul Edilen Talepler"
-            description="Fabrika tarafından kabul edilen teklifler"
-            icon={FileCheck2}
-            to="/service/tickets"
-            actionLabel="İşleri Aç"
-          />
+            <ModuleCard
+              tone="red"
+              eyebrow={`${acceptedTickets.length} kabul`}
+              title="Kabul Edilen Talepler"
+              description="Fabrika tarafından kabul edilen teklifler"
+              icon={FileCheck2}
+              to="/service/tickets"
+              actionLabel="İşleri Aç"
+            />
 
-        </section>
+          </section>
 
-        <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.28fr]">
-          <ModuleCard
-            tone="amber"
-            eyebrow={`${openBillingJobs.length} açık süreç`}
-            title="Hakediş Verilen Açık İşler"
-            description="Devam eden işler, hakediş gönderilen ve onay/ödeme bekleyen işler"
-            icon={HandCoins}
-            to="/service/tickets"
-            actionLabel="Açık İşleri Gör"
-            large
-          />
+          <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.28fr]">
+            <ModuleCard
+              tone="amber"
+              eyebrow={`${openBillingJobs.length} açık süreç`}
+              title="Hakediş Verilen Açık İşler"
+              description="Devam eden işler, hakediş gönderilen ve onay/ödeme bekleyen işler"
+              icon={HandCoins}
+              to="/service/tickets"
+              actionLabel="Açık İşleri Gör"
+              large
+            />
 
-          <ModuleCard
-            tone="softGreen"
-            eyebrow={`${closedBillingJobs.length} arşiv kayıt`}
-            title="Hakediş Verilen Kapanan İşler"
-            description="Arşiv, tamamlanan işler, ödemeler ve belgeler"
-            icon={Archive}
-            to="/service/tickets"
-            actionLabel="Arşivi Aç"
-            large
-          />
-        </section>
+            <ModuleCard
+              tone="softGreen"
+              eyebrow={`${closedBillingJobs.length} arşiv kayıt`}
+              title="Hakediş Verilen Kapanan İşler"
+              description="Arşiv, tamamlanan işler, ödemeler ve belgeler"
+              icon={Archive}
+              to="/service/tickets"
+              actionLabel="Arşivi Aç"
+              large
+            />
+          </section>
 
-        <section className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <MetricPill
-            tone="green"
-            value={incomingThisMonth}
-            label="Bu ay toplam gelen arıza bildirimi"
-            icon={ClipboardList}
-          />
-          <MetricPill
-            tone="blue"
-            value={offersThisMonth}
-            label="Bu ay toplam teklif verdiğim işler"
-            icon={Send}
-          />
-          <MetricPill
-            tone="green"
-            value={closedThisMonth}
-            label="Bu ay kapatılan işler"
-            icon={CheckCircle2}
-          />
-        </section>
+          <section className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            <MetricPill
+              tone="green"
+              value={incomingThisMonth}
+              label="Bu ay toplam gelen arıza bildirimi"
+              icon={ClipboardList}
+            />
+            <MetricPill
+              tone="blue"
+              value={offersThisMonth}
+              label="Bu ay toplam teklif verdiğim işler"
+              icon={Send}
+            />
+            <MetricPill
+              tone="green"
+              value={closedThisMonth}
+              label="Bu ay kapatılan işler"
+              icon={CheckCircle2}
+            />
+          </section>
+        </div>
+
+        <DashboardMessagePanel tickets={myJobs} role="service" toBasePath="/service/tickets" tone="green" />
       </div>
     </div>
   );

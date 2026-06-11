@@ -28,10 +28,34 @@ public class TicketMessage extends BaseEntity {
     @Column(nullable = false, length = 2_000)
     private String body;
 
+    @Column(nullable = false)
+    private boolean readByCustomer;
+
+    @Column(nullable = false)
+    private boolean readByService;
+
     TicketMessage(Ticket ticket, String senderRole, String senderName, String body) {
         this.ticket = ticket;
         this.senderRole = senderRole;
         this.senderName = senderName;
         this.body = body;
+        this.readByCustomer = "customer".equals(senderRole) || "system".equals(senderRole);
+        this.readByService = "service".equals(senderRole) || "system".equals(senderRole);
+    }
+
+    public void markReadByCustomer() {
+        readByCustomer = true;
+    }
+
+    public void markReadByService() {
+        readByService = true;
+    }
+
+    public boolean isUnreadForCustomer() {
+        return "service".equals(senderRole) && !readByCustomer;
+    }
+
+    public boolean isUnreadForService() {
+        return "customer".equals(senderRole) && !readByService;
     }
 }

@@ -12,6 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TicketCategoryIcon, TicketPriorityBadge, TicketStatusBadge } from '@/components/domain/ticketBadges';
+import { TicketMessageThread } from '@/components/messages/TicketMessageThread';
+import { ticketCategoryDescription } from '@/components/domain/ticketMeta';
 import {
   useServiceStore,
 } from '@/store/useServiceStore';
@@ -21,10 +24,6 @@ import FinalBillingDialog from './FinalBillingDialog';
 import {
   Building2,
   MapPin,
-  Wrench,
-  Zap,
-  Droplets,
-  Settings,
   Package,
   ImageIcon,
   Video,
@@ -66,6 +65,7 @@ export default function TicketDetailDrawer({
   const [estimatedCost, setEstimatedCost] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [proposalError, setProposalError] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
   const [isMessageSending, setIsMessageSending] = useState(false);
@@ -89,21 +89,18 @@ export default function TicketDetailDrawer({
     e.preventDefault();
 
     setIsSubmitting(true);
-
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    setProposalError(null);
 
     try {
-      await submitProposal(ticket.id, {
+      await submitProposal(activeTicket.id, {
         type: proposalType,
         estimatedCost: proposalType === 'FIXED_PRICE' ? parseFloat(estimatedCost) || 0 : 0,
         eta: 'Bugün içinde',
         message,
       });
       setActiveTab('my-proposal');
-    } catch (e) {
-      console.error('Failed to submit proposal:', e);
-      alert('Teklif gönderilemedi. Lütfen tekrar deneyin.');
+    } catch (error) {
+      setProposalError(error instanceof Error ? error.message : 'Teklif gönderilemedi. Lütfen tekrar deneyin.');
     } finally {
       setIsSubmitting(false);
     }
@@ -126,29 +123,6 @@ export default function TicketDetailDrawer({
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'Critical':
-        return 'bg-red-50 text-red-600 border-red-200/30';
-      case 'High':
-        return 'bg-orange-50 text-orange-600 border-orange-200/30';
-      case 'Medium':
-        return 'bg-amber-50 text-amber-600 border-amber-200/30';
-      default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
-    }
-  };
-
-  const priorityLabel = (priority: string) => {
-    const labels: Record<string, string> = { Critical: 'Kritik', High: 'Yüksek', Medium: 'Orta', Low: 'Düşük' };
-    return labels[priority] || priority;
-  };
-
-  const statusLabel = (status: string) => {
-    const labels: Record<string, string> = { OPEN: 'Açık', OFFERED: 'Teklif Verildi', IN_PROGRESS: 'Devam Ediyor', RESOLVED: 'Çözüldü', CLOSED: 'Kapandı', CANCELLED: 'İptal' };
-    return labels[status] || status;
-  };
-
   return (
     <>
     <Sheet open={isOpen} onOpenChange={onClose}>
@@ -163,23 +137,13 @@ export default function TicketDetailDrawer({
                 <span className="text-xs font-mono text-slate-500">
                   #{ticketCode}
                 </span>
-                <Badge
-                  variant="outline"
-                  className={`${getPriorityColor(activeTicket.priority)} text-xs`}
-                >
-                  {priorityLabel(activeTicket.priority)}
-                </Badge>
+                <TicketPriorityBadge priority={activeTicket.priority} className="text-xs" />
               </div>
               <SheetTitle className="text-xl font-bold text-slate-900">
                 {activeTicket.title}
               </SheetTitle>
             </div>
-            <Badge
-              variant="secondary"
-              className="bg-slate-50 text-slate-700"
-            >
-              {statusLabel(activeTicket.status)}
-            </Badge>
+            <TicketStatusBadge status={activeTicket.status} />
           </div>
           <SheetDescription className="text-slate-400">
             {activeTicket.description}
@@ -260,18 +224,18 @@ export default function TicketDetailDrawer({
             {/* Issue Category */}
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider flex items-center gap-2">
-                <ServiceCategoryIcon category={activeTicket.category} className="w-4 h-4" />
+                <TicketCategoryIcon category={activeTicket.category} className="w-4 h-4" />
                 Arıza Kategorisi
               </h3>
               <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
-                    <ServiceCategoryIcon category={activeTicket.category} className="w-6 h-6 text-red-600" />
+                    <TicketCategoryIcon category={activeTicket.category} className="w-6 h-6 text-red-600" />
                   </div>
                   <div>
                     <p className="font-medium text-slate-900">{activeTicket.category}</p>
                     <p className="text-sm text-slate-500">
-                      {getCategoryDescription(activeTicket.category)}
+                      {ticketCategoryDescription(activeTicket.category)}
                     </p>
                   </div>
                 </div>
@@ -357,44 +321,16 @@ export default function TicketDetailDrawer({
           </TabsContent>
 
           <TabsContent value="messages" className="space-y-4 mt-6">
-            <div className="space-y-3">
-              {messages.length > 0 ? (
-                messages.map((item) => {
-                  const isMine = item.senderRole === 'service';
-                  const isSystem = item.senderRole === 'system';
-
-                  if (isSystem) {
-                    return (
-                      <div key={item.id} className="rounded-lg bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
-                        {item.body}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div key={item.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                      <div
-                        className={`max-w-[82%] rounded-lg border px-3 py-2 ${
-                          isMine
-                            ? 'border-red-200 bg-red-50 text-slate-900'
-                            : 'border-slate-200 bg-white text-slate-800'
-                        }`}
-                      >
-                        <div className="mb-1 flex items-center justify-between gap-3 text-[11px] text-slate-500">
-                          <span className="font-medium">{item.senderName}</span>
-                          <span>{formatMessageTime(item.createdAt)}</span>
-                        </div>
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{item.body}</p>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
+            <TicketMessageThread
+              messages={messages}
+              viewerRole="service"
+              maxHeightClassName="max-h-[420px]"
+              emptyState={
                 <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-sm text-slate-500">
                   Henüz mesaj yok.
                 </div>
-              )}
-            </div>
+              }
+            />
 
             <form onSubmit={handleSendMessage} className="space-y-3 border-t border-slate-200 pt-4">
               <Textarea
@@ -630,6 +566,7 @@ export default function TicketDetailDrawer({
                 </div>
 
                 {/* Submit Button */}
+                {proposalError && <p className="text-sm font-medium text-red-600">{proposalError}</p>}
                 <div className="flex gap-3 pt-4 border-t border-slate-200">
                   <Button
                     type="button"
@@ -711,29 +648,6 @@ function resolveMediaUrl(url: string): string {
 function isVideoMedia(url: string): boolean {
   const cleanUrl = url.split('?')[0].toLowerCase();
   return ['.mp4', '.webm', '.ogg', '.mov', '.m4v'].some((extension) => cleanUrl.endsWith(extension));
-}
-
-function formatMessageTime(value: string): string {
-  return new Date(value).toLocaleDateString('tr-TR', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function ServiceCategoryIcon({ category, className }: { category: string; className: string }) {
-  switch (category) {
-    case 'Electric':
-      return <Zap className={className} />;
-    case 'Mechanic':
-      return <Settings className={className} />;
-    case 'Pneumatic':
-    case 'Hydraulic':
-      return <Droplets className={className} />;
-    default:
-      return <Wrench className={className} />;
-  }
 }
 
 function WorkOrderPanel({ ticket, onOpenBilling }: { ticket: Ticket; onOpenBilling: () => void }) {
@@ -820,16 +734,4 @@ function TimelineItem({
       </div>
     </div>
   );
-}
-
-function getCategoryDescription(category: string): string {
-  const descriptions: Record<string, string> = {
-    Electric: 'Elektrik, güç ve kontrol sistemleri',
-    Mechanic: 'Mekanik parçalar ve hareket sistemleri',
-    Pneumatic: 'Pnomatik ve havalı sistemler',
-    Hydraulic: 'Hidrolik sistemler ve pompalar',
-    Software: 'Yazılım, HMI ve PLC kontrolü',
-    General: 'Genel bakım ve diğer arızalar',
-  };
-  return descriptions[category] || category;
 }

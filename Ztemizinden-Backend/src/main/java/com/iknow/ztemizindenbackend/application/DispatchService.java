@@ -33,6 +33,7 @@ public class DispatchService {
 
         return serviceProviderRepository.findAll().stream()
                 .filter(provider -> provider.getStatus() == ProviderStatus.VERIFIED)
+                .filter(provider -> isQualifiedForTicket(provider, ticket))
                 .map(provider -> score(provider, ticket))
                 .sorted(Comparator.comparingInt(ProviderMatch::score).reversed())
                 .toList();
@@ -47,8 +48,15 @@ public class DispatchService {
         if (provider.getStatus() != ProviderStatus.VERIFIED) {
             throw new IllegalStateException("Provider is not verified");
         }
+        if (!isQualifiedForTicket(provider, ticket)) {
+            throw new IllegalStateException("Provider is not qualified for this ticket category");
+        }
         ticket.assignProvider(provider.getId(), provider.getName());
         return ticket;
+    }
+
+    private boolean isQualifiedForTicket(ServiceProvider provider, Ticket ticket) {
+        return provider.getSpecialties() != null && provider.getSpecialties().contains(ticket.getCategory());
     }
 
     private ProviderMatch score(ServiceProvider provider, Ticket ticket) {

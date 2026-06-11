@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
-import type { Ticket, TicketOffer, OfferType, TicketCategory } from '@/store/useCustomerStore';
+import { latestConversationMessage, sortTicketMessages } from '@/lib/ticketMessages';
+import type { Ticket, TicketMessage, TicketOffer, OfferType, TicketCategory } from '@/store/useCustomerStore';
 import type { ProviderStatus, ServiceProvider } from '@/store/useAdminStore';
 import type { User } from '@/store/useAuthStore';
 
@@ -51,6 +52,8 @@ interface ServiceStoreState {
     billing: { actualCost?: number; notes: string; laborCost?: number; partsCost?: number; extraCost?: number; partsSummary?: string }
   ) => Promise<void>;
   addTicketMessage: (ticketId: string, body: string) => Promise<void>;
+  receiveTicketMessage: (message: TicketMessage) => void;
+  markTicketMessagesRead: (ticketId: string) => Promise<void>;
   resetDemoData: () => void;
   getNewOpportunities: () => Ticket[];
   getMyProposals: () => Ticket[];
@@ -222,6 +225,21 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
     await get().fetchOpportunities();
   },
 
+  receiveTicketMessage: (message) => {
+    set((state) => ({
+      opportunities: state.opportunities.map((ticket) => appendTicketMessage(ticket, message)),
+      myJobs: state.myJobs.map((ticket) => appendTicketMessage(ticket, message)),
+    }));
+  },
+
+  markTicketMessagesRead: async (ticketId) => {
+    const updatedTicket = normalizeServiceTicket(await api.post<Ticket>(`/tickets/${ticketId}/messages/read`));
+    set((state) => ({
+      opportunities: state.opportunities.map((ticket) => (ticket.id === ticketId ? updatedTicket : ticket)),
+      myJobs: state.myJobs.map((ticket) => (ticket.id === ticketId ? updatedTicket : ticket)),
+    }));
+  },
+
   resetDemoData: () => {
     void get().fetchOpportunities();
     void get().fetchMyJobs();
@@ -261,12 +279,44 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
 }));
 
 function normalizeServiceTicket(ticket: Ticket): Ticket {
+  const messages = sortTicketMessages(
+    (ticket.messages ?? []).filter((message) => !message.ticketId || message.ticketId === ticket.id)
+  );
   return {
     ...ticket,
     mediaUrls: ticket.mediaUrls ?? [],
-    offers: ticket.offers ?? [],
-    messages: ticket.messages ?? [],
+    offers: (ticket.offers ?? []).filter((offer) => !offer.ticketId || offer.ticketId === ticket.id),
+    messages,
+    unreadMessageCount: ticket.unreadMessageCount ?? unreadMessagesForService(messages),
+    lastMessage: scopedLastMessage(ticket, messages),
   };
+}
+
+function appendTicketMessage(ticket: Ticket, message: TicketMessage): Ticket {
+  if (ticket.id !== message.ticketId) return ticket;
+  const messages = ticket.messages ?? [];
+  if (messages.some((item) => item.id === message.id)) return ticket;
+  const nextMessages = sortTicketMessages([...messages, message]);
+  const shouldIncrementUnread = message.senderRole === 'customer' && message.readByService !== true;
+
+  return {
+    ...ticket,
+    messages: nextMessages,
+    unreadMessageCount: (ticket.unreadMessageCount ?? unreadMessagesForService(messages)) + (shouldIncrementUnread ? 1 : 0),
+    lastMessage: latestConversationMessage(nextMessages),
+    updatedAt: message.createdAt ?? ticket.updatedAt,
+  };
+}
+
+function scopedLastMessage(ticket: Ticket, messages: TicketMessage[]) {
+  if (ticket.lastMessage && ticket.lastMessage.ticketId === ticket.id && ticket.lastMessage.senderRole !== 'system') {
+    return ticket.lastMessage;
+  }
+  return latestConversationMessage(messages);
+}
+
+function unreadMessagesForService(messages: TicketMessage[]) {
+  return messages.filter((message) => message.senderRole === 'customer' && message.readByService !== true).length;
 }
 
 function normalizeServiceProvider(provider: ServiceProvider): ServiceProvider {

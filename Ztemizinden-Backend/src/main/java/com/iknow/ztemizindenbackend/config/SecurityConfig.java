@@ -61,6 +61,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/customers").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/providers").permitAll()
+                .requestMatchers("/ws", "/ws/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/uploads/provider-documents/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/uploads/ticket-media/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/uploads/profile-logos/**").permitAll()

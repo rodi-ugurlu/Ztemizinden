@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
+import { latestConversationMessage, sortTicketMessages } from '@/lib/ticketMessages';
 
 // ==========================================
 // TYPE DEFINITIONS
@@ -99,6 +100,7 @@ export type BillingStatus = 'AWAITING_CUSTOMER_APPROVAL' | 'APPROVED' | 'DISPUTE
 
 export interface TicketOffer {
   id: string;
+  ticketId?: string;
   providerId: string;
   providerName: string;
   type: OfferType;
@@ -116,6 +118,8 @@ export interface TicketMessage {
   senderRole: 'customer' | 'service' | 'system';
   senderName: string;
   body: string;
+  readByCustomer?: boolean;
+  readByService?: boolean;
   createdAt: string;
 }
 
@@ -160,6 +164,8 @@ export interface Ticket {
   serviceEta?: string;
   offers: TicketOffer[];
   messages: TicketMessage[];
+  unreadMessageCount?: number;
+  lastMessage?: TicketMessage | null;
   finalEstimatedCost?: number;
   finalActualCost?: number;
   finalBillingNotes?: string;
@@ -215,6 +221,8 @@ interface CustomerStoreState {
   acceptOffer: (ticketId: string, offerId: string) => Promise<void>;
   rejectOffer: (ticketId: string, offerId: string) => Promise<void>;
   addTicketMessage: (ticketId: string, body: string) => Promise<void>;
+  receiveTicketMessage: (message: TicketMessage) => void;
+  markTicketMessagesRead: (ticketId: string) => Promise<void>;
   approveFinalBilling: (ticketId: string) => Promise<void>;
   disputeFinalBilling: (ticketId: string, reason: string) => Promise<void>;
   getTicketsByAsset: (assetId: string) => Ticket[];
@@ -385,6 +393,19 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
     }));
   },
 
+  receiveTicketMessage: (message) => {
+    set((state) => ({
+      tickets: state.tickets.map((ticket) => appendTicketMessage(ticket, message, 'customer')),
+    }));
+  },
+
+  markTicketMessagesRead: async (ticketId) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/messages/read`));
+    set((state) => ({
+      tickets: state.tickets.map((ticket) => (ticket.id === ticketId ? updatedTicket : ticket)),
+    }));
+  },
+
   approveFinalBilling: async (ticketId) => {
     const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/billing/approve`));
     set((state) => ({
@@ -427,12 +448,58 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
 }));
 
 function normalizeTicket(ticket: Ticket): Ticket {
+  const messages = sortTicketMessages(scopedMessages(ticket));
   return {
     ...ticket,
     mediaUrls: ticket.mediaUrls ?? [],
-    offers: ticket.offers ?? [],
-    messages: ticket.messages ?? [],
+    offers: scopedOffers(ticket),
+    messages,
+    unreadMessageCount: ticket.unreadMessageCount ?? unreadMessagesForRole(messages, 'customer'),
+    lastMessage: scopedLastMessage(ticket, messages),
   };
+}
+
+function scopedOffers(ticket: Ticket): TicketOffer[] {
+  return (ticket.offers ?? []).filter((offer) => !offer.ticketId || offer.ticketId === ticket.id);
+}
+
+function scopedMessages(ticket: Ticket): TicketMessage[] {
+  return (ticket.messages ?? []).filter((message) => !message.ticketId || message.ticketId === ticket.id);
+}
+
+function appendTicketMessage(ticket: Ticket, message: TicketMessage, role: 'customer' | 'service'): Ticket {
+  if (ticket.id !== message.ticketId) return ticket;
+  const messages = ticket.messages ?? [];
+  if (messages.some((item) => item.id === message.id)) return ticket;
+  const nextMessages = sortTicketMessages([...messages, message]);
+  const shouldIncrementUnread =
+    role === 'customer'
+      ? message.senderRole === 'service' && message.readByCustomer !== true
+      : message.senderRole === 'customer' && message.readByService !== true;
+
+  return {
+    ...ticket,
+    messages: nextMessages,
+    unreadMessageCount: (ticket.unreadMessageCount ?? unreadMessagesForRole(messages, role)) + (shouldIncrementUnread ? 1 : 0),
+    lastMessage: latestConversationMessage(nextMessages),
+    updatedAt: message.createdAt ?? ticket.updatedAt,
+  };
+}
+
+function scopedLastMessage(ticket: Ticket, messages: TicketMessage[]) {
+  if (ticket.lastMessage && ticket.lastMessage.ticketId === ticket.id && ticket.lastMessage.senderRole !== 'system') {
+    return ticket.lastMessage;
+  }
+  return latestConversationMessage(messages);
+}
+
+function unreadMessagesForRole(messages: TicketMessage[], role: 'customer' | 'service') {
+  return messages.filter((message) => {
+    if (role === 'customer') {
+      return message.senderRole === 'service' && message.readByCustomer !== true;
+    }
+    return message.senderRole === 'customer' && message.readByService !== true;
+  }).length;
 }
 
 // ==========================================

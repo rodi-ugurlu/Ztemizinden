@@ -1,6 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  DashboardMessagePanel,
+  DashboardMessageToast,
+  type DashboardMessageToastData,
+} from '@/components/messages/DashboardMessagePanel';
+import { subscribeToTicketMessages } from '@/lib/realtime';
 import { useCustomerStore, type Ticket } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
@@ -18,8 +24,21 @@ import {
 } from 'lucide-react';
 
 export default function CustomerDashboard() {
-  const { assets, tickets, customerProfile, isLoading, error, fetchAssets, fetchTickets, fetchCustomerProfile } = useCustomerStore();
+  const {
+    assets,
+    tickets,
+    customerProfile,
+    isLoading,
+    error,
+    fetchAssets,
+    fetchTickets,
+    fetchCustomerProfile,
+    receiveTicketMessage,
+  } = useCustomerStore();
   const user = useAuthStore((state) => state.user);
+  const seenMessageIdsRef = useRef(new Set<string>());
+  const ticketMetaRef = useRef(new Map<string, { title: string }>());
+  const [messageToast, setMessageToast] = useState<DashboardMessageToastData | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -27,6 +46,47 @@ export default function CustomerDashboard() {
     fetchTickets(user.id);
     fetchCustomerProfile();
   }, [fetchAssets, fetchTickets, fetchCustomerProfile, user?.id]);
+
+  useEffect(() => {
+    tickets.forEach((ticket) => {
+      ticketMetaRef.current.set(ticket.id, { title: ticket.title });
+      (ticket.messages ?? []).forEach((message) => seenMessageIdsRef.current.add(message.id));
+    });
+  }, [tickets]);
+
+  const subscriptionKey = useMemo(
+    () =>
+      tickets
+        .filter((ticket) => ticket.status !== 'CANCELLED')
+        .map((ticket) => ticket.id)
+        .sort()
+        .join('|'),
+    [tickets]
+  );
+
+  useEffect(() => {
+    if (!subscriptionKey) return;
+    const subscriptions = subscriptionKey.split('|').map((ticketId) =>
+      subscribeToTicketMessages(ticketId, (incomingMessage) => {
+        if (seenMessageIdsRef.current.has(incomingMessage.id)) return;
+        seenMessageIdsRef.current.add(incomingMessage.id);
+        receiveTicketMessage(incomingMessage);
+
+        if (incomingMessage.senderRole === 'service') {
+          const ticketMeta = ticketMetaRef.current.get(incomingMessage.ticketId);
+          setMessageToast({
+            ticketId: incomingMessage.ticketId,
+            title: ticketMeta?.title ?? 'Servis talebi',
+            senderName: incomingMessage.senderName,
+            body: incomingMessage.body,
+            path: `/customer/requests?ticketId=${encodeURIComponent(incomingMessage.ticketId)}`,
+          });
+        }
+      })
+    );
+
+    return () => subscriptions.forEach((unsubscribe) => unsubscribe());
+  }, [receiveTicketMessage, subscriptionKey]);
 
   const pendingOfferTickets = tickets.filter((ticket) =>
     ticket.offers.some((offer) => offer.status === 'PENDING')
@@ -88,88 +148,93 @@ export default function CustomerDashboard() {
         }}
       />
 
-      <div className="relative mx-auto flex min-h-[calc(100vh-145px)] w-full max-w-7xl flex-col gap-7 p-4 sm:p-6 lg:p-8">
-        <section className="overflow-hidden rounded-lg border border-slate-900 bg-slate-950 shadow-xl">
-          <div className="flex flex-col gap-5 px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between lg:px-7">
-            <div className="flex items-center gap-4">
-              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-600 shadow-lg shadow-red-950/30">
-                <Layers3 className="h-5 w-5" />
+      <DashboardMessageToast toast={messageToast} tone="red" onClose={() => setMessageToast(null)} />
+
+      <div className="relative mx-auto grid min-h-[calc(100vh-145px)] w-full max-w-[1500px] grid-cols-1 gap-7 p-4 sm:p-6 lg:p-8 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-7">
+          <section className="overflow-hidden rounded-lg border border-slate-900 bg-slate-950 shadow-xl">
+            <div className="flex flex-col gap-5 px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between lg:px-7">
+              <div className="flex items-center gap-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-600 shadow-lg shadow-red-950/30">
+                  <Layers3 className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Maintly</p>
+                  <h1 className="text-2xl font-black tracking-normal sm:text-3xl">
+                    {customerProfile?.companyName ?? 'Müşteri Paneli'}
+                  </h1>
+                  {customerProfile?.companyName && (
+                    <p className="mt-1 text-xs font-medium text-slate-300">Müşteri Paneli</p>
+                  )}
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Maintly</p>
-                <h1 className="text-2xl font-black tracking-normal sm:text-3xl">
-                  {customerProfile?.companyName ?? 'Müşteri Paneli'}
-                </h1>
-                {customerProfile?.companyName && (
-                  <p className="mt-1 text-xs font-medium text-slate-300">Müşteri Paneli</p>
-                )}
+              <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+                <RadioTower className="h-4 w-4 text-red-300" />
+                <div className="text-right">
+                  <p className="text-xs text-slate-300">Maintenance 6.0</p>
+                  <p className="text-sm font-semibold text-white">Canlı servis merkezi</p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-3">
-              <RadioTower className="h-4 w-4 text-red-300" />
-              <div className="text-right">
-                <p className="text-xs text-slate-300">Maintenance 6.0</p>
-                <p className="text-sm font-semibold text-white">Canlı servis merkezi</p>
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-          <ModuleCard
-            tone="blue"
-            eyebrow="Varlık/Ekipman Bazlı"
-            title={`${assets.length}`}
-            description="Toplam varlıklarımız"
-            icon={Package}
-            to="/customer/asset-tree"
-            actionLabel="Varlıkları Yönet"
-            actionIcon={Plus}
-          />
+          <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <ModuleCard
+              tone="blue"
+              eyebrow="Varlık/Ekipman Bazlı"
+              title={`${assets.length}`}
+              description="Toplam varlıklarımız"
+              icon={Package}
+              to="/customer/asset-tree"
+              actionLabel="Varlıkları Yönet"
+              actionIcon={Plus}
+            />
 
-          <ModuleCard
-            tone="red"
-            eyebrow="Hizli Aksiyon"
-            title="Arıza İhbarı Aç"
-            description="Yeni arıza bildir, servis firmasına gönder"
-            icon={Wrench}
-            to="/customer/tickets/create"
-            actionLabel="Kayıt Oluştur"
-            actionIcon={ArrowRight}
-            featured
-          />
+            <ModuleCard
+              tone="red"
+              eyebrow="Hizli Aksiyon"
+              title="Arıza İhbarı Aç"
+              description="Yeni arıza bildir, servis firmasına gönder"
+              icon={Wrench}
+              to="/customer/tickets/create"
+              actionLabel="Kayıt Oluştur"
+              actionIcon={ArrowRight}
+              featured
+            />
 
-          <ModuleCard
-            tone={pendingActionCount > 0 ? 'green' : 'amber'}
-            eyebrow={pendingActionCount > 0 ? `${pendingActionCount} aktif işlem` : 'Aksiyon yok'}
-            title="Bekleyen Talepler / İşler / İşlemler"
-            description="Onay, mesaj ve hakediş bekleyen süreçleri takip et"
-            icon={Bell}
-            to="/customer/requests"
-            actionLabel="Süreçleri Aç"
-            actionIcon={ArrowRight}
-          />
-        </section>
+            <ModuleCard
+              tone={pendingActionCount > 0 ? 'green' : 'amber'}
+              eyebrow={pendingActionCount > 0 ? `${pendingActionCount} aktif işlem` : 'Aksiyon yok'}
+              title="Bekleyen Talepler / İşler / İşlemler"
+              description="Onay, mesaj ve hakediş bekleyen süreçleri takip et"
+              icon={Bell}
+              to="/customer/requests"
+              actionLabel="Süreçleri Aç"
+              actionIcon={ArrowRight}
+            />
+          </section>
 
-        <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.45fr]">
-          <MetricTile
-            value={openedThisMonth}
-            title="Bu Ay Açılan Arızalar"
-            description="Bildirilen arızalar"
-            icon={FileText}
-            to="/customer/requests"
-          />
+          <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1.45fr]">
+            <MetricTile
+              value={openedThisMonth}
+              title="Bu Ay Açılan Arızalar"
+              description="Bildirilen arızalar"
+              icon={FileText}
+              to="/customer/requests"
+            />
 
-          <MetricTile
-            value={closedThisMonth}
-            title="Bu Ay Kapanan Arızalar"
-            description="Çözülen arızalar, hakedişler ve arşiv"
-            icon={Archive}
-            to="/customer/requests"
-            wide
-          />
-        </section>
+            <MetricTile
+              value={closedThisMonth}
+              title="Bu Ay Kapanan Arızalar"
+              description="Çözülen arızalar, hakedişler ve arşiv"
+              icon={Archive}
+              to="/customer/requests"
+              wide
+            />
+          </section>
+        </div>
 
+        <DashboardMessagePanel tickets={tickets} role="customer" toBasePath="/customer/requests" tone="red" />
       </div>
     </div>
   );

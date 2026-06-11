@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { TicketCategoryBadge, TicketPriorityBadge, TicketStatusBadge } from '@/components/domain/ticketBadges';
+import { TicketMessageThread } from '@/components/messages/TicketMessageThread';
+import { formatShortDateTime } from '@/components/domain/ticketMeta';
 import {
   useCustomerStore,
   type BillingStatus,
   type OfferStatus,
   type Ticket,
-  type TicketPriority,
-  type TicketStatus,
 } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useTicketMessageSubscriptions } from '@/hooks/useTicketMessageSubscriptions';
 import {
   CheckCircle2,
   Clock,
@@ -33,13 +36,17 @@ export default function RequestsPage() {
     acceptOffer,
     rejectOffer,
     addTicketMessage,
+    receiveTicketMessage,
+    markTicketMessagesRead,
     approveFinalBilling,
     disputeFinalBilling,
     fetchTickets,
     error: storeError,
   } = useCustomerStore();
   const user = useAuthStore((state) => state.user);
-  const [selectedTicketId, setSelectedTicketId] = useState(tickets[0]?.id ?? '');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTicketId = searchParams.get('ticketId') ?? '';
+  const [selectedTicketId, setSelectedTicketId] = useState('');
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -56,10 +63,37 @@ export default function RequestsPage() {
     }
   }, [fetchTickets, user?.id]);
 
+  const effectiveSelectedTicketId = useMemo(() => {
+    if (requestedTicketId && tickets.some((ticket) => ticket.id === requestedTicketId)) {
+      return requestedTicketId;
+    }
+    if (selectedTicketId && tickets.some((ticket) => ticket.id === selectedTicketId)) {
+      return selectedTicketId;
+    }
+    return tickets[0]?.id ?? '';
+  }, [requestedTicketId, selectedTicketId, tickets]);
+
   const selectedTicket = useMemo(
-    () => tickets.find((ticket) => ticket.id === selectedTicketId) ?? tickets[0],
-    [selectedTicketId, tickets]
+    () => tickets.find((ticket) => ticket.id === effectiveSelectedTicketId) ?? null,
+    [effectiveSelectedTicketId, tickets]
   );
+
+  const selectedTicketOffers = useMemo(() => {
+    if (!selectedTicket) return [];
+    return (selectedTicket.offers ?? []).filter((offer) => !offer.ticketId || offer.ticketId === selectedTicket.id);
+  }, [selectedTicket]);
+
+  const selectedTicketMessages = useMemo(() => {
+    if (!selectedTicket) return [];
+    return (selectedTicket.messages ?? []).filter((item) => !item.ticketId || item.ticketId === selectedTicket.id);
+  }, [selectedTicket]);
+
+  useTicketMessageSubscriptions(tickets, receiveTicketMessage);
+
+  useEffect(() => {
+    if (!selectedTicket?.id || !selectedTicket.unreadMessageCount) return;
+    void markTicketMessagesRead(selectedTicket.id);
+  }, [markTicketMessagesRead, selectedTicket?.id, selectedTicket?.unreadMessageCount]);
 
   const stats = useMemo(
     () => ({
@@ -82,6 +116,16 @@ export default function RequestsPage() {
         message: err instanceof Error ? err.message : 'Mesaj gönderilemedi',
       });
     }
+  };
+
+  const handleSelectTicket = (ticketId: string) => {
+    setSelectedTicketId(ticketId);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('ticketId', ticketId);
+      return next;
+    });
+    setMessage('');
   };
 
   const handleAcceptOffer = async (offerId: string) => {
@@ -188,7 +232,7 @@ export default function RequestsPage() {
               <button
                 key={ticket.id}
                 type="button"
-                onClick={() => setSelectedTicketId(ticket.id)}
+                onClick={() => handleSelectTicket(ticket.id)}
                 className={`w-full text-left rounded-lg border p-4 transition-all ${
                   selectedTicket?.id === ticket.id
                     ? 'border-red-200 bg-red-50'
@@ -202,11 +246,19 @@ export default function RequestsPage() {
                       #{ticket.id.split('-')[1]} - {ticket.assetName}
                     </p>
                   </div>
-                  <StatusBadge status={ticket.status} />
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <TicketStatusBadge status={ticket.status} />
+                    {(ticket.unreadMessageCount ?? 0) > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black text-white">
+                        <MessageSquare className="h-3 w-3" />
+                        {ticket.unreadMessageCount}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between mt-3">
-                  <PriorityBadge priority={ticket.priority} />
-                  <span className="text-xs text-slate-500">{formatDate(ticket.updatedAt)}</span>
+                  <TicketPriorityBadge priority={ticket.priority} />
+                  <span className="text-xs text-slate-500">{formatShortDateTime(ticket.updatedAt)}</span>
                 </div>
               </button>
             ))}
@@ -214,17 +266,15 @@ export default function RequestsPage() {
         </Card>
 
         {selectedTicket && (
-          <div className="space-y-6">
+          <div key={selectedTicket.id} className="space-y-6">
             <Card>
               <CardHeader className="pb-4">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                   <div>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <StatusBadge status={selectedTicket.status} />
-                      <PriorityBadge priority={selectedTicket.priority} />
-                      <Badge variant="outline" className="text-slate-600">
-                        {selectedTicket.category}
-                      </Badge>
+                      <TicketStatusBadge status={selectedTicket.status} />
+                      <TicketPriorityBadge priority={selectedTicket.priority} />
+                      <TicketCategoryBadge category={selectedTicket.category} className="text-slate-600" />
                     </div>
                     <CardTitle className="text-2xl text-slate-900">{selectedTicket.title}</CardTitle>
                     <CardDescription className="mt-2">{selectedTicket.description}</CardDescription>
@@ -262,8 +312,8 @@ export default function RequestsPage() {
                 <CardDescription>Servis sağlayıcılarından gelen keşif ve net fiyat teklifleri</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {(selectedTicket.offers ?? []).length > 0 ? (
-                  (selectedTicket.offers ?? []).map((offer) => (
+                {selectedTicketOffers.length > 0 ? (
+                  selectedTicketOffers.map((offer) => (
                     <div key={offer.id} className="rounded-lg border border-slate-200 p-4">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                         <div>
@@ -308,7 +358,7 @@ export default function RequestsPage() {
                   <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center">
                     <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="font-medium text-slate-700">Henüz teklif yok</p>
-                    <p className="text-sm text-slate-500 mt-1">Talep ilgili servis sağlayıcılarına yönlendirildi.</p>
+                    <p className="text-sm text-slate-500 mt-1">Bu arıza için servis sağlayıcılarından teklif bekleniyor.</p>
                   </div>
                 )}
               </CardContent>
@@ -328,24 +378,16 @@ export default function RequestsPage() {
                 <CardDescription>Servis sağlayıcı ve operasyon notları</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
-                  {(selectedTicket.messages ?? []).map((item) => (
-                    <div
-                      key={item.id}
-                      className={`rounded-lg p-3 border ${
-                        item.senderRole === 'customer'
-                          ? 'bg-red-50 border-red-100 ml-8'
-                          : 'bg-slate-50 border-slate-200 mr-8'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium text-slate-900">{item.senderName}</p>
-                        <span className="text-xs text-slate-500">{formatDate(item.createdAt)}</span>
-                      </div>
-                      <p className="text-sm text-slate-600 mt-1">{item.body}</p>
+                <TicketMessageThread
+                  messages={selectedTicketMessages}
+                  viewerRole="customer"
+                  emptyState={
+                    <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center">
+                      <MessageSquare className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+                      <p className="font-medium text-slate-700">Bu arıza için henüz yazışma yok</p>
                     </div>
-                  ))}
-                </div>
+                  }
+                />
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Textarea
                     value={message}
@@ -469,46 +511,6 @@ function CostBox({ label, value, signed = false }: { label: string; value: numbe
   );
 }
 
-function StatusBadge({ status }: { status: TicketStatus }) {
-  const variants: Record<TicketStatus, string> = {
-    OPEN: 'bg-blue-100 text-blue-700 border-blue-200',
-    OFFERED: 'bg-amber-100 text-amber-700 border-amber-200',
-    IN_PROGRESS: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-    RESOLVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    CLOSED: 'bg-slate-100 text-slate-700 border-slate-200',
-    CANCELLED: 'bg-red-100 text-red-700 border-red-200',
-  };
-
-  const labels: Record<TicketStatus, string> = {
-    OPEN: 'Açık',
-    OFFERED: 'Teklifli',
-    IN_PROGRESS: 'Serviste',
-    RESOLVED: 'Çözüldü',
-    CLOSED: 'Kapalı',
-    CANCELLED: 'İptal',
-  };
-
-  return <Badge variant="outline" className={variants[status]}>{labels[status]}</Badge>;
-}
-
-function PriorityBadge({ priority }: { priority: TicketPriority }) {
-  const variants: Record<TicketPriority, string> = {
-    Low: 'bg-slate-50 text-slate-600 border-slate-200',
-    Medium: 'bg-amber-50 text-amber-700 border-amber-200',
-    High: 'bg-orange-50 text-orange-700 border-orange-200',
-    Critical: 'bg-red-50 text-red-700 border-red-200',
-  };
-
-  const labels: Record<TicketPriority, string> = {
-    Low: 'Düşük',
-    Medium: 'Orta',
-    High: 'Yüksek',
-    Critical: 'Kritik',
-  };
-
-  return <Badge variant="outline" className={variants[priority]}>{labels[priority]}</Badge>;
-}
-
 function OfferStatusBadge({ status }: { status: OfferStatus }) {
   const variants: Record<OfferStatus, string> = {
     PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -541,13 +543,4 @@ function BillingStatusBadge({ status }: { status: BillingStatus }) {
   };
 
   return <Badge variant="outline" className={variants[status]}>{labels[status]}</Badge>;
-}
-
-function formatDate(dateString: string) {
-  return new Intl.DateTimeFormat('tr-TR', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(dateString));
 }

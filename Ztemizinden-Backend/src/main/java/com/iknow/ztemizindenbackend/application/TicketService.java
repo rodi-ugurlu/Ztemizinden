@@ -12,11 +12,13 @@ import com.iknow.ztemizindenbackend.domain.NotFoundException;
 import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
 import com.iknow.ztemizindenbackend.domain.Ticket;
+import com.iknow.ztemizindenbackend.domain.TicketMessage;
 import com.iknow.ztemizindenbackend.domain.TicketOffer;
 import com.iknow.ztemizindenbackend.domain.TicketRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,10 +36,11 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public List<Ticket> listOpportunities(String providerId) {
-        requireVerifiedProvider(providerId);
+        ServiceProvider provider = requireVerifiedProvider(providerId);
         List<Ticket> tickets = ticketRepository.findByStatusInOrderByCreatedAtAsc(
                 List.of(TicketStatus.OPEN, TicketStatus.OFFERED));
         return tickets.stream()
+                .filter(ticket -> isQualifiedForTicket(provider, ticket))
                 .filter(ticket -> ticket.getOffers().stream()
                         .noneMatch(offer -> offer.getProviderId().equals(providerId)))
                 .toList();
@@ -52,6 +55,16 @@ public class TicketService {
     @Transactional(readOnly = true)
     public Ticket get(String id) {
         return ticketRepository.findById(id).orElseThrow(() -> new NotFoundException("Ticket not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public Ticket getForProvider(String ticketId, String providerId) {
+        Ticket ticket = get(ticketId);
+        ServiceProvider provider = requireVerifiedProvider(providerId);
+        if (isVisibleForProvider(ticket, provider)) {
+            return ticket;
+        }
+        throw new AccessDeniedException("Ticket is not visible to current provider");
     }
 
     @Transactional
@@ -89,6 +102,7 @@ public class TicketService {
         if (provider.getStatus() != ProviderStatus.VERIFIED) {
             throw new IllegalStateException("Provider is not verified");
         }
+        requireQualifiedForTicket(provider, ticket);
 
         return ticket.addOffer(
                 provider.getId(),
@@ -114,6 +128,30 @@ public class TicketService {
             throw new IllegalStateException("Provider is not verified");
         }
         return provider;
+    }
+
+    private boolean isVisibleForProvider(Ticket ticket, ServiceProvider provider) {
+        if (provider.getId().equals(ticket.getAssignedProviderId())) {
+            return true;
+        }
+        if (ticket.getOffers().stream().anyMatch(offer -> offer.getProviderId().equals(provider.getId()))) {
+            return true;
+        }
+        return isOpenOpportunity(ticket) && isQualifiedForTicket(provider, ticket);
+    }
+
+    private boolean isOpenOpportunity(Ticket ticket) {
+        return ticket.getStatus() == TicketStatus.OPEN || ticket.getStatus() == TicketStatus.OFFERED;
+    }
+
+    private void requireQualifiedForTicket(ServiceProvider provider, Ticket ticket) {
+        if (!isQualifiedForTicket(provider, ticket)) {
+            throw new AccessDeniedException("Provider is not qualified for this ticket category");
+        }
+    }
+
+    private boolean isQualifiedForTicket(ServiceProvider provider, Ticket ticket) {
+        return provider.getSpecialties() != null && provider.getSpecialties().contains(ticket.getCategory());
     }
 
     @Transactional
@@ -145,16 +183,30 @@ public class TicketService {
     }
 
     @Transactional
-    public Ticket addCustomerMessage(String ticketId, String senderName, String body) {
+    public MessageResult addCustomerMessage(String ticketId, String senderName, String body) {
         Ticket ticket = get(ticketId);
-        ticket.addCustomerMessage(senderName, body);
+        TicketMessage message = ticket.addCustomerMessage(senderName, body);
+        return new MessageResult(ticket, message);
+    }
+
+    @Transactional
+    public MessageResult addServiceMessage(String ticketId, String senderName, String body) {
+        Ticket ticket = get(ticketId);
+        TicketMessage message = ticket.addServiceMessage(senderName, body);
+        return new MessageResult(ticket, message);
+    }
+
+    @Transactional
+    public Ticket markMessagesReadByCustomer(String ticketId) {
+        Ticket ticket = get(ticketId);
+        ticket.markMessagesReadByCustomer();
         return ticket;
     }
 
     @Transactional
-    public Ticket addServiceMessage(String ticketId, String senderName, String body) {
+    public Ticket markMessagesReadByService(String ticketId) {
         Ticket ticket = get(ticketId);
-        ticket.addServiceMessage(senderName, body);
+        ticket.markMessagesReadByService();
         return ticket;
     }
 
@@ -196,5 +248,8 @@ public class TicketService {
     }
 
     public record DisputeBillingCommand(String reason) {
+    }
+
+    public record MessageResult(Ticket ticket, TicketMessage message) {
     }
 }

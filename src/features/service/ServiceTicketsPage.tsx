@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { TicketCategoryIcon, TicketPriorityBadge, TicketStatusBadge } from '@/components/domain/ticketBadges';
+import { formatShortDate, ticketCategoryLabel } from '@/components/domain/ticketMeta';
+import { useTicketMessageSubscriptions } from '@/hooks/useTicketMessageSubscriptions';
 import {
   Select,
   SelectContent,
@@ -19,10 +23,8 @@ import {
   Search,
   Clock,
   MapPin,
+  MessageSquare,
   Wrench,
-  Zap,
-  Droplets,
-  Settings,
   Package,
   Filter,
   TicketCheck,
@@ -43,14 +45,18 @@ export default function ServiceTicketsPage() {
     currentProviderId,
     providerProfile,
     resolveProviderSession,
+    receiveTicketMessage,
+    markTicketMessagesRead,
     isLoading,
     error,
   } = useServiceStore();
   const user = useAuthStore((state) => state.user);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTicketId = searchParams.get('ticketId') ?? '';
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedTicketId, setSelectedTicketId] = useState('');
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   useEffect(() => {
@@ -70,6 +76,19 @@ export default function ServiceTicketsPage() {
     return acc;
   }, [] as Ticket[]);
 
+  useTicketMessageSubscriptions(allTickets, receiveTicketMessage);
+
+  const liveSelectedTicket =
+    (requestedTicketId ? allTickets.find((ticket) => ticket.id === requestedTicketId) : null) ??
+    (selectedTicketId ? allTickets.find((ticket) => ticket.id === selectedTicketId) : null) ??
+    null;
+  const isDrawerOpen = isDetailOpen || Boolean(requestedTicketId && liveSelectedTicket);
+
+  useEffect(() => {
+    if (!isDrawerOpen || !liveSelectedTicket?.id || !liveSelectedTicket.unreadMessageCount) return;
+    void markTicketMessagesRead(liveSelectedTicket.id);
+  }, [isDrawerOpen, liveSelectedTicket?.id, liveSelectedTicket?.unreadMessageCount, markTicketMessagesRead]);
+
   // Filter
   const filteredTickets = allTickets.filter((ticket) => {
     const matchesSearch =
@@ -87,8 +106,23 @@ export default function ServiceTicketsPage() {
   );
 
   const handleTicketClick = (ticket: Ticket) => {
-    setSelectedTicket(ticket);
+    setSelectedTicketId(ticket.id);
     setIsDetailOpen(true);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('ticketId', ticket.id);
+      return next;
+    });
+  };
+
+  const handleCloseDetail = () => {
+    setIsDetailOpen(false);
+    setSelectedTicketId('');
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('ticketId');
+      return next;
+    });
   };
 
   if (isLoading && !providerProfile) {
@@ -256,7 +290,7 @@ export default function ServiceTicketsPage() {
                 >
                   {/* Category Icon */}
                   <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <ServiceCategoryIcon category={ticket.category} className="w-5 h-5 text-red-600" />
+                    <TicketCategoryIcon category={ticket.category} className="w-5 h-5 text-red-600" />
                   </div>
 
                   {/* Info */}
@@ -265,8 +299,14 @@ export default function ServiceTicketsPage() {
                       <span className="text-xs font-mono text-slate-400">
                         #{ticket.id.split('-')[1]}
                       </span>
-                      <StatusBadge status={ticket.status} />
-                      <PriorityBadge priority={ticket.priority} />
+                      <TicketStatusBadge status={ticket.status} className="text-[10px]" />
+                      <TicketPriorityBadge priority={ticket.priority} className="text-[10px]" />
+                      {(ticket.unreadMessageCount ?? 0) > 0 && (
+                        <Badge className="gap-1 bg-red-600 text-[10px] text-white hover:bg-red-600">
+                          <MessageSquare className="h-3 w-3" />
+                          {ticket.unreadMessageCount}
+                        </Badge>
+                      )}
                     </div>
                     <h3 className="font-medium text-slate-900 text-sm truncate">
                       {ticket.title}
@@ -287,10 +327,10 @@ export default function ServiceTicketsPage() {
                   <div className="text-right flex-shrink-0 hidden sm:block">
                     <p className="text-xs text-slate-400 flex items-center gap-1 justify-end">
                       <Clock className="w-3 h-3" />
-                      {formatDate(ticket.createdAt)}
+                      {formatShortDate(ticket.createdAt)}
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
-                      {categoryLabel(ticket.category)}
+                      {ticketCategoryLabel(ticket.category)}
                     </p>
                   </div>
                 </div>
@@ -302,97 +342,10 @@ export default function ServiceTicketsPage() {
 
       {/* Drawer */}
       <TicketDetailDrawer
-        ticket={selectedTicket}
-        isOpen={isDetailOpen}
-        onClose={() => setIsDetailOpen(false)}
+        ticket={liveSelectedTicket}
+        isOpen={isDrawerOpen}
+        onClose={handleCloseDetail}
       />
     </div>
   );
-}
-
-// ==========================================
-// HELPER COMPONENTS
-// ==========================================
-
-function ServiceCategoryIcon({ category, className }: { category: string; className: string }) {
-  switch (category) {
-    case 'Electric':
-      return <Zap className={className} />;
-    case 'Mechanic':
-      return <Settings className={className} />;
-    case 'Pneumatic':
-    case 'Hydraulic':
-      return <Droplets className={className} />;
-    default:
-      return <Wrench className={className} />;
-  }
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    OPEN: 'bg-blue-50 text-blue-700 border-blue-200',
-    OFFERED: 'bg-amber-50 text-amber-700 border-amber-200',
-    IN_PROGRESS: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    RESOLVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    CLOSED: 'bg-slate-50 text-slate-600 border-slate-200',
-    CANCELLED: 'bg-red-50 text-red-700 border-red-200',
-  };
-
-  const labels: Record<string, string> = {
-    OPEN: 'Açık',
-    OFFERED: 'Teklif Verildi',
-    IN_PROGRESS: 'Devam Ediyor',
-    RESOLVED: 'Çözüldü',
-    CLOSED: 'Kapandı',
-    CANCELLED: 'İptal',
-  };
-
-  return (
-    <Badge variant="outline" className={`text-[10px] ${styles[status] || styles.OPEN}`}>
-      {labels[status] || status}
-    </Badge>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: string }) {
-  const styles: Record<string, string> = {
-    Critical: 'bg-red-50 text-red-600 border-red-200',
-    High: 'bg-orange-50 text-orange-600 border-orange-200',
-    Medium: 'bg-amber-50 text-amber-600 border-amber-200',
-    Low: 'bg-slate-50 text-slate-500 border-slate-200',
-  };
-
-  const labels: Record<string, string> = {
-    Critical: 'Kritik',
-    High: 'Yüksek',
-    Medium: 'Orta',
-    Low: 'Düşük',
-  };
-
-  return (
-    <Badge variant="outline" className={`text-[10px] ${styles[priority] || styles.Low}`}>
-      {labels[priority] || priority}
-    </Badge>
-  );
-}
-
-function categoryLabel(category: string): string {
-  const labels: Record<string, string> = {
-    Electric: 'Elektrik',
-    Mechanic: 'Mekanik',
-    Pneumatic: 'Pnömatik',
-    Hydraulic: 'Hidrolik',
-    Software: 'Yazılım',
-    General: 'Genel',
-  };
-  return labels[category] || category;
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('tr-TR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
 }

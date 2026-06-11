@@ -288,6 +288,14 @@ public class Ticket extends BaseEntity {
         return message;
     }
 
+    public void markMessagesReadByCustomer() {
+        messages.forEach(TicketMessage::markReadByCustomer);
+    }
+
+    public void markMessagesReadByService() {
+        messages.forEach(TicketMessage::markReadByService);
+    }
+
     public TicketOffer latestOffer() {
         return offers.stream()
                 .max(Comparator.comparing(TicketOffer::getCreatedAt))
