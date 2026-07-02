@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -6,7 +6,7 @@ import {
   DashboardMessageToast,
   type DashboardMessageToastData,
 } from '@/components/messages/DashboardMessagePanel';
-import { subscribeToCustomerTicketEvents } from '@/lib/realtime';
+import { useTicketEventRefresh } from '@/hooks/useTicketEventRefresh';
 import { useCustomerStore, type Ticket } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
@@ -59,9 +59,8 @@ export default function CustomerDashboard() {
 
   const customerEventId = customerProfile?.id ?? '';
 
-  useEffect(() => {
-    if (!customerEventId) return;
-    return subscribeToCustomerTicketEvents(customerEventId, (event) => {
+  const handleTicketEvent = useCallback(
+    (event: { type: string; conversationId?: string | null; ticket: Ticket }) => {
       receiveTicketUpdate(event.ticket);
 
       const incomingMessage = event.ticket.lastMessage;
@@ -81,8 +80,21 @@ export default function CustomerDashboard() {
           }`,
         });
       }
-    });
-  }, [customerEventId, receiveTicketUpdate]);
+    },
+    [receiveTicketUpdate]
+  );
+
+  const refreshTicketsSilently = useCallback(async () => {
+    if (!customerEventId) return;
+    await fetchTickets(customerEventId, { silent: true });
+  }, [customerEventId, fetchTickets]);
+
+  useTicketEventRefresh({
+    scope: 'customer',
+    id: customerEventId,
+    onEvent: handleTicketEvent,
+    refresh: refreshTicketsSilently,
+  });
 
   const pendingOfferTickets = tickets.filter((ticket) =>
     ticket.offers.some((offer) => offer.status === 'PENDING' || offer.status === 'INVITED')
@@ -157,10 +169,10 @@ export default function CustomerDashboard() {
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Maintly</p>
                   <h1 className="text-2xl font-black tracking-normal sm:text-3xl">
-                    {customerProfile?.companyName ?? 'Müşteri Paneli'}
+                    {customerProfile?.companyName ?? 'Fabrika/İşletme Paneli'}
                   </h1>
                   {customerProfile?.companyName && (
-                    <p className="mt-1 text-xs font-medium text-slate-300">Müşteri Paneli</p>
+                    <p className="mt-1 text-xs font-medium text-slate-300">Fabrika/İşletme Paneli</p>
                   )}
                 </div>
               </div>

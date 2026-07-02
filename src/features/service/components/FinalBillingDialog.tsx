@@ -96,7 +96,7 @@ export default function FinalBillingDialog({
               <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Arıza Kaydı</p>
               <p className="font-medium text-slate-900 text-sm mb-3 truncate">{ticket.title}</p>
 
-              <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Müşteri</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Fabrika/İşletme</p>
               <p className="font-medium text-slate-900 text-sm">{ticket.customerCompany}</p>
             </div>
 
@@ -171,7 +171,7 @@ export default function FinalBillingDialog({
                 <div>
                   <p className="text-sm text-red-600 font-medium">Tahmini Maliyetten Farklı</p>
                   <p className="text-xs text-red-300/70 mt-1">
-                    Gerçekleşen maliyet tahminiden %20'den fazla farklı. Müşteri
+                    Gerçekleşen maliyet tahminiden %20'den fazla farklı. Fabrika/İşletme
                     onayı gerekebilir.
                   </p>
                 </div>

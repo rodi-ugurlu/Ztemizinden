@@ -3,6 +3,7 @@ package com.iknow.ztemizindenbackend.api;
 import com.iknow.ztemizindenbackend.application.DispatchService;
 import com.iknow.ztemizindenbackend.application.DispatchService.ProviderMatch;
 import com.iknow.ztemizindenbackend.api.TicketController.TicketResponse;
+import com.iknow.ztemizindenbackend.domain.Ticket;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/dispatch")
 public class DispatchController {
     private final DispatchService dispatchService;
+    private final TicketEventPublisher ticketEventPublisher;
 
     @GetMapping("/queue")
     public List<TicketResponse> queue() {
@@ -32,7 +34,9 @@ public class DispatchController {
 
     @PostMapping("/tickets/{ticketId}/assign")
     public TicketResponse assign(@PathVariable String ticketId, @Valid @RequestBody AssignRequest request) {
-        return TicketResponse.from(dispatchService.assign(ticketId, request.providerId()));
+        Ticket ticket = dispatchService.assign(ticketId, request.providerId());
+        ticketEventPublisher.publish("TICKET_ASSIGNED", ticket);
+        return TicketResponse.from(ticket);
     }
 
     public record AssignRequest(@NotBlank String providerId) {

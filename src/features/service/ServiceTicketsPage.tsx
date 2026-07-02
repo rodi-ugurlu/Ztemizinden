@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { TicketCategoryIcon, TicketPriorityBadge, TicketStatusBadge } from '@/components/domain/ticketBadges';
 import { formatShortDate, formatShortDateTime, ticketCategoryLabel } from '@/components/domain/ticketMeta';
-import { subscribeToProviderTicketEvents } from '@/lib/realtime';
+import { useTicketEventRefresh } from '@/hooks/useTicketEventRefresh';
 import {
   Select,
   SelectContent,
@@ -108,12 +108,27 @@ export default function ServiceTicketsPage() {
     ])
   ) as Record<ServiceTicketView, number>;
 
-  useEffect(() => {
-    if (!currentProviderId) return;
-    return subscribeToProviderTicketEvents(currentProviderId, (event) => {
+  const handleTicketEvent = useCallback(
+    (event: { ticket: Ticket }) => {
       receiveTicketUpdate(event.ticket);
-    });
-  }, [currentProviderId, receiveTicketUpdate]);
+    },
+    [receiveTicketUpdate]
+  );
+
+  const refreshServiceTicketsSilently = useCallback(async () => {
+    if (!currentProviderId) return;
+    await Promise.all([
+      fetchOpportunities({ silent: true }),
+      fetchMyJobs({ silent: true }),
+    ]);
+  }, [currentProviderId, fetchMyJobs, fetchOpportunities]);
+
+  useTicketEventRefresh({
+    scope: 'provider',
+    id: currentProviderId,
+    onEvent: handleTicketEvent,
+    refresh: refreshServiceTicketsSilently,
+  });
 
   const liveSelectedTicket =
     (requestedTicketId ? allTickets.find((ticket) => ticket.id === requestedTicketId) : null) ??
@@ -331,7 +346,7 @@ export default function ServiceTicketsPage() {
             {isMessageFocus && (
               <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
                 <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Mesaj odağı açık: liste son müşteri yazışmasına göre sıralanıyor</span>
+                <span className="truncate">Mesaj odağı açık: liste son fabrika/işletme yazışmasına göre sıralanıyor</span>
               </div>
             )}
           </div>
@@ -358,7 +373,7 @@ export default function ServiceTicketsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Talep ara (başlık, müşteri, ID)..."
+                placeholder="Talep ara (başlık, fabrika/işletme, ID)..."
                 value={searchQuery}
                 onChange={(e) => updateListFilter('q', e.target.value)}
                 className="pl-10"
@@ -586,7 +601,7 @@ function MessageFocusNotice({ count, onClear }: { count: number; onClear: () => 
         <div className="min-w-0">
           <p className="text-sm font-black">Mesaj merkezi görünümü</p>
           <p className="mt-1 text-xs font-semibold leading-relaxed text-emerald-800">
-            {count} işte müşteri yazışması var. Bir satıra tıklayınca detay doğrudan Mesajlar sekmesinde açılır.
+            {count} işte fabrika/işletme yazışması var. Bir satıra tıklayınca detay doğrudan Mesajlar sekmesinde açılır.
           </p>
         </div>
       </div>
@@ -733,7 +748,7 @@ const messageFocusMeta = {
   title: 'Mesajlı İşler',
   description: 'Son mesajı olan veya okunmamış konuşması bulunan servis taleplerini takip edin',
   emptyTitle: 'Mesajlı iş yok',
-  emptyDescription: 'Müşteri yazışması bulunan işler burada görünecek.',
+  emptyDescription: 'Fabrika/İşletme yazışması bulunan işler burada görünecek.',
 };
 
 const drawerTabs: TicketDetailDrawerTab[] = ['details', 'work-order', 'asset', 'messages', 'proposal', 'my-proposal'];
@@ -777,7 +792,7 @@ function ticketConversationMessages(ticket: Ticket) {
 }
 
 function messageSenderLabel(role: string) {
-  if (role === 'customer') return 'Müşteri';
+  if (role === 'customer') return 'Fabrika/İşletme';
   if (role === 'service') return 'Servis';
   if (role === 'admin') return 'Operasyon';
   return 'Sistem';
@@ -797,9 +812,9 @@ function formatCurrency(value?: number) {
 }
 
 function billingStatusLabel(status?: string) {
-  if (status === 'DISPUTED') return 'Müşteri itirazı var';
-  if (status === 'APPROVED') return 'Müşteri onayladı';
-  return 'Müşteri onayı bekliyor';
+  if (status === 'DISPUTED') return 'Fabrika/İşletme itirazı var';
+  if (status === 'APPROVED') return 'Fabrika/İşletme onayladı';
+  return 'Fabrika/İşletme onayı bekliyor';
 }
 
 const statusFilters = ['all', 'OPEN', 'OFFERED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];

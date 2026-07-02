@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ElementType } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ElementType } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,8 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { TicketCategoryBadge, TicketPriorityBadge, TicketStatusBadge } from '@/components/domain/ticketBadges';
 import { formatShortDateTime } from '@/components/domain/ticketMeta';
 import { TicketMessageThread } from '@/components/messages/TicketMessageThread';
+import { useTicketEventRefresh } from '@/hooks/useTicketEventRefresh';
 import { useTicketMessageSubscriptions } from '@/hooks/useTicketMessageSubscriptions';
-import { subscribeToCustomerTicketEvents } from '@/lib/realtime';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
   useCustomerStore,
@@ -80,12 +80,24 @@ export default function RequestsPage() {
     }
   }, [fetchTickets, user?.id]);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    return subscribeToCustomerTicketEvents(user.id, (event) => {
+  const handleTicketEvent = useCallback(
+    (event: { ticket: Ticket }) => {
       receiveTicketUpdate(event.ticket);
-    });
-  }, [receiveTicketUpdate, user?.id]);
+    },
+    [receiveTicketUpdate]
+  );
+
+  const refreshTicketsSilently = useCallback(async () => {
+    if (!user?.id) return;
+    await fetchTickets(user.id, { silent: true });
+  }, [fetchTickets, user?.id]);
+
+  useTicketEventRefresh({
+    scope: 'customer',
+    id: user?.id ?? '',
+    onEvent: handleTicketEvent,
+    refresh: refreshTicketsSilently,
+  });
 
   const effectiveSelectedTicketId = useMemo(() => {
     if (requestedTicketId && tickets.some((ticket) => ticket.id === requestedTicketId)) {
@@ -297,7 +309,7 @@ export default function RequestsPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-600">Müşteri Operasyonu</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-600">Fabrika/İşletme Operasyonu</p>
             <h1 className="mt-2 text-2xl font-black tracking-normal text-slate-950 sm:text-3xl">
               Servis Taleplerim
             </h1>

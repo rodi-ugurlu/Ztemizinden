@@ -122,7 +122,7 @@ function HeroSection() {
                 to="/customer/login"
                 className="hidden rounded-xl px-4 py-2.5 text-sm font-bold text-gray-500 transition-all hover:bg-gray-100 hover:text-gray-900 md:inline-flex"
               >
-                Müşteri Girişi
+                Fabrika/İşletme Girişi
               </Link>
               <Link
                 to="/service/login"
@@ -578,7 +578,7 @@ function MobileMenu() {
         to="/customer/login"
         className="rounded-lg px-2.5 py-2 text-[11px] font-bold text-gray-500 transition-all hover:bg-gray-100 hover:text-gray-900 sm:text-xs"
       >
-        Müşteri
+        Fabrika/İşletme
       </Link>
       <Link
         to="/service/login"

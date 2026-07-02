@@ -71,7 +71,7 @@ export default function ResetPasswordPage() {
               <p>{notice}</p>
               <div className="password-reset__actions">
                 <button type="button" onClick={() => navigate('/customer/login')}>
-                  <span>Müşteri Girişi</span>
+                  <span>Fabrika/İşletme Girişi</span>
                   <ArrowRight size={16} />
                 </button>
                 <button type="button" onClick={() => navigate('/service/login')}>

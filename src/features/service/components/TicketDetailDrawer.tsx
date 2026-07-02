@@ -250,7 +250,7 @@ export default function TicketDetailDrawer({
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
-                Müşteri Bilgileri
+                Fabrika/İşletme Bilgileri
               </h3>
               <div className="bg-slate-50/50 rounded-lg p-4 space-y-3 border border-slate-200">
                 <div className="flex items-center gap-3">
@@ -392,7 +392,7 @@ export default function TicketDetailDrawer({
               maxHeightClassName="min-h-[260px] max-h-[calc(100vh-430px)]"
               emptyState={
                 <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-sm text-slate-500">
-                  {myConversation ? 'Henüz mesaj yok.' : 'Müşteri görüşmeye davet ettiğinde mesajlaşma açılır.'}
+                  {myConversation ? 'Henüz mesaj yok.' : 'Fabrika/İşletme görüşmeye davet ettiğinde mesajlaşma açılır.'}
                 </div>
               }
             />
@@ -405,10 +405,10 @@ export default function TicketDetailDrawer({
                 disabled={!canMessage || isMessageSending}
                 placeholder={
                   canMessage
-                    ? 'Müşteriye mesaj yaz...'
+                    ? 'Fabrika/İşletmeye mesaj yaz...'
                     : myConversation?.status === 'CLOSED'
                       ? 'Görüşme kapalı'
-                      : 'Müşteri görüşmeye davet ettiğinde açılır'
+                      : 'Fabrika/İşletme görüşmeye davet ettiğinde açılır'
                 }
                 className="resize-none bg-slate-50 border-slate-200 text-slate-900"
               />
@@ -500,7 +500,7 @@ export default function TicketDetailDrawer({
                       <span className="font-medium">Teklif Kabul Edildi!</span>
                     </div>
                     <p className="text-sm text-emerald-700/70">
-                      Müşteri teklifinizi kabul etti. İşe başlayabilirsiniz.
+                      Fabrika/İşletme teklifinizi kabul etti. İşe başlayabilirsiniz.
                     </p>
                   </div>
                 )}
@@ -509,10 +509,10 @@ export default function TicketDetailDrawer({
                   <div className="bg-sky-50 border border-sky-200/30 rounded-lg p-4">
                     <div className="flex items-center gap-2 text-sky-700 mb-2">
                       <MessageSquare className="w-5 h-5" />
-                      <span className="font-medium">Müşteri görüşmeye davet etti</span>
+                      <span className="font-medium">Fabrika/İşletme görüşmeye davet etti</span>
                     </div>
                     <p className="text-sm text-sky-700/70">
-                      Mesajlar sekmesinden müşteriyle özel görüşmeye devam edebilirsiniz.
+                      Mesajlar sekmesinden fabrika/işletme ile özel görüşmeye devam edebilirsiniz.
                     </p>
                   </div>
                 )}
@@ -524,7 +524,7 @@ export default function TicketDetailDrawer({
                       <span className="font-medium">Teklif Reddedildi</span>
                     </div>
                     <p className="text-sm text-red-700/70">
-                      Müşteri farklı bir servis sağlayıcı seçti.
+                      Fabrika/İşletme farklı bir servis sağlayıcı seçti.
                     </p>
                   </div>
                 )}
@@ -647,7 +647,7 @@ export default function TicketDetailDrawer({
                     className="bg-slate-50 border-slate-200 text-slate-900 resize-none"
                   />
                   <p className="text-xs text-slate-500">
-                    Müşteriye iletilecek detaylı açıklama
+                    Fabrika/İşletmeye iletilecek detaylı açıklama
                   </p>
                 </div>
 
@@ -791,7 +791,7 @@ function drawerContext(
   if (sourceView === 'new') {
     return {
       title: 'Yeni talep fırsatı',
-      description: 'Teklif vermeden önce ekleri, varlığı ve müşteri konumunu hızlıca kontrol edin.',
+      description: 'Teklif vermeden önce ekleri, varlığı ve fabrika/işletme konumunu hızlıca kontrol edin.',
       icon: Inbox,
       className: 'border-emerald-200 bg-emerald-50',
       iconClassName: 'bg-white text-emerald-700',
@@ -808,10 +808,10 @@ function drawerContext(
   if (sourceView === 'proposals') {
     const invited = myProposal?.status === 'INVITED';
     return {
-      title: invited ? 'Müşteri görüşmeye davet etti' : 'Teklifiniz müşteri onayında',
+      title: invited ? 'Fabrika/İşletme görüşmeye davet etti' : 'Teklifiniz fabrika/işletme onayında',
       description: invited
-        ? 'Müşteriyle özel görüşme açık. Mesajlar sekmesinden birebir yazışabilirsiniz.'
-        : 'Teklif içeriğini, tutarı ve son müşteri mesajlarını aynı yerden takip edin.',
+        ? 'Fabrika/İşletme ile özel görüşme açık. Mesajlar sekmesinden birebir yazışabilirsiniz.'
+        : 'Teklif içeriğini, tutarı ve son fabrika/işletme mesajlarını aynı yerden takip edin.',
       icon: Send,
       className: 'border-blue-200 bg-blue-50',
       iconClassName: 'bg-white text-blue-700',
@@ -828,7 +828,7 @@ function drawerContext(
   if (sourceView === 'accepted') {
     return {
       title: 'Kabul edilen aktif iş',
-      description: 'Müşteri teklifi kabul etti. Saha sürecini yönetin, müşteriyle yazışın veya hakedişi başlatın.',
+      description: 'Fabrika/İşletme teklifi kabul etti. Saha sürecini yönetin, fabrika/işletme ile yazışın veya hakedişi başlatın.',
       icon: FileCheck2,
       className: 'border-rose-200 bg-rose-50',
       iconClassName: 'bg-white text-rose-700',
@@ -845,7 +845,7 @@ function drawerContext(
   if (sourceView === 'open-billing') {
     return {
       title: 'Hakediş süreci açık',
-      description: 'Müşteri onayı, itiraz veya ödeme süreci devam eden işi takip edin.',
+      description: 'Fabrika/İşletme onayı, itiraz veya ödeme süreci devam eden işi takip edin.',
       icon: HandCoins,
       className: 'border-amber-200 bg-amber-50',
       iconClassName: 'bg-white text-amber-700',
@@ -886,7 +886,7 @@ function drawerContext(
     primaryAction: { label: 'Detayları Aç', tab: 'details' },
     secondaryAction: messageAction,
     metrics: [
-      { label: 'Müşteri', value: ticket.customerCompany },
+      { label: 'Fabrika/İşletme', value: ticket.customerCompany },
       { label: 'Durum', value: ticket.status },
     ],
   };
@@ -937,9 +937,9 @@ function conversationStatusLabel(conversation: TicketConversation) {
 }
 
 function billingStatusLabel(status?: string) {
-  if (status === 'DISPUTED') return 'Müşteri itirazı var';
-  if (status === 'APPROVED') return 'Müşteri onayladı';
-  return 'Müşteri onayı bekliyor';
+  if (status === 'DISPUTED') return 'Fabrika/İşletme itirazı var';
+  if (status === 'APPROVED') return 'Fabrika/İşletme onayladı';
+  return 'Fabrika/İşletme onayı bekliyor';
 }
 
 function MediaPreviewGrid({ mediaUrls }: { mediaUrls: string[] }) {
@@ -1000,7 +1000,7 @@ function WorkOrderPanel({ ticket, onOpenBilling }: { ticket: Ticket; onOpenBilli
       <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200 space-y-4">
         <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider">İş Özeti</h3>
         <div className="grid grid-cols-2 gap-4 text-sm">
-          <InfoCell label="Müşteri" value={ticket.customerCompany} />
+          <InfoCell label="Fabrika/İşletme" value={ticket.customerCompany} />
           <InfoCell label="Konum" value={ticket.customerLocation} />
           <InfoCell label="Varlık" value={ticket.assetName || ''} />
           <InfoCell label="Tahmini Tutar" value={`${estimatedCost.toLocaleString('tr-TR')} TL`} />
@@ -1012,9 +1012,9 @@ function WorkOrderPanel({ ticket, onOpenBilling }: { ticket: Ticket; onOpenBilli
             <h3 className="text-sm font-semibold text-slate-900">İş Tamamlama</h3>
             <p className="mt-1 text-sm text-slate-500">
               {billingPending
-                ? 'Hakediş müşterinin onayını bekliyor.'
+                ? 'Hakediş fabrika/işletme onayını bekliyor.'
                 : canComplete
-                ? 'Saha işi tamamlandıysa hakedişi müşteriye onaya gönderin.'
+                ? 'Saha işi tamamlandıysa hakedişi fabrika/işletme onayına gönderin.'
                 : 'İş tamamlama yalnızca devam eden talepler için kullanılabilir.'}
             </p>
           </div>

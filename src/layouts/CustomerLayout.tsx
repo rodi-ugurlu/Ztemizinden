@@ -30,7 +30,7 @@ export default function CustomerLayout() {
           <img src={logoImg} alt="Maintly Logo" className="h-10 w-auto object-contain" />
           <div>
             <span className="font-bold text-slate-900 text-lg tracking-tight">Maintly</span>
-            <p className="text-xs text-slate-500">Müşteri Portalı</p>
+            <p className="text-xs text-slate-500">Fabrika/İşletme Portalı</p>
           </div>
         </div>
 

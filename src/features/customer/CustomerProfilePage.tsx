@@ -135,7 +135,7 @@ export default function CustomerProfilePage() {
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-red-600">Müşteri Künyesi</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-red-600">Fabrika/İşletme Künyesi</p>
             <h1 className="mt-2 text-3xl font-black tracking-normal text-slate-950">Firma Profili</h1>
             <p className="mt-1 text-sm text-slate-500">
               Dashboard, varlıklar ve talepler bu firma bilgileriyle ilişkilendirilir.
@@ -193,7 +193,7 @@ export default function CustomerProfilePage() {
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
-                      {profile?.status === 'ACTIVE' ? 'Aktif müşteri' : 'Askıda'}
+                      {profile?.status === 'ACTIVE' ? 'Aktif fabrika/işletme' : 'Askıda'}
                     </Badge>
                     {displayForm.taxNumber && (
                       <Badge variant="outline" className="border-slate-200 text-slate-600">
@@ -317,7 +317,7 @@ export default function CustomerProfilePage() {
                   <div>
                     <p className="font-semibold text-slate-900">Profil kaydı</p>
                     <p className="mt-1 text-sm leading-6 text-slate-500">
-                      Bu bilgiler müşteri portalındaki künye görünümü ve servis talebi bağlamı için kullanılır.
+                      Bu bilgiler fabrika/işletme portalındaki künye görünümü ve servis talebi bağlamı için kullanılır.
                     </p>
                   </div>
                 </div>

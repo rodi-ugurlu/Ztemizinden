@@ -168,7 +168,7 @@ export default function AdminDashboard() {
                   <TableHeader>
                     <TableRow className="border-slate-200">
                       <TableHead className="text-slate-400">Talep ID</TableHead>
-                      <TableHead className="text-slate-400">Müşteri</TableHead>
+                      <TableHead className="text-slate-400">Fabrika/İşletme</TableHead>
                       <TableHead className="text-slate-400">Konu</TableHead>
                       <TableHead className="text-slate-400">Durum</TableHead>
                       <TableHead className="text-slate-400">Yanıt Süresi</TableHead>

@@ -46,6 +46,7 @@ public class TicketController {
     private final TicketService ticketService;
     private final CurrentUser currentUser;
     private final TicketMessageBroadcaster ticketMessageBroadcaster;
+    private final TicketEventPublisher ticketEventPublisher;
 
     @GetMapping
     public List<TicketResponse> list(@RequestParam String customerId) {
@@ -101,6 +102,7 @@ public class TicketController {
                 ApiEnums.ticketPriority(request.priority()),
                 request.mediaUrls() == null ? List.of() : request.mediaUrls()
         ));
+        publishTicketEvent("TICKET_CREATED", ticket, null);
         return TicketResponse.fromForCustomer(ticket);
     }
 
@@ -115,6 +117,7 @@ public class TicketController {
                 request.eta(),
                 request.message()
         ));
+        publishTicketEvent("OFFER_SUBMITTED", offer.getTicket(), null);
         return OfferResponse.from(offer);
     }
 
@@ -149,7 +152,9 @@ public class TicketController {
     @PostMapping("/{ticketId}/cancel")
     public TicketResponse cancel(@PathVariable String ticketId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.fromForCustomer(ticketService.cancel(ticketId));
+        Ticket ticket = ticketService.cancel(ticketId);
+        publishTicketEvent("TICKET_CANCELLED", ticket, null);
+        return TicketResponse.fromForCustomer(ticket);
     }
 
     @PostMapping("/{ticketId}/billing")
@@ -157,25 +162,31 @@ public class TicketController {
         Ticket ticket = ticketService.get(ticketId);
         currentUser.requireProviderTicket(ticket);
         String providerId = currentUser.providerId(ticket.getAssignedProviderId());
-        return TicketResponse.fromForService(ticketService.submitFinalBilling(
+        Ticket updatedTicket = ticketService.submitFinalBilling(
                 ticketId,
                 new SubmitBillingCommand(request.actualCost(), request.notes())
-        ), providerId);
+        );
+        publishTicketEvent("BILLING_SUBMITTED", updatedTicket, null);
+        return TicketResponse.fromForService(updatedTicket, providerId);
     }
 
     @PostMapping("/{ticketId}/billing/approve")
     public TicketResponse approveBilling(@PathVariable String ticketId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.fromForCustomer(ticketService.approveFinalBilling(ticketId));
+        Ticket ticket = ticketService.approveFinalBilling(ticketId);
+        publishTicketEvent("BILLING_APPROVED", ticket, null);
+        return TicketResponse.fromForCustomer(ticket);
     }
 
     @PostMapping("/{ticketId}/billing/dispute")
     public TicketResponse disputeBilling(@PathVariable String ticketId, @Valid @RequestBody DisputeBillingRequest request) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.fromForCustomer(ticketService.disputeFinalBilling(
+        Ticket ticket = ticketService.disputeFinalBilling(
                 ticketId,
                 new DisputeBillingCommand(request.reason())
-        ));
+        );
+        publishTicketEvent("BILLING_DISPUTED", ticket, null);
+        return TicketResponse.fromForCustomer(ticket);
     }
 
     @PostMapping("/{ticketId}/messages")
@@ -588,52 +599,16 @@ public class TicketController {
     }
 
     private void publishTicketEvent(String type, Ticket ticket, String conversationId) {
-        ticketMessageBroadcaster.publishCustomerTicket(
-                ticket.getCustomerId(),
-                new TicketEventPayload(type, conversationId, TicketResponse.fromForCustomer(ticket))
-        );
-
-        providerIds(ticket).forEach(providerId -> ticketMessageBroadcaster.publishProviderTicket(
-                providerId,
-                new TicketEventPayload(
-                        type,
-                        conversationIdForProvider(ticket, providerId),
-                        TicketResponse.fromForService(ticket, providerId)
-                )
-        ));
+        ticketEventPublisher.publish(type, ticket, conversationId);
     }
 
     private void publishConversationMessages(List<TicketMessage> messages) {
         messages.forEach(ticketMessageBroadcaster::publishConversation);
     }
 
-    private static List<String> providerIds(Ticket ticket) {
-        List<String> providerIds = new ArrayList<>();
-        ticket.getOffers().stream()
-                .map(TicketOffer::getProviderId)
-                .filter(providerId -> providerId != null && !providerId.isBlank())
-                .forEach(providerIds::add);
-        ticket.getConversations().stream()
-                .map(TicketConversation::getProviderId)
-                .filter(providerId -> providerId != null && !providerId.isBlank())
-                .forEach(providerIds::add);
-        if (ticket.getAssignedProviderId() != null && !ticket.getAssignedProviderId().isBlank()) {
-            providerIds.add(ticket.getAssignedProviderId());
-        }
-        return providerIds.stream().distinct().toList();
-    }
-
     private static String conversationIdForOffer(Ticket ticket, String offerId) {
         return ticket.getConversations().stream()
                 .filter(conversation -> conversation.getOffer().getId().equals(offerId))
-                .map(TicketConversation::getId)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private static String conversationIdForProvider(Ticket ticket, String providerId) {
-        return ticket.getConversations().stream()
-                .filter(conversation -> conversation.getProviderId().equals(providerId))
                 .map(TicketConversation::getId)
                 .findFirst()
                 .orElse(null);

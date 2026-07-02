@@ -42,16 +42,16 @@ const customerSlogans = [
 
 const serviceSlogans = [
   {
-    tr: 'MÜŞTERİLER SİZİ ARASIN, SİZ İŞİNİZE ODAKLANIN',
-    en: 'Let Customers Come to You — You Focus on the Work',
+    tr: 'FABRİKA/İŞLETMELER SİZİ ARASIN, SİZ İŞİNİZE ODAKLANIN',
+    en: 'Let Businesses Come to You — You Focus on the Work',
   },
   {
     tr: 'EKİBİNİZİ, İŞLERİNİZİ VE GELİRİNİZİ TEK EKRANDAN YÖNETİN',
     en: 'Manage Your Team, Jobs & Revenue — All in One Screen',
   },
   {
-    tr: 'DOĞRU MÜŞTERİYE, DOĞRU ZAMANDA ULAŞIN',
-    en: 'Reach the Right Customer at the Right Time',
+    tr: 'DOĞRU FABRİKA/İŞLETMEYE, DOĞRU ZAMANDA ULAŞIN',
+    en: 'Reach the Right Business at the Right Time',
   },
 ];
 
@@ -360,7 +360,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
         password: customerRegister.password,
       });
       accountCreated = true;
-      setLocalNotice('Müşteri hesabınız oluşturuldu. Giriş yapılıyor...');
+      setLocalNotice('Fabrika/İşletme hesabınız oluşturuldu. Giriş yapılıyor...');
       const signedInUser = await loginWithPassword('customer', customerRegister.email, customerRegister.password);
       navigate(dashboardPathForRole(signedInUser.role ?? 'customer'));
     } catch (submitError) {
@@ -378,7 +378,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
         );
       } else {
         setLocalError(
-          submitError instanceof Error ? submitError.message : 'Müşteri kaydı oluşturulamadı'
+          submitError instanceof Error ? submitError.message : 'Fabrika/İşletme kaydı oluşturulamadı'
         );
       }
     } finally {
@@ -505,7 +505,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
             }
           >
             <h2 className="animated-auth__title">
-              {customerView === 'login' ? 'Müşteri Girişi' : 'Müşteri Kaydı'}
+              {customerView === 'login' ? 'Fabrika/İşletme Girişi' : 'Fabrika/İşletme Kaydı'}
             </h2>
 
             {customerView === 'login' ? (
@@ -1061,7 +1061,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       <div className="animated-auth__panels-container">
         <div className="animated-auth__panel animated-auth__panel--left">
           <div className="animated-auth__panel-content">
-            <BannerSlogans audience="Müşteriler için" slogans={customerSlogans} />
+            <BannerSlogans audience="Fabrika/İşletmeler için" slogans={customerSlogans} />
             <button
               className="animated-auth__btn animated-auth__btn--transparent"
               type="button"
@@ -1089,7 +1089,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                 setCustomerView('login');
               }}
             >
-              Müşteri Girişi
+              Fabrika/İşletme Girişi
             </button>
           </div>
           <img src={loginImage} className="animated-auth__image" alt="Login" />

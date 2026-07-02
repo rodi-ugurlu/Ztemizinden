@@ -89,7 +89,7 @@ export const forServices = [
   'Gelen taleplere anlık yanıt ve teklif',
   'Saha ekibi atama ve rota optimizasyonu',
   'Mobil uyumlu iş emri yönetimi',
-  'Müşteri portföyü ve sözleşme takibi',
+  'Fabrika/işletme portföyü ve sözleşme takibi',
 ];
 
 export const footerLinks = {

@@ -32,19 +32,19 @@ export const serviceTicketViewMeta: Record<ServiceTicketView, { title: string; d
   },
   proposals: {
     title: 'Teklif Verilen Talepler',
-    description: 'Teklif gönderdiğiniz ve müşteri onayı bekleyen işler',
+    description: 'Teklif gönderdiğiniz ve fabrika/işletme onayı bekleyen işler',
     emptyTitle: 'Onay bekleyen teklif yok',
     emptyDescription: 'Açık teklif verdiğiniz işler burada takip edilir.',
   },
   accepted: {
     title: 'Kabul Edilen Talepler',
-    description: 'Müşterinin kabul ettiği, henüz hakediş sürecine alınmamış aktif işler',
+    description: 'Fabrika/İşletmenin kabul ettiği, henüz hakediş sürecine alınmamış aktif işler',
     emptyTitle: 'Kabul edilen aktif iş yok',
     emptyDescription: 'Teklifiniz kabul edildiğinde iş burada açılır.',
   },
   'open-billing': {
     title: 'Hakediş Verilen Açık İşler',
-    description: 'Hakedişi oluşturulmuş; müşteri onayı, itiraz veya ödeme süreci devam eden işler',
+    description: 'Hakedişi oluşturulmuş; fabrika/işletme onayı, itiraz veya ödeme süreci devam eden işler',
     emptyTitle: 'Açık hakediş süreci yok',
     emptyDescription: 'Hakediş oluşturduğunuz açık işler burada takip edilir.',
   },

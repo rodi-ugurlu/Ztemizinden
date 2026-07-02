@@ -290,7 +290,7 @@ function shortTicketId(id: string) {
 }
 
 function senderRoleLabel(role: TicketMessage['senderRole']) {
-  if (role === 'customer') return 'Müşteri';
+  if (role === 'customer') return 'Fabrika/İşletme';
   if (role === 'service') return 'Servis';
   return 'Sistem';
 }

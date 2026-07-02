@@ -270,7 +270,7 @@ export default function DispatchPage() {
             <TableHeader>
               <TableRow className="border-slate-200 hover:bg-transparent">
                 <TableHead className="text-slate-400">Talep</TableHead>
-                <TableHead className="text-slate-400">Müşteri</TableHead>
+                <TableHead className="text-slate-400">Fabrika/İşletme</TableHead>
                 <TableHead className="text-slate-400">SLA</TableHead>
                 <TableHead className="text-slate-400">Kategori</TableHead>
                 <TableHead className="text-slate-400">Öncelik</TableHead>
@@ -378,7 +378,7 @@ export default function DispatchPage() {
             <div className="space-y-4">
               <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-200 space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-sm text-slate-400">Müşteri</span>
+                  <span className="text-sm text-slate-400">Fabrika/İşletme</span>
                   <span className="text-sm text-slate-900">{selectedTicket.customerCompany}</span>
                 </div>
                 <div className="flex justify-between">

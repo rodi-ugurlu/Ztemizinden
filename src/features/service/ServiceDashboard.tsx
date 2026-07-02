@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatShortDate, ticketCategoryLabel, ticketPriorityLabel } from '@/components/domain/ticketMeta';
@@ -7,7 +7,7 @@ import {
   DashboardMessageToast,
   type DashboardMessageToastData,
 } from '@/components/messages/DashboardMessagePanel';
-import { subscribeToProviderTicketEvents } from '@/lib/realtime';
+import { useTicketEventRefresh } from '@/hooks/useTicketEventRefresh';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useServiceStore } from '@/store/useServiceStore';
 import type { Ticket } from '@/store/useCustomerStore';
@@ -76,9 +76,8 @@ export default function ServiceDashboard() {
     });
   }, [myJobs]);
 
-  useEffect(() => {
-    if (!currentProviderId) return;
-    return subscribeToProviderTicketEvents(currentProviderId, (event) => {
+  const handleTicketEvent = useCallback(
+    (event: { type: string; conversationId?: string | null; ticket: Ticket }) => {
       receiveTicketUpdate(event.ticket);
 
       const incomingMessage = event.ticket.lastMessage;
@@ -98,8 +97,24 @@ export default function ServiceDashboard() {
           }`,
         });
       }
-    });
-  }, [currentProviderId, receiveTicketUpdate]);
+    },
+    [receiveTicketUpdate]
+  );
+
+  const refreshServiceTicketsSilently = useCallback(async () => {
+    if (!currentProviderId) return;
+    await Promise.all([
+      fetchOpportunities({ silent: true }),
+      fetchMyJobs({ silent: true }),
+    ]);
+  }, [currentProviderId, fetchMyJobs, fetchOpportunities]);
+
+  useTicketEventRefresh({
+    scope: 'provider',
+    id: currentProviderId,
+    onEvent: handleTicketEvent,
+    refresh: refreshServiceTicketsSilently,
+  });
 
   const visibleTickets = uniqueTickets([...opportunities, ...myJobs]);
   const opportunityIds = new Set(opportunities.map((ticket) => ticket.id));
@@ -286,7 +301,7 @@ export default function ServiceDashboard() {
               to="/service/tickets?view=proposals"
               actionLabel="Teklifleri Gör"
               items={proposalPreviewItems}
-              emptyText="Müşteri onayı bekleyen teklif yok"
+              emptyText="Fabrika/İşletme onayı bekleyen teklif yok"
             />
 
             <ModuleCard
@@ -343,7 +358,7 @@ export default function ServiceDashboard() {
               tone="blue"
               value={offersThisMonth}
               label="Bu ay toplam teklif verdiğim işler"
-              helper="Müşteri onayı bekleyen veya sonuçlanan"
+              helper="Fabrika/İşletme onayı bekleyen veya sonuçlanan"
               icon={Send}
             />
             <MetricCard
@@ -623,7 +638,7 @@ function formatCurrency(value?: number) {
 function billingStatusLabel(status?: string) {
   if (status === 'DISPUTED') return 'İtirazlı';
   if (status === 'APPROVED') return 'Onaylandı';
-  return 'Müşteri onayı bekliyor';
+  return 'Fabrika/İşletme onayı bekliyor';
 }
 
 function uniqueTickets(tickets: Ticket[]) {

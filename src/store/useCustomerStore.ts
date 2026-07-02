@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { latestConversationMessage, sortTicketMessages } from '@/lib/ticketMessages';
 
+type FetchOptions = {
+  silent?: boolean;
+};
+
 // ==========================================
 // TYPE DEFINITIONS
 // ==========================================
@@ -217,7 +221,7 @@ interface CustomerStoreState {
 
   // Actions
   fetchAssets: (customerId: string) => Promise<void>;
-  fetchTickets: (customerId: string) => Promise<void>;
+  fetchTickets: (customerId: string, options?: FetchOptions) => Promise<void>;
   fetchCustomerProfile: () => Promise<CustomerProfile | null>;
   updateCustomerProfile: (profile: UpdateCustomerProfileInput) => Promise<CustomerProfile>;
   
@@ -277,13 +281,20 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
     }
   },
 
-  fetchTickets: async (customerId: string) => {
-    set({ isLoading: true, error: null });
+  fetchTickets: async (customerId: string, options: FetchOptions = {}) => {
+    if (!options.silent) {
+      set({ isLoading: true, error: null });
+    }
     try {
       const tickets = await api.get<Ticket[]>('/tickets', { params: { customerId } });
-      set({ tickets: tickets.map(normalizeTicket), isLoading: false });
+      set((state) => ({
+        tickets: tickets.map(normalizeTicket),
+        isLoading: options.silent ? state.isLoading : false,
+      }));
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Talepler yuklenemedi', isLoading: false });
+      if (!options.silent) {
+        set({ error: error instanceof Error ? error.message : 'Talepler yuklenemedi', isLoading: false });
+      }
     }
   },
 
@@ -294,7 +305,7 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
       set({ customerProfile, isLoading: false });
       return customerProfile;
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Müşteri profili yüklenemedi', isLoading: false });
+      set({ error: error instanceof Error ? error.message : 'Fabrika/İşletme profili yüklenemedi', isLoading: false });
       return null;
     }
   },
@@ -373,7 +384,7 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
     const newTicket = normalizeTicket(await api.post<Ticket>('/tickets', {
       customerId: ticketData.customerId,
       customerName: ticketData.customerName,
-      customerCompany: ticketData.customerCompany ?? ticketData.customerName ?? 'Müşteri',
+      customerCompany: ticketData.customerCompany ?? ticketData.customerName ?? 'Fabrika/İşletme',
       customerLocation: ticketData.customerLocation ?? 'Belirtilmedi',
       customerCity: ticketData.customerCity,
       customerDistrict: ticketData.customerDistrict,

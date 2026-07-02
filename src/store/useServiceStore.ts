@@ -5,6 +5,10 @@ import type { Ticket, TicketConversation, TicketMessage, TicketOffer, OfferType,
 import type { ProviderStatus, ServiceProvider } from '@/store/useAdminStore';
 import type { User } from '@/store/useAuthStore';
 
+type FetchOptions = {
+  silent?: boolean;
+};
+
 export type ServiceTicket = Ticket;
 
 export type UpdateProviderProfileInput = {
@@ -37,8 +41,8 @@ interface ServiceStoreState {
   // Actions
   setProvider: (id: string, name: string) => void;
   resolveProviderSession: (user: User | null) => Promise<void>;
-  fetchOpportunities: () => Promise<void>;
-  fetchMyJobs: () => Promise<void>;
+  fetchOpportunities: (options?: FetchOptions) => Promise<void>;
+  fetchMyJobs: (options?: FetchOptions) => Promise<void>;
   fetchProviderProfile: () => Promise<void>;
   updateProviderProfile: (profile: UpdateProviderProfileInput) => Promise<ServiceProvider>;
   
@@ -108,49 +112,67 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
     }
   },
 
-  fetchOpportunities: async () => {
+  fetchOpportunities: async (options: FetchOptions = {}) => {
     const providerProfile = get().providerProfile;
     if (!providerProfile) {
-      set({
-        opportunities: [],
-        isLoading: false,
-        error: get().error ?? 'Servis profili yuklenemedi',
-      });
+      if (!options.silent) {
+        set({
+          opportunities: [],
+          isLoading: false,
+          error: get().error ?? 'Servis profili yuklenemedi',
+        });
+      }
       return;
     }
     if (!canAccessJobs(providerProfile)) {
       set({ opportunities: [], isLoading: false, error: null });
       return;
     }
-    set({ isLoading: true, error: null });
+    if (!options.silent) {
+      set({ isLoading: true, error: null });
+    }
     try {
       const tickets = await api.get<Ticket[]>('/tickets/opportunities', { params: { providerId: get().currentProviderId } });
-      set({ opportunities: tickets.map(normalizeServiceTicket), isLoading: false });
+      set((state) => ({
+        opportunities: tickets.map(normalizeServiceTicket),
+        isLoading: options.silent ? state.isLoading : false,
+      }));
     } catch (error: unknown) {
-      set({ error: error instanceof Error ? error.message : 'Firsatlar yuklenemedi', isLoading: false });
+      if (!options.silent) {
+        set({ error: error instanceof Error ? error.message : 'Firsatlar yuklenemedi', isLoading: false });
+      }
     }
   },
 
-  fetchMyJobs: async () => {
+  fetchMyJobs: async (options: FetchOptions = {}) => {
     const providerProfile = get().providerProfile;
     if (!providerProfile) {
-      set({
-        myJobs: [],
-        isLoading: false,
-        error: get().error ?? 'Servis profili yuklenemedi',
-      });
+      if (!options.silent) {
+        set({
+          myJobs: [],
+          isLoading: false,
+          error: get().error ?? 'Servis profili yuklenemedi',
+        });
+      }
       return;
     }
     if (!canAccessJobs(providerProfile)) {
       set({ myJobs: [], isLoading: false, error: null });
       return;
     }
-    set({ isLoading: true, error: null });
+    if (!options.silent) {
+      set({ isLoading: true, error: null });
+    }
     try {
       const tickets = await api.get<Ticket[]>('/tickets/provider', { params: { providerId: get().currentProviderId } });
-      set({ myJobs: tickets.map(normalizeServiceTicket), isLoading: false });
+      set((state) => ({
+        myJobs: tickets.map(normalizeServiceTicket),
+        isLoading: options.silent ? state.isLoading : false,
+      }));
     } catch (error: unknown) {
-      set({ error: error instanceof Error ? error.message : 'Isler yuklenemedi', isLoading: false });
+      if (!options.silent) {
+        set({ error: error instanceof Error ? error.message : 'Isler yuklenemedi', isLoading: false });
+      }
     }
   },
 
