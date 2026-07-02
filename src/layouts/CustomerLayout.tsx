@@ -1,7 +1,8 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
-import { Building2, Home, LogOut } from 'lucide-react';
+import { Building2, LogOut } from 'lucide-react';
+import logoImg from '@/assets/logo.png';
 
 /**
  * CustomerLayout Component
@@ -26,9 +27,7 @@ export default function CustomerLayout() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 sm:py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sticky top-0 z-50">
         <div className="flex items-center gap-3 w-full lg:w-auto">
-          <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center shadow-sm">
-            <Home className="w-5 h-5 text-white" />
-          </div>
+          <img src={logoImg} alt="Maintly Logo" className="h-10 w-auto object-contain" />
           <div>
             <span className="font-bold text-slate-900 text-lg tracking-tight">Maintly</span>
             <p className="text-xs text-slate-500">Müşteri Portalı</p>

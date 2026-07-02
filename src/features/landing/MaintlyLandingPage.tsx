@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import NetworkScene from './NetworkScene';
+import logoImg from '@/assets/logo.png';
 import {
   stats,
   proofPoints,
@@ -107,9 +108,7 @@ function HeroSection() {
         >
           <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:gap-3 sm:py-4 md:px-6 lg:px-8">
             <Link to="/" className="group flex min-w-0 items-center gap-2 sm:gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500 text-sm font-black text-white shadow-lg shadow-red-500/15 transition-shadow group-hover:shadow-red-500/25 sm:h-11 sm:w-11 sm:rounded-xl sm:text-base">
-                M
-              </span>
+              <img src={logoImg} alt="Maintly Logo" className="h-9 w-auto object-contain sm:h-11" />
               <span className="min-w-0">
                 <span className="block text-base font-black leading-none text-gray-900 sm:text-xl">Maintly</span>
                 <span className="mt-0.5 hidden text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 sm:block sm:mt-1">
@@ -448,9 +447,7 @@ function FooterSection() {
         <div className="grid gap-8 sm:grid-cols-2 sm:gap-10 lg:grid-cols-4 lg:gap-12">
           <div className="sm:col-span-2 lg:col-span-1">
             <Link to="/" className="flex items-center gap-2.5 sm:gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500 text-xs font-black text-white sm:h-10 sm:w-10 sm:rounded-xl sm:text-sm">
-                M
-              </span>
+              <img src={logoImg} alt="Maintly Logo" className="h-9 w-auto object-contain sm:h-10" />
               <span className="text-base font-black text-gray-900 sm:text-lg">Maintly</span>
             </Link>
             <p className="mt-4 max-w-xs text-xs leading-5 text-gray-400 sm:mt-5 sm:text-sm sm:leading-6">
