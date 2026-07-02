@@ -6,7 +6,7 @@ import {
   DashboardMessageToast,
   type DashboardMessageToastData,
 } from '@/components/messages/DashboardMessagePanel';
-import { subscribeToTicketMessages } from '@/lib/realtime';
+import { subscribeToCustomerTicketEvents } from '@/lib/realtime';
 import { useCustomerStore, type Ticket } from '@/store/useCustomerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
@@ -33,7 +33,7 @@ export default function CustomerDashboard() {
     fetchAssets,
     fetchTickets,
     fetchCustomerProfile,
-    receiveTicketMessage,
+    receiveTicketUpdate,
   } = useCustomerStore();
   const user = useAuthStore((state) => state.user);
   const seenMessageIdsRef = useRef(new Set<string>());
@@ -51,45 +51,41 @@ export default function CustomerDashboard() {
     tickets.forEach((ticket) => {
       ticketMetaRef.current.set(ticket.id, { title: ticket.title });
       (ticket.messages ?? []).forEach((message) => seenMessageIdsRef.current.add(message.id));
+      (ticket.conversations ?? []).forEach((conversation) => {
+        (conversation.messages ?? []).forEach((message) => seenMessageIdsRef.current.add(message.id));
+      });
     });
   }, [tickets]);
 
-  const subscriptionKey = useMemo(
-    () =>
-      tickets
-        .filter((ticket) => ticket.status !== 'CANCELLED')
-        .map((ticket) => ticket.id)
-        .sort()
-        .join('|'),
-    [tickets]
-  );
+  const customerEventId = customerProfile?.id ?? '';
 
   useEffect(() => {
-    if (!subscriptionKey) return;
-    const subscriptions = subscriptionKey.split('|').map((ticketId) =>
-      subscribeToTicketMessages(ticketId, (incomingMessage) => {
-        if (seenMessageIdsRef.current.has(incomingMessage.id)) return;
-        seenMessageIdsRef.current.add(incomingMessage.id);
-        receiveTicketMessage(incomingMessage);
+    if (!customerEventId) return;
+    return subscribeToCustomerTicketEvents(customerEventId, (event) => {
+      receiveTicketUpdate(event.ticket);
 
-        if (incomingMessage.senderRole === 'service') {
-          const ticketMeta = ticketMetaRef.current.get(incomingMessage.ticketId);
-          setMessageToast({
-            ticketId: incomingMessage.ticketId,
-            title: ticketMeta?.title ?? 'Servis talebi',
-            senderName: incomingMessage.senderName,
-            body: incomingMessage.body,
-            path: `/customer/requests?ticketId=${encodeURIComponent(incomingMessage.ticketId)}`,
-          });
-        }
-      })
-    );
+      const incomingMessage = event.ticket.lastMessage;
+      if (!incomingMessage || seenMessageIdsRef.current.has(incomingMessage.id)) return;
+      seenMessageIdsRef.current.add(incomingMessage.id);
 
-    return () => subscriptions.forEach((unsubscribe) => unsubscribe());
-  }, [receiveTicketMessage, subscriptionKey]);
+      if (event.type === 'MESSAGE' && incomingMessage.senderRole === 'service') {
+        const ticketMeta = ticketMetaRef.current.get(incomingMessage.ticketId);
+        const conversationId = event.conversationId ?? incomingMessage.conversationId;
+        setMessageToast({
+          ticketId: incomingMessage.ticketId,
+          title: ticketMeta?.title ?? 'Servis talebi',
+          senderName: incomingMessage.senderName,
+          body: incomingMessage.body,
+          path: `/customer/requests?ticketId=${encodeURIComponent(incomingMessage.ticketId)}&tab=messages${
+            conversationId ? `&conversationId=${encodeURIComponent(conversationId)}` : ''
+          }`,
+        });
+      }
+    });
+  }, [customerEventId, receiveTicketUpdate]);
 
   const pendingOfferTickets = tickets.filter((ticket) =>
-    ticket.offers.some((offer) => offer.status === 'PENDING')
+    ticket.offers.some((offer) => offer.status === 'PENDING' || offer.status === 'INVITED')
   );
   const billingApprovalTickets = tickets.filter(
     (ticket) => ticket.billingStatus === 'AWAITING_CUSTOMER_APPROVAL'
@@ -234,7 +230,13 @@ export default function CustomerDashboard() {
           </section>
         </div>
 
-        <DashboardMessagePanel tickets={tickets} role="customer" toBasePath="/customer/requests" tone="red" />
+        <DashboardMessagePanel
+          tickets={tickets}
+          role="customer"
+          toBasePath="/customer/requests"
+          allMessagesPath="/customer/requests"
+          tone="red"
+        />
       </div>
     </div>
   );

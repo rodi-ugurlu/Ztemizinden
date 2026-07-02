@@ -17,4 +17,25 @@ public class TicketMessageBroadcaster {
                 TicketMessagePayload.from(message)
         );
     }
+
+    public void publishConversation(TicketMessage message) {
+        if (message.getConversation() == null) {
+            publish(message);
+            return;
+        }
+        messagingTemplate.convertAndSend(
+                "/topic/tickets/" + message.getTicket().getId()
+                        + "/conversations/" + message.getConversation().getId()
+                        + "/messages",
+                TicketMessagePayload.from(message)
+        );
+    }
+
+    public void publishCustomerTicket(String customerId, Object payload) {
+        messagingTemplate.convertAndSend("/topic/customers/" + customerId + "/tickets", payload);
+    }
+
+    public void publishProviderTicket(String providerId, Object payload) {
+        messagingTemplate.convertAndSend("/topic/providers/" + providerId + "/tickets", payload);
+    }
 }

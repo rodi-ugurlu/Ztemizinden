@@ -155,6 +155,10 @@ interface AuthTokenResponse {
   expires_in: number;
 }
 
+interface AuthMessageResponse {
+  message: string;
+}
+
 interface JwtClaims {
   sub?: string;
   email?: string;
@@ -187,6 +191,62 @@ async function requestBackendToken(email: string, password: string): Promise<Aut
   }
 
   return response.json();
+}
+
+export async function requestPasswordReset(email: string): Promise<string> {
+  if (import.meta.env.VITE_AUTH_MODE === 'demo') {
+    return 'Eğer bu e-posta kayıtlıysa şifre sıfırlama bağlantısı gönderildi.';
+  }
+
+  const apiUrl = normalizedApiUrl();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/auth/forgot-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+      body: JSON.stringify({ email }),
+    });
+  } catch {
+    throw new Error('Backend bağlantısı kurulamadı. API adresini ve sunucu erişimini kontrol edin.');
+  }
+
+  if (!response.ok) {
+    throw new Error(await authErrorMessage(response));
+  }
+
+  const payload = (await response.json()) as AuthMessageResponse;
+  return payload.message;
+}
+
+export async function submitPasswordReset(token: string, newPassword: string): Promise<string> {
+  if (import.meta.env.VITE_AUTH_MODE === 'demo') {
+    return 'Şifreniz güncellendi. Yeni şifrenizle giriş yapabilirsiniz.';
+  }
+
+  const apiUrl = normalizedApiUrl();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/auth/reset-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+      body: JSON.stringify({ token, newPassword }),
+    });
+  } catch {
+    throw new Error('Backend bağlantısı kurulamadı. API adresini ve sunucu erişimini kontrol edin.');
+  }
+
+  if (!response.ok) {
+    throw new Error(await authErrorMessage(response));
+  }
+
+  const payload = (await response.json()) as AuthMessageResponse;
+  return payload.message;
 }
 
 function normalizedApiUrl() {

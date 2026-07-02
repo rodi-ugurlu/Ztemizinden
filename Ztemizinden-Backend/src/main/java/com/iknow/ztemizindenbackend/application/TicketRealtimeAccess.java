@@ -7,6 +7,8 @@ import com.iknow.ztemizindenbackend.domain.NotFoundException;
 import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
 import com.iknow.ztemizindenbackend.domain.Ticket;
+import com.iknow.ztemizindenbackend.domain.TicketConversation;
+import com.iknow.ztemizindenbackend.domain.TicketConversationRepository;
 import com.iknow.ztemizindenbackend.domain.TicketRepository;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TicketRealtimeAccess {
     private final SecurityProperties securityProperties;
     private final TicketRepository ticketRepository;
+    private final TicketConversationRepository ticketConversationRepository;
     private final CustomerRepository customerRepository;
     private final ServiceProviderRepository serviceProviderRepository;
 
@@ -59,6 +62,83 @@ public class TicketRealtimeAccess {
         }
 
         throw new AccessDeniedException("Ticket topic is not visible to current user");
+    }
+
+    @Transactional(readOnly = true)
+    public void requireCanSubscribeConversation(String ticketId, String conversationId, Principal principal) {
+        if (!securityProperties.enabled()) {
+            return;
+        }
+
+        Authentication authentication = authentication(principal);
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("WebSocket session is not authenticated");
+        }
+        if (hasRole(authentication, "ADMIN")) {
+            return;
+        }
+
+        TicketConversation conversation = ticketConversationRepository.findById(conversationId)
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+        if (!conversation.getTicket().getId().equals(ticketId)) {
+            throw new AccessDeniedException("Conversation does not belong to ticket topic");
+        }
+
+        if (hasRole(authentication, "CUSTOMER")) {
+            String customerId = customerId(authentication);
+            if (conversation.getTicket().getCustomerId().equals(customerId)) {
+                return;
+            }
+        }
+
+        if (hasRole(authentication, "SERVICE")) {
+            String providerId = providerId(authentication);
+            if (conversation.getProviderId().equals(providerId)) {
+                return;
+            }
+        }
+
+        throw new AccessDeniedException("Conversation topic is not visible to current user");
+    }
+
+    @Transactional(readOnly = true)
+    public void requireCanSubscribeCustomer(String requestedCustomerId, Principal principal) {
+        if (!securityProperties.enabled()) {
+            return;
+        }
+
+        Authentication authentication = authentication(principal);
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("WebSocket session is not authenticated");
+        }
+        if (hasRole(authentication, "ADMIN")) {
+            return;
+        }
+        if (hasRole(authentication, "CUSTOMER") && requestedCustomerId.equals(customerId(authentication))) {
+            return;
+        }
+
+        throw new AccessDeniedException("Customer ticket topic is not visible to current user");
+    }
+
+    @Transactional(readOnly = true)
+    public void requireCanSubscribeProvider(String requestedProviderId, Principal principal) {
+        if (!securityProperties.enabled()) {
+            return;
+        }
+
+        Authentication authentication = authentication(principal);
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("WebSocket session is not authenticated");
+        }
+        if (hasRole(authentication, "ADMIN")) {
+            return;
+        }
+        if (hasRole(authentication, "SERVICE") && requestedProviderId.equals(providerId(authentication))) {
+            return;
+        }
+
+        throw new AccessDeniedException("Provider ticket topic is not visible to current user");
     }
 
     private boolean isVisibleForProvider(Ticket ticket, ServiceProvider provider) {

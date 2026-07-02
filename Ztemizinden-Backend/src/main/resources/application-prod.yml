@@ -10,3 +10,9 @@ server:
 app:
   upload:
     root-dir: ${APP_UPLOAD_DIR:/var/lib/ztemizinden/uploads}
+  password-reset:
+    frontend-base-url: ${APP_FRONTEND_BASE_URL:https://maintly.app}
+    log-reset-link: ${APP_PASSWORD_RESET_LOG_LINK:false}
+  demo-data:
+    ensure-demo-accounts: ${APP_DEMO_ENSURE_ACCOUNTS:false}
+    reset-and-seed: ${APP_DEMO_RESET_AND_SEED:false}

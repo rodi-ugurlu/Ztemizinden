@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { latestConversationMessage, sortTicketMessages } from '@/lib/ticketMessages';
-import type { Ticket, TicketMessage, TicketOffer, OfferType, TicketCategory } from '@/store/useCustomerStore';
+import type { Ticket, TicketConversation, TicketMessage, TicketOffer, OfferType, TicketCategory } from '@/store/useCustomerStore';
 import type { ProviderStatus, ServiceProvider } from '@/store/useAdminStore';
 import type { User } from '@/store/useAuthStore';
 
@@ -52,8 +52,11 @@ interface ServiceStoreState {
     billing: { actualCost?: number; notes: string; laborCost?: number; partsCost?: number; extraCost?: number; partsSummary?: string }
   ) => Promise<void>;
   addTicketMessage: (ticketId: string, body: string) => Promise<void>;
+  addConversationMessage: (ticketId: string, conversationId: string, body: string) => Promise<void>;
   receiveTicketMessage: (message: TicketMessage) => void;
+  receiveTicketUpdate: (ticket: Ticket) => void;
   markTicketMessagesRead: (ticketId: string) => Promise<void>;
+  markConversationMessagesRead: (ticketId: string, conversationId: string) => Promise<void>;
   resetDemoData: () => void;
   getNewOpportunities: () => Ticket[];
   getMyProposals: () => Ticket[];
@@ -225,6 +228,15 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
     await get().fetchOpportunities();
   },
 
+  addConversationMessage: async (ticketId, conversationId, body) => {
+    if (!canAccessJobs(get().providerProfile)) {
+      throw new Error('Servis hesabı operasyon onayı bekliyor');
+    }
+    await api.post(`/tickets/${ticketId}/conversations/${conversationId}/messages`, { body });
+    await get().fetchMyJobs();
+    await get().fetchOpportunities();
+  },
+
   receiveTicketMessage: (message) => {
     set((state) => ({
       opportunities: state.opportunities.map((ticket) => appendTicketMessage(ticket, message)),
@@ -232,8 +244,39 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
     }));
   },
 
+  receiveTicketUpdate: (ticket) => {
+    const updatedTicket = normalizeServiceTicket(ticket);
+    set((state) => {
+      const providerId = state.currentProviderId;
+      const relatedToProvider =
+        updatedTicket.assignedProviderId === providerId ||
+        updatedTicket.offers.some((offer) => offer.providerId === providerId) ||
+        updatedTicket.conversations.some((conversation) => conversation.providerId === providerId);
+      const isOpenOpportunity = updatedTicket.status === 'OPEN' || updatedTicket.status === 'OFFERED';
+
+      return {
+        opportunities: upsertOrRemoveTicket(
+          state.opportunities,
+          updatedTicket,
+          isOpenOpportunity && !relatedToProvider
+        ),
+        myJobs: upsertOrRemoveTicket(state.myJobs, updatedTicket, relatedToProvider),
+      };
+    });
+  },
+
   markTicketMessagesRead: async (ticketId) => {
     const updatedTicket = normalizeServiceTicket(await api.post<Ticket>(`/tickets/${ticketId}/messages/read`));
+    set((state) => ({
+      opportunities: state.opportunities.map((ticket) => (ticket.id === ticketId ? updatedTicket : ticket)),
+      myJobs: state.myJobs.map((ticket) => (ticket.id === ticketId ? updatedTicket : ticket)),
+    }));
+  },
+
+  markConversationMessagesRead: async (ticketId, conversationId) => {
+    const updatedTicket = normalizeServiceTicket(await api.post<Ticket>(
+      `/tickets/${ticketId}/conversations/${conversationId}/messages/read`
+    ));
     set((state) => ({
       opportunities: state.opportunities.map((ticket) => (ticket.id === ticketId ? updatedTicket : ticket)),
       myJobs: state.myJobs.map((ticket) => (ticket.id === ticketId ? updatedTicket : ticket)),
@@ -256,7 +299,7 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
       ticket.offers?.some(
         (p) =>
           p.providerId === get().currentProviderId &&
-          (p.status === 'PENDING' || p.status === 'ACCEPTED' || p.status === 'REJECTED')
+          (p.status === 'PENDING' || p.status === 'INVITED' || p.status === 'ACCEPTED' || p.status === 'REJECTED')
       )
     );
   },
@@ -279,44 +322,121 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
 }));
 
 function normalizeServiceTicket(ticket: Ticket): Ticket {
-  const messages = sortTicketMessages(
-    (ticket.messages ?? []).filter((message) => !message.ticketId || message.ticketId === ticket.id)
-  );
+  const messages = sortTicketMessages((ticket.messages ?? []).filter((message) =>
+    (!message.ticketId || message.ticketId === ticket.id) && !message.conversationId
+  ));
+  const conversations = (ticket.conversations ?? [])
+    .filter((conversation) => !conversation.ticketId || conversation.ticketId === ticket.id)
+    .map((conversation) => normalizeConversation(conversation));
   return {
     ...ticket,
     mediaUrls: ticket.mediaUrls ?? [],
     offers: (ticket.offers ?? []).filter((offer) => !offer.ticketId || offer.ticketId === ticket.id),
+    conversations,
     messages,
-    unreadMessageCount: ticket.unreadMessageCount ?? unreadMessagesForService(messages),
-    lastMessage: scopedLastMessage(ticket, messages),
+    unreadMessageCount: ticket.unreadMessageCount ?? unreadMessagesForServiceTicket(messages, conversations),
+    lastMessage: scopedLastMessage(ticket, messages, conversations),
   };
 }
 
 function appendTicketMessage(ticket: Ticket, message: TicketMessage): Ticket {
   if (ticket.id !== message.ticketId) return ticket;
+  if (message.conversationId) {
+    return appendConversationMessage(ticket, message);
+  }
+
   const messages = ticket.messages ?? [];
   if (messages.some((item) => item.id === message.id)) return ticket;
   const nextMessages = sortTicketMessages([...messages, message]);
   const shouldIncrementUnread = message.senderRole === 'customer' && message.readByService !== true;
+  const conversations = ticket.conversations ?? [];
 
   return {
     ...ticket,
     messages: nextMessages,
-    unreadMessageCount: (ticket.unreadMessageCount ?? unreadMessagesForService(messages)) + (shouldIncrementUnread ? 1 : 0),
-    lastMessage: latestConversationMessage(nextMessages),
+    unreadMessageCount: (ticket.unreadMessageCount ?? unreadMessagesForServiceTicket(messages, conversations)) + (shouldIncrementUnread ? 1 : 0),
+    lastMessage: latestConversationMessage([...nextMessages, ...conversationMessages(conversations)]),
     updatedAt: message.createdAt ?? ticket.updatedAt,
   };
 }
 
-function scopedLastMessage(ticket: Ticket, messages: TicketMessage[]) {
+function appendConversationMessage(ticket: Ticket, message: TicketMessage): Ticket {
+  const conversations = ticket.conversations ?? [];
+  let didAppend = false;
+  const nextConversations = conversations.map((conversation) => {
+    if (conversation.id !== message.conversationId) return conversation;
+    if (conversation.messages.some((item) => item.id === message.id)) return conversation;
+
+    didAppend = true;
+    const messages = sortTicketMessages([...conversation.messages, message]);
+    const shouldIncrementUnread = message.senderRole === 'customer' && message.readByService !== true;
+    return {
+      ...conversation,
+      messages,
+      unreadMessageCount: (conversation.unreadMessageCount ?? unreadMessagesForService(conversation.messages)) + (shouldIncrementUnread ? 1 : 0),
+      lastMessage: latestConversationMessage(messages),
+      updatedAt: message.createdAt ?? conversation.updatedAt,
+    };
+  });
+
+  if (!didAppend) return ticket;
+
+  const shouldIncrementUnread = message.senderRole === 'customer' && message.readByService !== true;
+  return {
+    ...ticket,
+    conversations: nextConversations,
+    unreadMessageCount: (ticket.unreadMessageCount ?? unreadMessagesForServiceTicket(ticket.messages ?? [], conversations)) + (shouldIncrementUnread ? 1 : 0),
+    lastMessage: latestConversationMessage([...(ticket.messages ?? []), ...conversationMessages(nextConversations)]),
+    updatedAt: message.createdAt ?? ticket.updatedAt,
+  };
+}
+
+function scopedLastMessage(ticket: Ticket, messages: TicketMessage[], conversations: TicketConversation[]) {
   if (ticket.lastMessage && ticket.lastMessage.ticketId === ticket.id && ticket.lastMessage.senderRole !== 'system') {
     return ticket.lastMessage;
   }
-  return latestConversationMessage(messages);
+  return latestConversationMessage([...messages, ...conversationMessages(conversations)]);
+}
+
+function normalizeConversation(conversation: TicketConversation): TicketConversation {
+  const messages = sortTicketMessages((conversation.messages ?? []).filter((message) =>
+    (!message.ticketId || message.ticketId === conversation.ticketId) &&
+    (!message.conversationId || message.conversationId === conversation.id)
+  ));
+
+  return {
+    ...conversation,
+    messages,
+    unreadMessageCount: conversation.unreadMessageCount ?? unreadMessagesForService(messages),
+    lastMessage: conversation.lastMessage && conversation.lastMessage.senderRole !== 'system'
+      ? conversation.lastMessage
+      : latestConversationMessage(messages),
+  };
 }
 
 function unreadMessagesForService(messages: TicketMessage[]) {
   return messages.filter((message) => message.senderRole === 'customer' && message.readByService !== true).length;
+}
+
+function unreadMessagesForServiceTicket(messages: TicketMessage[], conversations: TicketConversation[]) {
+  return unreadMessagesForService(messages) + conversations.reduce(
+    (total, conversation) => total + unreadMessagesForService(conversation.messages),
+    0
+  );
+}
+
+function conversationMessages(conversations: TicketConversation[]) {
+  return conversations.flatMap((conversation) => conversation.messages ?? []);
+}
+
+function upsertOrRemoveTicket(tickets: Ticket[], ticket: Ticket, shouldInclude: boolean) {
+  const exists = tickets.some((item) => item.id === ticket.id);
+  if (!shouldInclude) {
+    return exists ? tickets.filter((item) => item.id !== ticket.id) : tickets;
+  }
+  return exists
+    ? tickets.map((item) => (item.id === ticket.id ? ticket : item))
+    : [ticket, ...tickets];
 }
 
 function normalizeServiceProvider(provider: ServiceProvider): ServiceProvider {
@@ -356,9 +476,9 @@ export function useTicketStats() {
   const allTickets = [...newOpportunities, ...myJobs];
   const myProposals = allTickets.filter((ticket) =>
     ticket.offers?.some(
-      (offer) =>
-        offer.providerId === currentProviderId &&
-        (offer.status === 'PENDING' || offer.status === 'ACCEPTED' || offer.status === 'REJECTED')
+        (offer) =>
+          offer.providerId === currentProviderId &&
+        (offer.status === 'PENDING' || offer.status === 'INVITED' || offer.status === 'ACCEPTED' || offer.status === 'REJECTED')
     )
   );
   const activeJobs = myJobs.filter((ticket) => ticket.status === 'IN_PROGRESS');
@@ -384,7 +504,7 @@ export function useMyProposals() {
     ticket.offers?.some(
       (offer) =>
         offer.providerId === currentProviderId &&
-        (offer.status === 'PENDING' || offer.status === 'ACCEPTED' || offer.status === 'REJECTED')
+        (offer.status === 'PENDING' || offer.status === 'INVITED' || offer.status === 'ACCEPTED' || offer.status === 'REJECTED')
     )
   );
 }

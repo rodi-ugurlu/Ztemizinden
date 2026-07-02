@@ -5,6 +5,17 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:55432/ztemizinden}
     username: ${DB_USERNAME:ztemizinden}
     password: ${DB_PASSWORD:ztemizinden}
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:true}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -23,6 +34,14 @@ app:
     jwt-expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:480}
   upload:
     root-dir: ${APP_UPLOAD_DIR:uploads}
+  password-reset:
+    frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:5173}
+    mail-from: ${APP_MAIL_FROM:${SPRING_MAIL_USERNAME:no-reply@maintly.app}}
+    token-expiration-minutes: ${APP_PASSWORD_RESET_EXPIRATION_MINUTES:30}
+    log-reset-link: ${APP_PASSWORD_RESET_LOG_LINK:true}
+  demo-data:
+    ensure-demo-accounts: ${APP_DEMO_ENSURE_ACCOUNTS:true}
+    reset-and-seed: ${APP_DEMO_RESET_AND_SEED:true}
   keycloak:
     provisioning:
       enabled: ${APP_KEYCLOAK_PROVISIONING_ENABLED:false}

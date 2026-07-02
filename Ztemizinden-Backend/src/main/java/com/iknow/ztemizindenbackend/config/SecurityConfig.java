@@ -33,7 +33,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
-@EnableConfigurationProperties({SecurityProperties.class, KeycloakProvisioningProperties.class})
+@EnableConfigurationProperties({SecurityProperties.class, KeycloakProvisioningProperties.class, PasswordResetProperties.class})
 public class SecurityConfig {
     private static final List<String> DEFAULT_ALLOWED_ORIGIN_PATTERNS = List.of(
             "http://localhost:*",
@@ -57,8 +57,11 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/favicon.svg", "/icons.svg", "/assets/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/reset-password").permitAll()
                 .requestMatchers(HttpMethod.GET, "/customer/**", "/service/**", "/admin/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/reset-password").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/customers").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/providers").permitAll()
                 .requestMatchers("/ws", "/ws/**").permitAll()

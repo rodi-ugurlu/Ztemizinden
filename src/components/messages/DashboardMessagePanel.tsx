@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import type { Ticket, TicketMessage } from '@/store/useCustomerStore';
-import { ArrowRight, Bell, MailOpen, MessageSquare, X } from 'lucide-react';
+import { ticketStatusLabel } from '@/components/domain/ticketMeta';
+import type { Ticket, TicketConversation, TicketMessage } from '@/store/useCustomerStore';
+import { ArrowRight, Bell, Clock3, MailOpen, MessageSquare, Package, X } from 'lucide-react';
 
 type MessagePanelRole = 'customer' | 'service';
 type MessagePanelTone = 'red' | 'green';
@@ -18,6 +19,7 @@ interface DashboardMessagePanelProps {
   tickets: Ticket[];
   role: MessagePanelRole;
   toBasePath: string;
+  allMessagesPath?: string;
   tone?: MessagePanelTone;
 }
 
@@ -25,15 +27,11 @@ export function DashboardMessagePanel({
   tickets,
   role,
   toBasePath,
+  allMessagesPath,
   tone = 'red',
 }: DashboardMessagePanelProps) {
   const styles = toneStyles[tone];
-  const items = uniqueTickets(tickets)
-    .map((ticket) => ({
-      ticket,
-      unreadCount: unreadCountForRole(ticket, role),
-      lastMessage: latestMessage(ticket),
-    }))
+  const items = uniqueTickets(tickets).flatMap((ticket) => messageItems(ticket, role))
     .filter((item) => item.lastMessage || item.unreadCount > 0)
     .sort((a, b) => {
       if (a.unreadCount !== b.unreadCount) return b.unreadCount - a.unreadCount;
@@ -43,7 +41,7 @@ export function DashboardMessagePanel({
   const visibleItems = items.slice(0, 6);
 
   return (
-    <aside className="h-fit rounded-lg border border-slate-200 bg-white shadow-md xl:sticky xl:top-6">
+    <aside className="h-fit self-start rounded-lg border border-slate-200 bg-white shadow-md xl:sticky xl:top-6">
       <div className="border-b border-slate-100 p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -61,14 +59,19 @@ export function DashboardMessagePanel({
         </div>
       </div>
 
-      <div className="max-h-[590px] space-y-2 overflow-y-auto p-3">
+      <div className="max-h-[520px] space-y-2 overflow-y-auto p-3 xl:max-h-[590px]">
         {visibleItems.length > 0 ? (
-          visibleItems.map(({ ticket, unreadCount, lastMessage }) => {
-            const path = `${toBasePath}?ticketId=${encodeURIComponent(ticket.id)}`;
+          visibleItems.map(({ key, ticket, conversation, unreadCount, lastMessage }) => {
+            const path = `${toBasePath}?ticketId=${encodeURIComponent(ticket.id)}&tab=messages${
+              conversation?.id ? `&conversationId=${encodeURIComponent(conversation.id)}` : ''
+            }`;
+            const senderLabel = lastMessage
+              ? `${senderRoleLabel(lastMessage.senderRole)} · ${lastMessage.senderName}`
+              : conversation?.providerName ?? ticket.customerCompany;
 
             return (
               <Link
-                key={ticket.id}
+                key={key}
                 to={path}
                 className={`block rounded-lg border p-3 transition-all hover:-translate-y-0.5 hover:shadow-md ${
                   unreadCount > 0
@@ -78,11 +81,19 @@ export function DashboardMessagePanel({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-[11px] font-bold uppercase text-slate-400">
+                        #{shortTicketId(ticket.id)}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase text-slate-500">
+                        {conversation ? conversationStatusLabel(conversation) : ticketStatusLabel(ticket.status)}
+                      </span>
+                    </div>
                     <p className={`line-clamp-2 text-sm leading-snug ${unreadCount > 0 ? 'font-black text-slate-950' : 'font-bold text-slate-800'}`}>
                       {ticket.title}
                     </p>
                     <p className="mt-1 truncate text-xs font-medium text-slate-500">
-                      {lastMessage?.senderName ?? ticket.customerCompany}
+                      {conversation?.providerName ? `${conversation.providerName} · ${senderLabel}` : senderLabel}
                     </p>
                   </div>
                   {unreadCount > 0 && (
@@ -97,7 +108,18 @@ export function DashboardMessagePanel({
                 </p>
 
                 <div className="mt-3 flex items-center justify-between gap-3 text-xs font-semibold text-slate-400">
-                  <span>{formatMessageTime(lastMessage?.createdAt ?? ticket.updatedAt)}</span>
+                  <span className="min-w-0 truncate">{ticket.customerCompany}</span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <Package className="h-3 w-3" />
+                    <span className="max-w-[105px] truncate">{ticket.assetName || 'Varlık yok'}</span>
+                  </span>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs font-semibold text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Clock3 className="h-3 w-3" />
+                    {formatMessageTime(lastMessage?.createdAt ?? ticket.updatedAt)}
+                  </span>
                   <ArrowRight className={`h-4 w-4 ${unreadCount > 0 ? styles.icon : 'text-slate-300'}`} />
                 </div>
               </Link>
@@ -114,10 +136,10 @@ export function DashboardMessagePanel({
 
       <div className="border-t border-slate-100 p-3">
         <Link
-          to={toBasePath}
+          to={allMessagesPath ?? `${toBasePath}?focus=messages`}
           className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-black ${styles.action}`}
         >
-          Tüm Mesajları Aç
+          Mesajlı İşleri Aç
           <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
@@ -171,11 +193,61 @@ export function DashboardMessageToast({
   );
 }
 
-function unreadCountForRole(ticket: Ticket, role: MessagePanelRole) {
-  if (typeof ticket.unreadMessageCount === 'number') {
-    return ticket.unreadMessageCount;
+type DashboardMessageItem = {
+  key: string;
+  ticket: Ticket;
+  conversation?: TicketConversation;
+  unreadCount: number;
+  lastMessage: TicketMessage | null;
+};
+
+function messageItems(ticket: Ticket, role: MessagePanelRole): DashboardMessageItem[] {
+  const generalMessages = ticket.messages ?? [];
+  const items: DashboardMessageItem[] = [];
+
+  const generalUnread = unreadMessagesForRole(generalMessages, role);
+  const generalLastMessage = latestMessage(generalMessages);
+  if (generalLastMessage || generalUnread > 0) {
+    items.push({
+      key: `${ticket.id}:general`,
+      ticket,
+      unreadCount: generalUnread,
+      lastMessage: generalLastMessage,
+    });
   }
-  return (ticket.messages ?? []).filter((message) => {
+
+  for (const conversation of ticket.conversations ?? []) {
+    const messages = conversation.messages ?? [];
+    const unreadCount = conversation.unreadMessageCount ?? unreadMessagesForRole(messages, role);
+    const lastMessage = conversation.lastMessage && conversation.lastMessage.senderRole !== 'system'
+      ? conversation.lastMessage
+      : latestMessage(messages);
+    if (!lastMessage && unreadCount <= 0) continue;
+    items.push({
+      key: `${ticket.id}:${conversation.id}`,
+      ticket,
+      conversation,
+      unreadCount,
+      lastMessage,
+    });
+  }
+
+  if (items.length === 0 && ticket.lastMessage && ticket.lastMessage.senderRole !== 'system') {
+    const conversation = (ticket.conversations ?? []).find((item) => item.id === ticket.lastMessage?.conversationId);
+    items.push({
+      key: `${ticket.id}:${conversation?.id ?? 'last'}`,
+      ticket,
+      conversation,
+      unreadCount: ticket.unreadMessageCount ?? 0,
+      lastMessage: ticket.lastMessage,
+    });
+  }
+
+  return items;
+}
+
+function unreadMessagesForRole(messages: TicketMessage[], role: MessagePanelRole) {
+  return messages.filter((message) => {
     if (role === 'customer') {
       return message.senderRole === 'service' && message.readByCustomer !== true;
     }
@@ -183,11 +255,8 @@ function unreadCountForRole(ticket: Ticket, role: MessagePanelRole) {
   }).length;
 }
 
-function latestMessage(ticket: Ticket) {
-  if (ticket.lastMessage && ticket.lastMessage.senderRole !== 'system') {
-    return ticket.lastMessage;
-  }
-  return [...(ticket.messages ?? [])]
+function latestMessage(messages: TicketMessage[]) {
+  return [...messages]
     .filter((message) => message.senderRole !== 'system')
     .sort((a, b) => messageTime(b) - messageTime(a))[0] ?? null;
 }
@@ -214,6 +283,22 @@ function formatMessageTime(value?: string) {
     day: '2-digit',
     month: 'short',
   });
+}
+
+function shortTicketId(id: string) {
+  return id.split('-')[1] ?? id.slice(0, 8);
+}
+
+function senderRoleLabel(role: TicketMessage['senderRole']) {
+  if (role === 'customer') return 'Müşteri';
+  if (role === 'service') return 'Servis';
+  return 'Sistem';
+}
+
+function conversationStatusLabel(conversation: TicketConversation) {
+  if (conversation.status === 'ACCEPTED') return 'Kabul';
+  if (conversation.status === 'CLOSED') return conversation.closedReason === 'NOT_SELECTED' ? 'Seçilmedi' : 'Kapalı';
+  return 'Görüşme';
 }
 
 function uniqueTickets(tickets: Ticket[]) {

@@ -56,6 +56,19 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+WebSocket kontrolu:
+
+```bash
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  -H "Sec-WebSocket-Version: 13" \
+  https://DOMAININIZ/ws
+```
+
+Beklenen cevap `101 Switching Protocols`. `200`, `301`, `404`, `502` veya timeout gelirse canlı mesajlasma icin `/ws` reverse proxy ayari duzeltilmelidir.
+
 Prod env icinde mutlaka degistirilecek alanlar:
 
 - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`

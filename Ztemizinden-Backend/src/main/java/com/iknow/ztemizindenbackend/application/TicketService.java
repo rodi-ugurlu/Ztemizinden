@@ -12,6 +12,7 @@ import com.iknow.ztemizindenbackend.domain.NotFoundException;
 import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
 import com.iknow.ztemizindenbackend.domain.Ticket;
+import com.iknow.ztemizindenbackend.domain.TicketConversation;
 import com.iknow.ztemizindenbackend.domain.TicketMessage;
 import com.iknow.ztemizindenbackend.domain.TicketOffer;
 import com.iknow.ztemizindenbackend.domain.TicketRepository;
@@ -115,10 +116,19 @@ public class TicketService {
     }
 
     @Transactional
-    public Ticket acceptOffer(String ticketId, String offerId) {
+    public TicketMutationResult inviteOffer(String ticketId, String offerId) {
         Ticket ticket = get(ticketId);
+        List<TicketMessage> previousConversationMessages = conversationMessages(ticket);
+        ticket.inviteOffer(offerId);
+        return new TicketMutationResult(ticket, newConversationSystemMessages(ticket, previousConversationMessages));
+    }
+
+    @Transactional
+    public TicketMutationResult acceptOffer(String ticketId, String offerId) {
+        Ticket ticket = get(ticketId);
+        List<TicketMessage> previousConversationMessages = conversationMessages(ticket);
         ticket.acceptOffer(offerId);
-        return ticket;
+        return new TicketMutationResult(ticket, newConversationSystemMessages(ticket, previousConversationMessages));
     }
 
     private ServiceProvider requireVerifiedProvider(String providerId) {
@@ -155,10 +165,11 @@ public class TicketService {
     }
 
     @Transactional
-    public Ticket rejectOffer(String ticketId, String offerId) {
+    public TicketMutationResult rejectOffer(String ticketId, String offerId) {
         Ticket ticket = get(ticketId);
+        List<TicketMessage> previousConversationMessages = conversationMessages(ticket);
         ticket.rejectOffer(offerId);
-        return ticket;
+        return new TicketMutationResult(ticket, newConversationSystemMessages(ticket, previousConversationMessages));
     }
 
     @Transactional
@@ -197,6 +208,35 @@ public class TicketService {
     }
 
     @Transactional
+    public MessageResult addCustomerConversationMessage(
+            String ticketId,
+            String conversationId,
+            String senderName,
+            String body
+    ) {
+        Ticket ticket = get(ticketId);
+        TicketMessage message = ticket.addCustomerConversationMessage(conversationId, senderName, body);
+        return new MessageResult(ticket, message);
+    }
+
+    @Transactional
+    public MessageResult addServiceConversationMessage(
+            String ticketId,
+            String conversationId,
+            String providerId,
+            String senderName,
+            String body
+    ) {
+        Ticket ticket = get(ticketId);
+        TicketConversation conversation = ticket.conversation(conversationId);
+        if (providerId != null && !conversation.isForProvider(providerId)) {
+            throw new AccessDeniedException("Conversation is not visible to current provider");
+        }
+        TicketMessage message = ticket.addServiceConversationMessage(conversationId, providerId, senderName, body);
+        return new MessageResult(ticket, message);
+    }
+
+    @Transactional
     public Ticket markMessagesReadByCustomer(String ticketId) {
         Ticket ticket = get(ticketId);
         ticket.markMessagesReadByCustomer();
@@ -211,10 +251,42 @@ public class TicketService {
     }
 
     @Transactional
+    public Ticket markConversationMessagesReadByCustomer(String ticketId, String conversationId) {
+        Ticket ticket = get(ticketId);
+        ticket.markConversationMessagesReadByCustomer(conversationId);
+        return ticket;
+    }
+
+    @Transactional
+    public Ticket markConversationMessagesReadByService(String ticketId, String conversationId, String providerId) {
+        Ticket ticket = get(ticketId);
+        ticket.markConversationMessagesReadByService(conversationId, providerId);
+        return ticket;
+    }
+
+    @Transactional
     public Ticket approveFinalBilling(String ticketId) {
         Ticket ticket = get(ticketId);
         ticket.approveFinalBilling();
         return ticket;
+    }
+
+    private List<TicketMessage> conversationMessages(Ticket ticket) {
+        return ticket.getConversations().stream()
+                .flatMap(conversation -> conversation.getMessages().stream())
+                .toList();
+    }
+
+    private List<TicketMessage> newConversationSystemMessages(
+            Ticket ticket,
+            List<TicketMessage> previousConversationMessages
+    ) {
+        return ticket.getConversations().stream()
+                .flatMap(conversation -> conversation.getMessages().stream())
+                .filter(message -> !previousConversationMessages.contains(message))
+                .filter(message -> message.getConversation() != null)
+                .filter(message -> "system".equals(message.getSenderRole()))
+                .toList();
     }
 
     public record CreateTicketCommand(
@@ -251,5 +323,8 @@ public class TicketService {
     }
 
     public record MessageResult(Ticket ticket, TicketMessage message) {
+    }
+
+    public record TicketMutationResult(Ticket ticket, List<TicketMessage> messages) {
     }
 }

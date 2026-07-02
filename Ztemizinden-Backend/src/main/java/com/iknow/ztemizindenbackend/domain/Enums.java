@@ -37,7 +37,15 @@ public final class Enums {
     }
 
     public enum OfferStatus {
-        PENDING, ACCEPTED, REJECTED, WITHDRAWN
+        PENDING, INVITED, ACCEPTED, REJECTED, WITHDRAWN
+    }
+
+    public enum ConversationStatus {
+        ACTIVE, ACCEPTED, CLOSED
+    }
+
+    public enum ConversationClosedReason {
+        REJECTED, NOT_SELECTED
     }
 
     public enum BillingStatus {

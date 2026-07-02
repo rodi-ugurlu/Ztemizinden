@@ -65,13 +65,27 @@ public class TicketOffer extends BaseEntity {
         this.message = message;
     }
 
+    void invite() {
+        if (status != OfferStatus.PENDING) {
+            throw new IllegalStateException("Only pending offers can be invited");
+        }
+        status = OfferStatus.INVITED;
+    }
+
     void accept() {
+        if (!isSelectable()) {
+            throw new IllegalStateException("Only pending or invited offers can be accepted");
+        }
         status = OfferStatus.ACCEPTED;
     }
 
     void reject() {
-        if (status == OfferStatus.PENDING) {
+        if (isSelectable()) {
             status = OfferStatus.REJECTED;
         }
+    }
+
+    boolean isSelectable() {
+        return status == OfferStatus.PENDING || status == OfferStatus.INVITED;
     }
 }

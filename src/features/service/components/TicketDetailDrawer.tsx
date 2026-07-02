@@ -14,14 +14,18 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TicketCategoryIcon, TicketPriorityBadge, TicketStatusBadge } from '@/components/domain/ticketBadges';
 import { TicketMessageThread } from '@/components/messages/TicketMessageThread';
+import { useTicketMessageSubscriptions } from '@/hooks/useTicketMessageSubscriptions';
 import { ticketCategoryDescription } from '@/components/domain/ticketMeta';
 import {
   useServiceStore,
 } from '@/store/useServiceStore';
 import { getApiRootUrl } from '@/lib/backendUrl';
-import type { Ticket, OfferType } from '@/store/useCustomerStore';
+import type { Ticket, OfferType, TicketConversation, TicketOffer } from '@/store/useCustomerStore';
 import FinalBillingDialog from './FinalBillingDialog';
+import type { ServiceTicketView } from '../serviceTicketViews';
 import {
+  Archive,
+  BriefcaseBusiness,
   Building2,
   MapPin,
   Package,
@@ -33,6 +37,9 @@ import {
   Clock4,
   MessageSquare,
   DollarSign,
+  FileCheck2,
+  HandCoins,
+  Inbox,
   Search,
   Send,
 } from 'lucide-react';
@@ -40,10 +47,20 @@ import {
 interface TicketDetailDrawerProps {
   ticket: Ticket | null;
   isOpen: boolean;
+  sourceView?: ServiceTicketView;
+  initialTab?: TicketDetailDrawerTab;
   onClose: () => void;
 }
 
 const API_MEDIA_ORIGIN = getApiRootUrl();
+const ticketDetailDrawerTabs: TicketDetailDrawerTab[] = [
+  'details',
+  'work-order',
+  'asset',
+  'messages',
+  'proposal',
+  'my-proposal',
+];
 
 /**
  * TicketDetailDrawer Component
@@ -54,11 +71,24 @@ const API_MEDIA_ORIGIN = getApiRootUrl();
 export default function TicketDetailDrawer({
   ticket,
   isOpen,
+  sourceView = 'all',
+  initialTab = 'details',
   onClose,
 }: TicketDetailDrawerProps) {
-  const { submitProposal, getMyProposalForTicket, addTicketMessage, currentProviderId } = useServiceStore();
+  const {
+    submitProposal,
+    getMyProposalForTicket,
+    addConversationMessage,
+    receiveTicketMessage,
+    currentProviderId,
+  } = useServiceStore();
   const liveTicket = useServiceStore((state) => (ticket ? state.getTicketById(ticket.id) : undefined));
-  const [activeTab, setActiveTab] = useState('details');
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const setDrawerTab = (value: string) => {
+    if (ticketDetailDrawerTabs.includes(value as TicketDetailDrawerTab)) {
+      setActiveTab(value as TicketDetailDrawerTab);
+    }
+  };
 
   // Proposal form state
   const [proposalType, setProposalType] = useState<OfferType>('DISCOVERY');
@@ -71,18 +101,28 @@ export default function TicketDetailDrawer({
   const [isMessageSending, setIsMessageSending] = useState(false);
   const [isBillingDialogOpen, setIsBillingDialogOpen] = useState(false);
 
-  if (!ticket) return null;
+  const activeTicket = ticket ? (liveTicket ?? ticket) : null;
+  const myProposal = activeTicket ? getMyProposalForTicket(activeTicket.id) : undefined;
+  const myConversation = activeTicket ? findProviderConversation(activeTicket, currentProviderId, myProposal) : undefined;
 
-  const activeTicket = liveTicket ?? ticket;
+  useTicketMessageSubscriptions(
+    activeTicket && isOpen && activeTab === 'messages' ? [activeTicket] : [],
+    receiveTicketMessage,
+    activeTicket && isOpen && activeTab === 'messages'
+      ? { ticketId: activeTicket.id, conversationId: myConversation?.id }
+      : null
+  );
+
+  if (!activeTicket) return null;
+
   const mediaUrls = activeTicket.mediaUrls ?? [];
-  const messages = activeTicket.messages ?? [];
+  const messages = myConversation?.messages ?? activeTicket.messages ?? [];
   const canMessage =
-    !!activeTicket.assignedProviderId &&
-    (!currentProviderId || activeTicket.assignedProviderId === currentProviderId) &&
+    !!myConversation &&
+    myConversation.status !== 'CLOSED' &&
     activeTicket.status !== 'CLOSED' &&
     activeTicket.status !== 'CANCELLED';
   const ticketCode = (activeTicket.id.split('-')[1] ?? activeTicket.id).toUpperCase();
-  const myProposal = getMyProposalForTicket(activeTicket.id);
   const hasSubmitted = !!myProposal;
 
   const handleSubmitProposal = async (e: React.FormEvent) => {
@@ -109,12 +149,12 @@ export default function TicketDetailDrawer({
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const body = chatMessage.trim();
-    if (!body || !canMessage) return;
+    if (!body || !canMessage || !myConversation) return;
 
     setIsMessageSending(true);
     setChatError(null);
     try {
-      await addTicketMessage(activeTicket.id, body);
+      await addConversationMessage(activeTicket.id, myConversation.id, body);
       setChatMessage('');
     } catch (error) {
       setChatError(error instanceof Error ? error.message : 'Mesaj gönderilemedi');
@@ -128,61 +168,71 @@ export default function TicketDetailDrawer({
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-xl bg-white border-slate-200 text-slate-900 overflow-y-auto"
+        className="w-full overflow-y-auto border-slate-200 bg-white text-slate-900 sm:max-w-2xl"
       >
         <SheetHeader className="space-y-4 pb-6 border-b border-slate-200">
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-mono text-slate-500">
                   #{ticketCode}
                 </span>
                 <TicketPriorityBadge priority={activeTicket.priority} className="text-xs" />
               </div>
-              <SheetTitle className="text-xl font-bold text-slate-900">
+              <SheetTitle className="line-clamp-2 text-xl font-bold text-slate-900">
                 {activeTicket.title}
               </SheetTitle>
             </div>
-            <TicketStatusBadge status={activeTicket.status} />
+            <TicketStatusBadge status={activeTicket.status} className="shrink-0" />
           </div>
           <SheetDescription className="text-slate-400">
             {activeTicket.description}
           </SheetDescription>
+          <ServiceDrawerContextPanel
+            ticket={activeTicket}
+            sourceView={sourceView}
+            myProposal={myProposal}
+            canMessage={canMessage}
+            onSelectTab={setActiveTab}
+            onOpenBilling={() => setIsBillingDialogOpen(true)}
+          />
         </SheetHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
-          <TabsList className="grid w-full grid-cols-5 bg-slate-50">
-            <TabsTrigger
-              value="details"
-              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
-            >
-              Detaylar
-            </TabsTrigger>
-            <TabsTrigger
-              value="work-order"
-              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
-            >
-              İş Emri
-            </TabsTrigger>
-            <TabsTrigger
-              value="asset"
-              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
-            >
-              Varlık
-            </TabsTrigger>
-            <TabsTrigger
-              value="messages"
-              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
-            >
-              Mesajlar
-            </TabsTrigger>
-            <TabsTrigger
-              value={hasSubmitted ? 'my-proposal' : 'proposal'}
-              className="text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900"
-            >
-              {hasSubmitted ? 'Teklifim' : 'Teklif Ver'}
-            </TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setDrawerTab} className="mt-6">
+          <div className="-mx-1 overflow-x-auto px-1 pb-1">
+            <TabsList className="grid min-w-[560px] grid-cols-5 bg-slate-50 sm:min-w-0">
+              <TabsTrigger
+                value="details"
+                className="text-[12px] text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 sm:text-sm"
+              >
+                Detaylar
+              </TabsTrigger>
+              <TabsTrigger
+                value="work-order"
+                className="text-[12px] text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 sm:text-sm"
+              >
+                İş Emri
+              </TabsTrigger>
+              <TabsTrigger
+                value="asset"
+                className="text-[12px] text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 sm:text-sm"
+              >
+                Varlık
+              </TabsTrigger>
+              <TabsTrigger
+                value="messages"
+                className="text-[12px] text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 sm:text-sm"
+              >
+                Mesajlar
+              </TabsTrigger>
+              <TabsTrigger
+                value={hasSubmitted ? 'my-proposal' : 'proposal'}
+                className="text-[12px] text-slate-400 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 sm:text-sm"
+              >
+                {hasSubmitted ? 'Teklifim' : 'Teklif Ver'}
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Details Tab */}
           <TabsContent value="details" className="space-y-6 mt-6">
@@ -309,25 +359,40 @@ export default function TicketDetailDrawer({
             </div>
 
             {/* Media */}
-            {ticket.mediaUrls.length > 0 && (
+            {mediaUrls.length > 0 && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wider flex items-center gap-2">
                   <ImageIcon className="w-4 h-4" />
                   Ekler
                 </h3>
-                <MediaPreviewGrid mediaUrls={ticket.mediaUrls} />
+                <MediaPreviewGrid mediaUrls={mediaUrls} />
               </div>
             )}
           </TabsContent>
 
           <TabsContent value="messages" className="space-y-4 mt-6">
+            {myConversation && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-900">{myConversation.providerName}</p>
+                    <p className="text-xs font-medium text-slate-500">{conversationStatusLabel(myConversation)}</p>
+                  </div>
+                  {(myConversation.unreadMessageCount ?? 0) > 0 && (
+                    <Badge variant="outline" className="bg-red-50 text-red-700">
+                      {myConversation.unreadMessageCount} yeni
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
             <TicketMessageThread
               messages={messages}
               viewerRole="service"
-              maxHeightClassName="max-h-[420px]"
+              maxHeightClassName="min-h-[260px] max-h-[calc(100vh-430px)]"
               emptyState={
                 <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-sm text-slate-500">
-                  Henüz mesaj yok.
+                  {myConversation ? 'Henüz mesaj yok.' : 'Müşteri görüşmeye davet ettiğinde mesajlaşma açılır.'}
                 </div>
               }
             />
@@ -338,7 +403,13 @@ export default function TicketDetailDrawer({
                 onChange={(event) => setChatMessage(event.target.value)}
                 rows={4}
                 disabled={!canMessage || isMessageSending}
-                placeholder={canMessage ? 'Müşteriye mesaj yaz...' : 'Mesajlaşma iş atandıktan sonra açılır'}
+                placeholder={
+                  canMessage
+                    ? 'Müşteriye mesaj yaz...'
+                    : myConversation?.status === 'CLOSED'
+                      ? 'Görüşme kapalı'
+                      : 'Müşteri görüşmeye davet ettiğinde açılır'
+                }
                 className="resize-none bg-slate-50 border-slate-200 text-slate-900"
               />
               {chatError && <p className="text-sm text-red-600">{chatError}</p>}
@@ -368,12 +439,15 @@ export default function TicketDetailDrawer({
                       className={
                         myProposal.status === 'ACCEPTED'
                           ? 'bg-emerald-50 text-emerald-600 border-emerald-200/30'
+                          : myProposal.status === 'INVITED'
+                          ? 'bg-sky-50 text-sky-600 border-sky-200/30'
                           : myProposal.status === 'REJECTED'
                           ? 'bg-red-50 text-red-600 border-red-200/30'
                           : 'bg-amber-50 text-amber-600 border-amber-200/30'
                       }
                     >
                       {myProposal.status === 'PENDING' && 'Beklemede'}
+                      {myProposal.status === 'INVITED' && 'Görüşmeye Davet Edildi'}
                       {myProposal.status === 'ACCEPTED' && 'Kabul Edildi'}
                       {myProposal.status === 'REJECTED' && 'Reddedildi'}
                     </Badge>
@@ -427,6 +501,18 @@ export default function TicketDetailDrawer({
                     </div>
                     <p className="text-sm text-emerald-700/70">
                       Müşteri teklifinizi kabul etti. İşe başlayabilirsiniz.
+                    </p>
+                  </div>
+                )}
+
+                {myProposal.status === 'INVITED' && (
+                  <div className="bg-sky-50 border border-sky-200/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-sky-700 mb-2">
+                      <MessageSquare className="w-5 h-5" />
+                      <span className="font-medium">Müşteri görüşmeye davet etti</span>
+                    </div>
+                    <p className="text-sm text-sky-700/70">
+                      Mesajlar sekmesinden müşteriyle özel görüşmeye devam edebilirsiniz.
                     </p>
                   </div>
                 )}
@@ -602,6 +688,259 @@ export default function TicketDetailDrawer({
 // ==========================================
 // HELPER COMPONENTS
 // ==========================================
+
+export type TicketDetailDrawerTab = 'details' | 'work-order' | 'asset' | 'messages' | 'proposal' | 'my-proposal';
+type DrawerContextAction = {
+  label: string;
+  tab?: TicketDetailDrawerTab;
+  run?: 'billing';
+};
+type DrawerContextConfig = {
+  title: string;
+  description: string;
+  icon: typeof Inbox;
+  className: string;
+  iconClassName: string;
+  primaryButtonClassName: string;
+  primaryAction: DrawerContextAction;
+  secondaryAction: DrawerContextAction;
+  metrics: Array<{ label: string; value: string }>;
+};
+
+function ServiceDrawerContextPanel({
+  ticket,
+  sourceView,
+  myProposal,
+  canMessage,
+  onSelectTab,
+  onOpenBilling,
+}: {
+  ticket: Ticket;
+  sourceView: ServiceTicketView;
+  myProposal?: TicketOffer;
+  canMessage: boolean;
+  onSelectTab: (tab: TicketDetailDrawerTab) => void;
+  onOpenBilling: () => void;
+}) {
+  const context = drawerContext(ticket, sourceView, myProposal, canMessage);
+  const Icon = context.icon;
+  const runAction = (action: DrawerContextAction) => {
+    if (action.run === 'billing') {
+      onOpenBilling();
+      return;
+    }
+    if (action.tab) {
+      onSelectTab(action.tab);
+    }
+  };
+
+  return (
+    <div className={`rounded-lg border p-4 ${context.className}`}>
+      <div className="flex items-start gap-3">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${context.iconClassName}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-slate-950">{context.title}</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">{context.description}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        {context.metrics.map((metric) => (
+          <div key={metric.label} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
+            <p className="text-[11px] font-bold uppercase text-slate-400">{metric.label}</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-800">{metric.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <Button
+          type="button"
+          onClick={() => runAction(context.primaryAction)}
+          className={`flex-1 font-semibold ${context.primaryButtonClassName}`}
+        >
+          {context.primaryAction.label}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => runAction(context.secondaryAction)}
+          className="flex-1 border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        >
+          {context.secondaryAction.label}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function drawerContext(
+  ticket: Ticket,
+  sourceView: ServiceTicketView,
+  myProposal: TicketOffer | undefined,
+  canMessage: boolean
+): DrawerContextConfig {
+  const finalAmount = formatMoney(ticket.finalActualCost ?? ticket.finalEstimatedCost ?? myProposal?.estimatedCost);
+  const offerAmount = formatMoney(myProposal?.estimatedCost);
+  const messageAction: DrawerContextAction = canMessage
+    ? { label: 'Mesaj Yaz', tab: 'messages' }
+    : { label: 'Mesajları Gör', tab: 'messages' };
+
+  if (sourceView === 'new') {
+    return {
+      title: 'Yeni talep fırsatı',
+      description: 'Teklif vermeden önce ekleri, varlığı ve müşteri konumunu hızlıca kontrol edin.',
+      icon: Inbox,
+      className: 'border-emerald-200 bg-emerald-50',
+      iconClassName: 'bg-white text-emerald-700',
+      primaryButtonClassName: 'bg-emerald-700 text-white hover:bg-emerald-800',
+      primaryAction: { label: 'Teklif Ver', tab: 'proposal' },
+      secondaryAction: { label: 'Detayları İncele', tab: 'details' },
+      metrics: [
+        { label: 'Kategori', value: ticket.category },
+        { label: 'Öncelik', value: ticket.priority },
+      ],
+    };
+  }
+
+  if (sourceView === 'proposals') {
+    const invited = myProposal?.status === 'INVITED';
+    return {
+      title: invited ? 'Müşteri görüşmeye davet etti' : 'Teklifiniz müşteri onayında',
+      description: invited
+        ? 'Müşteriyle özel görüşme açık. Mesajlar sekmesinden birebir yazışabilirsiniz.'
+        : 'Teklif içeriğini, tutarı ve son müşteri mesajlarını aynı yerden takip edin.',
+      icon: Send,
+      className: 'border-blue-200 bg-blue-50',
+      iconClassName: 'bg-white text-blue-700',
+      primaryButtonClassName: 'bg-blue-700 text-white hover:bg-blue-800',
+      primaryAction: invited && canMessage ? { label: 'Mesaj Yaz', tab: 'messages' } : { label: 'Teklifimi Aç', tab: 'my-proposal' },
+      secondaryAction: invited ? { label: 'Teklifimi Aç', tab: 'my-proposal' } : { label: 'Detayları İncele', tab: 'details' },
+      metrics: [
+        { label: 'Teklif', value: offerAmount },
+        { label: 'Durum', value: proposalStatusLabel(myProposal?.status) },
+      ],
+    };
+  }
+
+  if (sourceView === 'accepted') {
+    return {
+      title: 'Kabul edilen aktif iş',
+      description: 'Müşteri teklifi kabul etti. Saha sürecini yönetin, müşteriyle yazışın veya hakedişi başlatın.',
+      icon: FileCheck2,
+      className: 'border-rose-200 bg-rose-50',
+      iconClassName: 'bg-white text-rose-700',
+      primaryButtonClassName: 'bg-rose-700 text-white hover:bg-rose-800',
+      primaryAction: { label: 'Hakediş Oluştur', run: 'billing' },
+      secondaryAction: messageAction,
+      metrics: [
+        { label: 'ETA', value: ticket.serviceEta || myProposal?.eta || 'Belirsiz' },
+        { label: 'Varlık', value: ticket.assetName || 'Varlık yok' },
+      ],
+    };
+  }
+
+  if (sourceView === 'open-billing') {
+    return {
+      title: 'Hakediş süreci açık',
+      description: 'Müşteri onayı, itiraz veya ödeme süreci devam eden işi takip edin.',
+      icon: HandCoins,
+      className: 'border-amber-200 bg-amber-50',
+      iconClassName: 'bg-white text-amber-700',
+      primaryButtonClassName: 'bg-amber-600 text-white hover:bg-amber-700',
+      primaryAction: { label: 'İş Emrini Aç', tab: 'work-order' },
+      secondaryAction: messageAction,
+      metrics: [
+        { label: 'Hakediş', value: finalAmount },
+        { label: 'Durum', value: billingStatusLabel(ticket.billingStatus) },
+      ],
+    };
+  }
+
+  if (sourceView === 'closed-billing') {
+    return {
+      title: 'Kapanmış iş arşivi',
+      description: 'Onaylanmış hakediş, kapanış tarihi ve servis geçmişi arşivde tutulur.',
+      icon: Archive,
+      className: 'border-teal-200 bg-teal-50',
+      iconClassName: 'bg-white text-teal-700',
+      primaryButtonClassName: 'bg-teal-700 text-white hover:bg-teal-800',
+      primaryAction: { label: 'İş Emrini Aç', tab: 'work-order' },
+      secondaryAction: { label: myProposal ? 'Teklifimi Aç' : 'Detaylar', tab: myProposal ? 'my-proposal' : 'details' },
+      metrics: [
+        { label: 'Final', value: finalAmount },
+        { label: 'Kapanış', value: formatDrawerDate(ticket.updatedAt || ticket.createdAt) },
+      ],
+    };
+  }
+
+  return {
+    title: 'Talep özeti',
+    description: 'Talep detayları, iş emri, varlık, mesajlar ve teklif bilgileri bu panelde.',
+    icon: BriefcaseBusiness,
+    className: 'border-slate-200 bg-slate-50',
+    iconClassName: 'bg-white text-slate-700',
+    primaryButtonClassName: 'bg-slate-900 text-white hover:bg-slate-800',
+    primaryAction: { label: 'Detayları Aç', tab: 'details' },
+    secondaryAction: messageAction,
+    metrics: [
+      { label: 'Müşteri', value: ticket.customerCompany },
+      { label: 'Durum', value: ticket.status },
+    ],
+  };
+}
+
+function formatMoney(value?: number) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 'Tutar yok';
+  return new Intl.NumberFormat('tr-TR', {
+    style: 'currency',
+    currency: 'TRY',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatDrawerDate(value: string) {
+  return new Date(value).toLocaleDateString('tr-TR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function proposalStatusLabel(status?: string) {
+  if (status === 'ACCEPTED') return 'Kabul edildi';
+  if (status === 'INVITED') return 'Görüşmede';
+  if (status === 'REJECTED') return 'Reddedildi';
+  if (status === 'WITHDRAWN') return 'Geri çekildi';
+  return 'Beklemede';
+}
+
+function findProviderConversation(
+  ticket: Ticket,
+  providerId: string,
+  myProposal?: TicketOffer
+): TicketConversation | null {
+  return (ticket.conversations ?? []).find((conversation) =>
+    (providerId && conversation.providerId === providerId) ||
+    (myProposal?.id && conversation.offerId === myProposal.id)
+  ) ?? null;
+}
+
+function conversationStatusLabel(conversation: TicketConversation) {
+  if (conversation.status === 'ACCEPTED') return 'Kabul edildi';
+  if (conversation.status === 'CLOSED') {
+    return conversation.closedReason === 'NOT_SELECTED' ? 'Seçilmedi' : 'Kapatıldı';
+  }
+  return 'Aktif görüşme';
+}
+
+function billingStatusLabel(status?: string) {
+  if (status === 'DISPUTED') return 'Müşteri itirazı var';
+  if (status === 'APPROVED') return 'Müşteri onayladı';
+  return 'Müşteri onayı bekliyor';
+}
 
 function MediaPreviewGrid({ mediaUrls }: { mediaUrls: string[] }) {
   return (

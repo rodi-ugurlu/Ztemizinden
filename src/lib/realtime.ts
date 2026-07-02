@@ -1,8 +1,14 @@
 import { getApiRootUrl } from '@/lib/backendUrl';
 import { getStoredAccessToken } from '@/store/useAuthStore';
-import type { TicketMessage } from '@/store/useCustomerStore';
+import type { Ticket, TicketMessage } from '@/store/useCustomerStore';
 
 type TicketMessageHandler = (message: TicketMessage) => void;
+export type TicketEventPayload = {
+  type: string;
+  conversationId?: string | null;
+  ticket: Ticket;
+};
+type TicketEventHandler = (event: TicketEventPayload) => void;
 type ConnectionState = 'idle' | 'connecting' | 'connected';
 
 type StompFrame = {
@@ -15,9 +21,17 @@ const NULL_CHAR = '\u0000';
 const RECONNECT_DELAY_MS = 2_000;
 const TICKET_TOPIC_PREFIX = '/topic/tickets/';
 const TICKET_TOPIC_SUFFIX = '/messages';
+const CONVERSATION_TOPIC_MARKER = '/conversations/';
+const CUSTOMER_TICKET_TOPIC_PREFIX = '/topic/customers/';
+const PROVIDER_TICKET_TOPIC_PREFIX = '/topic/providers/';
+const TICKET_EVENT_TOPIC_SUFFIX = '/tickets';
 
 const ticketSubscribers = new Map<string, Map<string, TicketMessageHandler>>();
 const activeTicketSubscriptions = new Map<string, string>();
+const conversationSubscribers = new Map<string, Map<string, TicketMessageHandler>>();
+const activeConversationSubscriptions = new Map<string, string>();
+const ticketEventSubscribers = new Map<string, Map<string, TicketEventHandler>>();
+const activeTicketEventSubscriptions = new Map<string, string>();
 
 let socket: WebSocket | null = null;
 let connectionState: ConnectionState = 'idle';
@@ -37,6 +51,45 @@ export function subscribeToTicketMessages(ticketId: string, onMessage: TicketMes
 
   return () => {
     removeTicketMessageHandler(ticketId, handlerId);
+  };
+}
+
+export function subscribeToConversationMessages(
+  ticketId: string,
+  conversationId: string,
+  onMessage: TicketMessageHandler
+) {
+  const key = conversationKey(ticketId, conversationId);
+  const handlerId = `handler-${++nextHandlerId}`;
+  const handlers = conversationSubscribers.get(key) ?? new Map<string, TicketMessageHandler>();
+  handlers.set(handlerId, onMessage);
+  conversationSubscribers.set(key, handlers);
+
+  ensureConnected();
+
+  return () => {
+    removeConversationMessageHandler(key, handlerId);
+  };
+}
+
+export function subscribeToCustomerTicketEvents(customerId: string, onEvent: TicketEventHandler) {
+  return subscribeToTicketEvents(ticketEventKey('customer', customerId), onEvent);
+}
+
+export function subscribeToProviderTicketEvents(providerId: string, onEvent: TicketEventHandler) {
+  return subscribeToTicketEvents(ticketEventKey('provider', providerId), onEvent);
+}
+
+function subscribeToTicketEvents(key: string, onEvent: TicketEventHandler) {
+  const handlerId = `handler-${++nextHandlerId}`;
+  const handlers = ticketEventSubscribers.get(key) ?? new Map<string, TicketEventHandler>();
+  handlers.set(handlerId, onEvent);
+  ticketEventSubscribers.set(key, handlers);
+
+  ensureConnected();
+
+  return () => {
+    removeTicketEventHandler(key, handlerId);
   };
 }
 
@@ -96,6 +149,8 @@ function ensureConnected() {
     socket = null;
     connectionState = 'idle';
     activeTicketSubscriptions.clear();
+    activeConversationSubscriptions.clear();
+    activeTicketEventSubscriptions.clear();
     if (hasSubscribers()) {
       scheduleReconnect();
     }
@@ -117,6 +172,29 @@ function subscribeToMissingTopics() {
     socket.send(frame('SUBSCRIBE', {
       id: subscriptionId,
       destination: ticketMessageDestination(ticketId),
+    }));
+  }
+
+  for (const key of conversationSubscribers.keys()) {
+    if (activeConversationSubscriptions.has(key)) continue;
+
+    const [ticketId, conversationId] = splitConversationKey(key);
+    const subscriptionId = `conversation-${conversationId}-${++nextSubscriptionId}`;
+    activeConversationSubscriptions.set(key, subscriptionId);
+    socket.send(frame('SUBSCRIBE', {
+      id: subscriptionId,
+      destination: conversationMessageDestination(ticketId, conversationId),
+    }));
+  }
+
+  for (const key of ticketEventSubscribers.keys()) {
+    if (activeTicketEventSubscriptions.has(key)) continue;
+
+    const subscriptionId = `ticket-event-${++nextSubscriptionId}`;
+    activeTicketEventSubscriptions.set(key, subscriptionId);
+    socket.send(frame('SUBSCRIBE', {
+      id: subscriptionId,
+      destination: ticketEventDestination(key),
     }));
   }
 }
@@ -147,18 +225,100 @@ function unsubscribeFromTicketTopic(ticketId: string) {
   }
 }
 
+function removeConversationMessageHandler(key: string, handlerId: string) {
+  const handlers = conversationSubscribers.get(key);
+  if (!handlers) return;
+
+  handlers.delete(handlerId);
+  if (handlers.size > 0) return;
+
+  conversationSubscribers.delete(key);
+  unsubscribeFromConversationTopic(key);
+
+  if (!hasSubscribers()) {
+    closeSocket();
+    clearReconnectTimer();
+  }
+}
+
+function unsubscribeFromConversationTopic(key: string) {
+  const subscriptionId = activeConversationSubscriptions.get(key);
+  if (!subscriptionId) return;
+
+  activeConversationSubscriptions.delete(key);
+  if (connectionState === 'connected' && socket?.readyState === WebSocket.OPEN) {
+    socket.send(frame('UNSUBSCRIBE', { id: subscriptionId }));
+  }
+}
+
+function removeTicketEventHandler(key: string, handlerId: string) {
+  const handlers = ticketEventSubscribers.get(key);
+  if (!handlers) return;
+
+  handlers.delete(handlerId);
+  if (handlers.size > 0) return;
+
+  ticketEventSubscribers.delete(key);
+  unsubscribeFromTicketEventTopic(key);
+
+  if (!hasSubscribers()) {
+    closeSocket();
+    clearReconnectTimer();
+  }
+}
+
+function unsubscribeFromTicketEventTopic(key: string) {
+  const subscriptionId = activeTicketEventSubscriptions.get(key);
+  if (!subscriptionId) return;
+
+  activeTicketEventSubscriptions.delete(key);
+  if (connectionState === 'connected' && socket?.readyState === WebSocket.OPEN) {
+    socket.send(frame('UNSUBSCRIBE', { id: subscriptionId }));
+  }
+}
+
 function dispatchTicketMessage(stompFrame: StompFrame) {
+  if (isTicketEventDestination(stompFrame.headers.destination)) {
+    dispatchTicketEvent(stompFrame);
+    return;
+  }
+
   const message = parseTicketMessage(stompFrame.body);
   if (!message) return;
 
   const ticketId = message.ticketId || ticketIdFromDestination(stompFrame.headers.destination);
   if (!ticketId) return;
 
+  if (message.conversationId) {
+    const handlers = conversationSubscribers.get(conversationKey(ticketId, message.conversationId));
+    if (!handlers) return;
+
+    for (const handler of Array.from(handlers.values())) {
+      handler(message);
+    }
+    return;
+  }
+
   const handlers = ticketSubscribers.get(ticketId);
   if (!handlers) return;
 
   for (const handler of Array.from(handlers.values())) {
     handler(message);
+  }
+}
+
+function dispatchTicketEvent(stompFrame: StompFrame) {
+  const event = parseTicketEvent(stompFrame.body);
+  if (!event) return;
+
+  const key = ticketEventKeyFromDestination(stompFrame.headers.destination);
+  if (!key) return;
+
+  const handlers = ticketEventSubscribers.get(key);
+  if (!handlers) return;
+
+  for (const handler of Array.from(handlers.values())) {
+    handler(event);
   }
 }
 
@@ -181,6 +341,8 @@ function closeSocket() {
   const wasStompConnected = connectionState === 'connected';
 
   activeTicketSubscriptions.clear();
+  activeConversationSubscriptions.clear();
+  activeTicketEventSubscriptions.clear();
   connectionState = 'idle';
   currentToken = null;
   socket = null;
@@ -235,11 +397,38 @@ function closeSocket() {
 }
 
 function hasSubscribers() {
-  return ticketSubscribers.size > 0;
+  return ticketSubscribers.size > 0 || conversationSubscribers.size > 0 || ticketEventSubscribers.size > 0;
 }
 
 function ticketMessageDestination(ticketId: string) {
   return `${TICKET_TOPIC_PREFIX}${ticketId}${TICKET_TOPIC_SUFFIX}`;
+}
+
+function conversationMessageDestination(ticketId: string, conversationId: string) {
+  return `${TICKET_TOPIC_PREFIX}${ticketId}${CONVERSATION_TOPIC_MARKER}${conversationId}${TICKET_TOPIC_SUFFIX}`;
+}
+
+function ticketEventDestination(key: string) {
+  const [type, id] = splitTicketEventKey(key);
+  const prefix = type === 'customer' ? CUSTOMER_TICKET_TOPIC_PREFIX : PROVIDER_TICKET_TOPIC_PREFIX;
+  return `${prefix}${id}${TICKET_EVENT_TOPIC_SUFFIX}`;
+}
+
+function isTicketEventDestination(destination?: string) {
+  return Boolean(ticketEventKeyFromDestination(destination));
+}
+
+function ticketEventKeyFromDestination(destination?: string) {
+  if (!destination || !destination.endsWith(TICKET_EVENT_TOPIC_SUFFIX)) return null;
+  if (destination.startsWith(CUSTOMER_TICKET_TOPIC_PREFIX)) {
+    const id = destination.slice(CUSTOMER_TICKET_TOPIC_PREFIX.length, -TICKET_EVENT_TOPIC_SUFFIX.length);
+    return id ? ticketEventKey('customer', id) : null;
+  }
+  if (destination.startsWith(PROVIDER_TICKET_TOPIC_PREFIX)) {
+    const id = destination.slice(PROVIDER_TICKET_TOPIC_PREFIX.length, -TICKET_EVENT_TOPIC_SUFFIX.length);
+    return id ? ticketEventKey('provider', id) : null;
+  }
+  return null;
 }
 
 function ticketIdFromDestination(destination?: string) {
@@ -251,12 +440,39 @@ function ticketIdFromDestination(destination?: string) {
     return null;
   }
 
-  return destination.slice(TICKET_TOPIC_PREFIX.length, -TICKET_TOPIC_SUFFIX.length);
+  const topicPath = destination.slice(TICKET_TOPIC_PREFIX.length, -TICKET_TOPIC_SUFFIX.length);
+  return topicPath.split(CONVERSATION_TOPIC_MARKER)[0] || null;
+}
+
+function conversationKey(ticketId: string, conversationId: string) {
+  return `${ticketId}:${conversationId}`;
+}
+
+function splitConversationKey(key: string) {
+  const separatorIndex = key.indexOf(':');
+  return [key.slice(0, separatorIndex), key.slice(separatorIndex + 1)] as const;
+}
+
+function ticketEventKey(type: 'customer' | 'provider', id: string) {
+  return `${type}:${id}`;
+}
+
+function splitTicketEventKey(key: string) {
+  const separatorIndex = key.indexOf(':');
+  return [key.slice(0, separatorIndex) as 'customer' | 'provider', key.slice(separatorIndex + 1)] as const;
 }
 
 function parseTicketMessage(body: string) {
   try {
     return JSON.parse(body) as TicketMessage;
+  } catch {
+    return null;
+  }
+}
+
+function parseTicketEvent(body: string) {
+  try {
+    return JSON.parse(body) as TicketEventPayload;
   } catch {
     return null;
   }

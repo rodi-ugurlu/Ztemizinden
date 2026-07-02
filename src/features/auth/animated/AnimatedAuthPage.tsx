@@ -9,7 +9,7 @@ import {
 } from '@/lib/serviceExpertise';
 import { cities, districtsForCity, firstDistrictForCity, normalizeDistrictList } from '@/lib/locations';
 import type { TicketCategory } from '@/store/useCustomerStore';
-import { useAuthStore } from '@/store/useAuthStore';
+import { requestPasswordReset, useAuthStore } from '@/store/useAuthStore';
 import loginImage from './assets/login.svg';
 import registerImage from './assets/register.svg';
 import './AnimatedAuthPage.css';
@@ -200,6 +200,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   const [localError, setLocalError] = useState<string | null>(null);
   const [localNotice, setLocalNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResetRequesting, setIsResetRequesting] = useState(false);
   const [serviceExpertiseQuery, setServiceExpertiseQuery] = useState('');
 
   const isServiceMode = activeRole === 'service';
@@ -307,6 +308,28 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       navigate(dashboardPathForRole(signedInUser.role ?? 'service'));
     } catch {
       // Store error is rendered below the form.
+    }
+  };
+
+  const handleForgotPassword = async (email: string) => {
+    clearFeedback();
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setLocalError('Şifre sıfırlama bağlantısı için e-posta adresinizi yazın.');
+      return;
+    }
+
+    setIsResetRequesting(true);
+    try {
+      setLocalNotice(await requestPasswordReset(trimmedEmail));
+    } catch (submitError) {
+      setLocalError(
+        submitError instanceof Error
+          ? submitError.message
+          : 'Şifre sıfırlama bağlantısı gönderilemedi'
+      );
+    } finally {
+      setIsResetRequesting(false);
     }
   };
 
@@ -518,6 +541,14 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                     }
                   />
                 </div>
+                <button
+                  className="animated-auth__forgot-link"
+                  type="button"
+                  disabled={isResetRequesting}
+                  onClick={() => handleForgotPassword(customerLogin.email)}
+                >
+                  {isResetRequesting ? 'Bağlantı gönderiliyor...' : 'Şifremi unuttum'}
+                </button>
                 <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isLoading}>
                   {isLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
                 </button>
@@ -719,6 +750,14 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                     }
                   />
                 </div>
+                <button
+                  className="animated-auth__forgot-link"
+                  type="button"
+                  disabled={isResetRequesting}
+                  onClick={() => handleForgotPassword(serviceLogin.identifier)}
+                >
+                  {isResetRequesting ? 'Bağlantı gönderiliyor...' : 'Şifremi unuttum'}
+                </button>
                 <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isLoading}>
                   {isLoading ? 'Giriş yapılıyor...' : 'Servis Girişi'}
                 </button>

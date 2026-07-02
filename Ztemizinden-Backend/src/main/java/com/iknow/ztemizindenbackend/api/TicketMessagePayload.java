@@ -6,6 +6,7 @@ import java.time.Instant;
 public record TicketMessagePayload(
         String id,
         String ticketId,
+        String conversationId,
         String senderRole,
         String senderName,
         String body,
@@ -17,6 +18,7 @@ public record TicketMessagePayload(
         return new TicketMessagePayload(
                 message.getId(),
                 message.getTicket().getId(),
+                message.getConversation() == null ? null : message.getConversation().getId(),
                 message.getSenderRole(),
                 message.getSenderName(),
                 message.getBody(),

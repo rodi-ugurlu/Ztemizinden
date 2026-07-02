@@ -48,6 +48,10 @@ public class AuthUser extends BaseEntity {
         enabled = false;
     }
 
+    public void changePasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
     public void restore(String email, String passwordHash, AuthRole role, String customerId, String providerId) {
         this.email = normalizeEmail(email);
         this.passwordHash = passwordHash;

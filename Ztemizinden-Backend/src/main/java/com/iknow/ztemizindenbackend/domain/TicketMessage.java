@@ -19,6 +19,10 @@ public class TicketMessage extends BaseEntity {
     @JoinColumn(name = "ticket_id", nullable = false)
     private Ticket ticket;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "conversation_id")
+    private TicketConversation conversation;
+
     @Column(nullable = false)
     private String senderRole;
 
@@ -35,7 +39,12 @@ public class TicketMessage extends BaseEntity {
     private boolean readByService;
 
     TicketMessage(Ticket ticket, String senderRole, String senderName, String body) {
+        this(ticket, null, senderRole, senderName, body);
+    }
+
+    TicketMessage(Ticket ticket, TicketConversation conversation, String senderRole, String senderName, String body) {
         this.ticket = ticket;
+        this.conversation = conversation;
         this.senderRole = senderRole;
         this.senderName = senderName;
         this.body = body;

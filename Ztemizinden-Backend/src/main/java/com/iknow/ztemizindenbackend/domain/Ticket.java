@@ -1,6 +1,7 @@
 package com.iknow.ztemizindenbackend.domain;
 
 import com.iknow.ztemizindenbackend.domain.Enums.BillingStatus;
+import com.iknow.ztemizindenbackend.domain.Enums.OfferStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferType;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketCategory;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketPriority;
@@ -95,6 +96,9 @@ public class Ticket extends BaseEntity {
     private List<TicketOffer> offers = new ArrayList<>();
 
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<TicketConversation> conversations = new LinkedHashSet<>();
+
+    @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<TicketMessage> messages = new LinkedHashSet<>();
 
     @ElementCollection
@@ -172,8 +176,8 @@ public class Ticket extends BaseEntity {
     ) {
         ensureOpenForOffer();
         if (offers.stream().anyMatch(offer -> offer.getProviderId().equals(providerId)
-                && offer.getStatus() == com.iknow.ztemizindenbackend.domain.Enums.OfferStatus.PENDING)) {
-            throw new IllegalStateException("Provider already has a pending offer for this ticket");
+                && offer.isSelectable())) {
+            throw new IllegalStateException("Provider already has an active offer for this ticket");
         }
         TicketOffer offer = new TicketOffer(this, providerId, providerName, type, estimatedCost, eta, message);
         offers.add(offer);
@@ -181,44 +185,72 @@ public class Ticket extends BaseEntity {
         return offer;
     }
 
+    public TicketConversation inviteOffer(String offerId) {
+        if (status != TicketStatus.OFFERED) {
+            throw new IllegalStateException("Ticket is not waiting for offer approval");
+        }
+        TicketOffer invitedOffer = offer(offerId);
+        invitedOffer.invite();
+
+        TicketConversation conversation = conversationForOfferOrCreate(invitedOffer);
+        conversation.addSystemMessage("Musteri gorusmeye davet etti.");
+        status = TicketStatus.OFFERED;
+        return conversation;
+    }
+
     public void acceptOffer(String offerId) {
         if (status != TicketStatus.OFFERED) {
             throw new IllegalStateException("Ticket is not waiting for offer approval");
         }
-        TicketOffer acceptedOffer = offers.stream()
-                .filter(offer -> offer.getId().equals(offerId))
-                .findFirst()
-                .orElseThrow(() -> new NotFoundException("Offer not found"));
-        if (acceptedOffer.getStatus() != com.iknow.ztemizindenbackend.domain.Enums.OfferStatus.PENDING) {
-            throw new IllegalStateException("Only pending offers can be accepted");
+        TicketOffer acceptedOffer = offer(offerId);
+        if (!acceptedOffer.isSelectable()) {
+            throw new IllegalStateException("Only pending or invited offers can be accepted");
         }
 
-        offers.forEach(TicketOffer::reject);
+        offers.stream()
+                .filter(offer -> !offer.getId().equals(acceptedOffer.getId()))
+                .forEach(TicketOffer::reject);
         acceptedOffer.accept();
+
+        conversations.stream()
+                .filter(conversation -> !conversation.getOffer().getId().equals(acceptedOffer.getId()))
+                .filter(TicketConversation::isWritable)
+                .forEach(conversation -> {
+                    conversation.closeNotSelected();
+                    conversation.addSystemMessage("Baska bir teklif kabul edildigi icin gorusme kapatildi.");
+                });
+        TicketConversation acceptedConversation = conversationForOfferOrCreate(acceptedOffer);
+        acceptedConversation.accept();
+        acceptedConversation.addSystemMessage("Teklif kabul edildi ve servis sureci baslatildi.");
+
         assignedProviderId = acceptedOffer.getProviderId();
         assignedProviderName = acceptedOffer.getProviderName();
         serviceEta = acceptedOffer.getEta();
         finalEstimatedCost = acceptedOffer.getEstimatedCost();
         status = TicketStatus.IN_PROGRESS;
         asset.markUnderMaintenance();
-        addSystemMessage(acceptedOffer.getProviderName() + " servisi davet edildi.");
     }
 
     public void rejectOffer(String offerId) {
         if (status != TicketStatus.OFFERED) {
             throw new IllegalStateException("Ticket is not waiting for offer approval");
         }
-        TicketOffer rejectedOffer = offers.stream()
-                .filter(offer -> offer.getId().equals(offerId))
-                .findFirst()
-                .orElseThrow(() -> new NotFoundException("Offer not found"));
-        if (rejectedOffer.getStatus() != com.iknow.ztemizindenbackend.domain.Enums.OfferStatus.PENDING) {
-            throw new IllegalStateException("Only pending offers can be rejected");
+        TicketOffer rejectedOffer = offer(offerId);
+        if (!rejectedOffer.isSelectable()) {
+            throw new IllegalStateException("Only pending or invited offers can be rejected");
         }
 
         rejectedOffer.reject();
-        if (offers.stream().noneMatch(offer -> offer.getStatus() == com.iknow.ztemizindenbackend.domain.Enums.OfferStatus.PENDING)) {
+        conversationForOffer(rejectedOffer).ifPresent(conversation -> {
+            if (conversation.isWritable()) {
+                conversation.closeRejected();
+                conversation.addSystemMessage("Teklif reddedildigi icin gorusme kapatildi.");
+            }
+        });
+        if (offers.stream().noneMatch(TicketOffer::isSelectable)) {
             status = TicketStatus.OPEN;
+        } else {
+            status = TicketStatus.OFFERED;
         }
     }
 
@@ -288,12 +320,40 @@ public class Ticket extends BaseEntity {
         return message;
     }
 
+    public TicketMessage addCustomerConversationMessage(String conversationId, String senderName, String body) {
+        return conversation(conversationId).addCustomerMessage(senderName, body);
+    }
+
+    public TicketMessage addServiceConversationMessage(String conversationId, String providerId, String senderName, String body) {
+        TicketConversation conversation = conversation(conversationId);
+        if (providerId != null && !conversation.isForProvider(providerId)) {
+            throw new IllegalStateException("Provider cannot write to this conversation");
+        }
+        return conversation.addServiceMessage(senderName, body);
+    }
+
     public void markMessagesReadByCustomer() {
-        messages.forEach(TicketMessage::markReadByCustomer);
+        messages.stream()
+                .filter(message -> message.getConversation() == null)
+                .forEach(TicketMessage::markReadByCustomer);
     }
 
     public void markMessagesReadByService() {
-        messages.forEach(TicketMessage::markReadByService);
+        messages.stream()
+                .filter(message -> message.getConversation() == null)
+                .forEach(TicketMessage::markReadByService);
+    }
+
+    public void markConversationMessagesReadByCustomer(String conversationId) {
+        conversation(conversationId).markMessagesReadByCustomer();
+    }
+
+    public void markConversationMessagesReadByService(String conversationId, String providerId) {
+        TicketConversation conversation = conversation(conversationId);
+        if (providerId != null && !conversation.isForProvider(providerId)) {
+            throw new IllegalStateException("Provider cannot read this conversation");
+        }
+        conversation.markMessagesReadByService();
     }
 
     public TicketOffer latestOffer() {
@@ -310,6 +370,34 @@ public class Ticket extends BaseEntity {
 
     private void addSystemMessage(String body) {
         messages.add(new TicketMessage(this, "system", "Ztemizinden Operasyon", body));
+    }
+
+    private TicketOffer offer(String offerId) {
+        return offers.stream()
+                .filter(offer -> offer.getId().equals(offerId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Offer not found"));
+    }
+
+    public TicketConversation conversation(String conversationId) {
+        return conversations.stream()
+                .filter(conversation -> conversation.getId().equals(conversationId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+    }
+
+    private java.util.Optional<TicketConversation> conversationForOffer(TicketOffer offer) {
+        return conversations.stream()
+                .filter(conversation -> conversation.getOffer().getId().equals(offer.getId()))
+                .findFirst();
+    }
+
+    private TicketConversation conversationForOfferOrCreate(TicketOffer offer) {
+        return conversationForOffer(offer).orElseGet(() -> {
+            TicketConversation conversation = new TicketConversation(this, offer);
+            conversations.add(conversation);
+            return conversation;
+        });
     }
 
     private static String displayName(String value, String fallback) {

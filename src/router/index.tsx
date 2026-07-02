@@ -15,6 +15,7 @@ const CustomerRegister = lazy(() => import('@/features/auth/CustomerRegister'));
 const ServiceLogin = lazy(() => import('@/features/auth/ServiceLogin'));
 const ServiceRegister = lazy(() => import('@/features/auth/ServiceRegister'));
 const AdminLogin = lazy(() => import('@/features/auth/AdminLogin'));
+const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage'));
 
 // Customer Portal Pages
 const CustomerDashboard = lazy(() => import('@/features/customer/CustomerDashboard'));
@@ -124,6 +125,11 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: withPageLoader(<MaintlyLandingPage />),
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: '/reset-password',
+    element: withPageLoader(<ResetPasswordPage />),
     errorElement: <RouteErrorBoundary />,
   },
 

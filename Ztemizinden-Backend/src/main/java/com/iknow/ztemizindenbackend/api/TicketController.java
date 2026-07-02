@@ -6,13 +6,17 @@ import com.iknow.ztemizindenbackend.application.TicketService.CreateTicketComman
 import com.iknow.ztemizindenbackend.application.TicketService.DisputeBillingCommand;
 import com.iknow.ztemizindenbackend.application.TicketService.MessageResult;
 import com.iknow.ztemizindenbackend.application.TicketService.SubmitBillingCommand;
+import com.iknow.ztemizindenbackend.application.TicketService.TicketMutationResult;
 import com.iknow.ztemizindenbackend.application.TicketMessageBroadcaster;
 import com.iknow.ztemizindenbackend.application.CurrentUser;
 import com.iknow.ztemizindenbackend.domain.Enums.BillingStatus;
+import com.iknow.ztemizindenbackend.domain.Enums.ConversationClosedReason;
+import com.iknow.ztemizindenbackend.domain.Enums.ConversationStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferType;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketStatus;
 import com.iknow.ztemizindenbackend.domain.Ticket;
+import com.iknow.ztemizindenbackend.domain.TicketConversation;
 import com.iknow.ztemizindenbackend.domain.TicketMessage;
 import com.iknow.ztemizindenbackend.domain.TicketOffer;
 import jakarta.validation.Valid;
@@ -50,18 +54,25 @@ public class TicketController {
 
     @GetMapping("/opportunities")
     public List<TicketResponse> listOpportunities(@RequestParam String providerId) {
-        return ticketService.listOpportunities(currentUser.providerId(providerId)).stream().map(TicketResponse::fromForService).toList();
+        String scopedProviderId = currentUser.providerId(providerId);
+        return ticketService.listOpportunities(scopedProviderId).stream()
+                .map(ticket -> TicketResponse.fromForService(ticket, scopedProviderId))
+                .toList();
     }
 
     @GetMapping("/provider")
     public List<TicketResponse> listForProvider(@RequestParam String providerId) {
-        return ticketService.listForProvider(currentUser.providerId(providerId)).stream().map(TicketResponse::fromForService).toList();
+        String scopedProviderId = currentUser.providerId(providerId);
+        return ticketService.listForProvider(scopedProviderId).stream()
+                .map(ticket -> TicketResponse.fromForService(ticket, scopedProviderId))
+                .toList();
     }
 
     @GetMapping("/{ticketId}")
     public TicketResponse get(@PathVariable String ticketId) {
         if (currentUser.isService()) {
-            return TicketResponse.fromForService(ticketService.getForProvider(ticketId, currentUser.providerId(null)));
+            String providerId = currentUser.providerId(null);
+            return TicketResponse.fromForService(ticketService.getForProvider(ticketId, providerId), providerId);
         }
 
         Ticket ticket = ticketService.get(ticketId);
@@ -110,13 +121,29 @@ public class TicketController {
     @PostMapping("/{ticketId}/offers/{offerId}/accept")
     public TicketResponse acceptOffer(@PathVariable String ticketId, @PathVariable String offerId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.fromForCustomer(ticketService.acceptOffer(ticketId, offerId));
+        TicketMutationResult result = ticketService.acceptOffer(ticketId, offerId);
+        publishConversationMessages(result.messages());
+        publishTicketEvent("OFFER_ACCEPTED", result.ticket(), null);
+        return TicketResponse.fromForCustomer(result.ticket());
+    }
+
+    @PostMapping("/{ticketId}/offers/{offerId}/invite")
+    public TicketResponse inviteOffer(@PathVariable String ticketId, @PathVariable String offerId) {
+        currentUser.requireCustomerTicket(ticketService.get(ticketId));
+        TicketMutationResult result = ticketService.inviteOffer(ticketId, offerId);
+        publishConversationMessages(result.messages());
+        String conversationId = conversationIdForOffer(result.ticket(), offerId);
+        publishTicketEvent("OFFER_INVITED", result.ticket(), conversationId);
+        return TicketResponse.fromForCustomer(result.ticket());
     }
 
     @PostMapping("/{ticketId}/offers/{offerId}/reject")
     public TicketResponse rejectOffer(@PathVariable String ticketId, @PathVariable String offerId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        return TicketResponse.fromForCustomer(ticketService.rejectOffer(ticketId, offerId));
+        TicketMutationResult result = ticketService.rejectOffer(ticketId, offerId);
+        publishConversationMessages(result.messages());
+        publishTicketEvent("OFFER_REJECTED", result.ticket(), conversationIdForOffer(result.ticket(), offerId));
+        return TicketResponse.fromForCustomer(result.ticket());
     }
 
     @PostMapping("/{ticketId}/cancel")
@@ -127,11 +154,13 @@ public class TicketController {
 
     @PostMapping("/{ticketId}/billing")
     public TicketResponse submitBilling(@PathVariable String ticketId, @Valid @RequestBody SubmitBillingRequest request) {
-        currentUser.requireProviderTicket(ticketService.get(ticketId));
+        Ticket ticket = ticketService.get(ticketId);
+        currentUser.requireProviderTicket(ticket);
+        String providerId = currentUser.providerId(ticket.getAssignedProviderId());
         return TicketResponse.fromForService(ticketService.submitFinalBilling(
                 ticketId,
                 new SubmitBillingCommand(request.actualCost(), request.notes())
-        ));
+        ), providerId);
     }
 
     @PostMapping("/{ticketId}/billing/approve")
@@ -154,13 +183,15 @@ public class TicketController {
         Ticket ticket = ticketService.get(ticketId);
         if (currentUser.isService()) {
             currentUser.requireProviderTicket(ticket);
+            String providerId = currentUser.providerId(ticket.getAssignedProviderId());
             MessageResult result = ticketService.addServiceMessage(
                     ticketId,
                     currentUser.displayName(ticket.getAssignedProviderName()),
                     request.body()
             );
             ticketMessageBroadcaster.publish(result.message());
-            return TicketResponse.fromForService(result.ticket());
+            publishTicketEvent("MESSAGE", result.ticket(), null);
+            return TicketResponse.fromForService(result.ticket(), providerId);
         }
 
         currentUser.requireCustomerTicket(ticket);
@@ -170,14 +201,50 @@ public class TicketController {
                 request.body()
         );
         ticketMessageBroadcaster.publish(result.message());
+        publishTicketEvent("MESSAGE", result.ticket(), null);
+        return TicketResponse.fromForCustomer(result.ticket());
+    }
+
+    @PostMapping("/{ticketId}/conversations/{conversationId}/messages")
+    public TicketResponse addConversationMessage(
+            @PathVariable String ticketId,
+            @PathVariable String conversationId,
+            @Valid @RequestBody AddMessageRequest request
+    ) {
+        Ticket ticket = ticketService.get(ticketId);
+        if (currentUser.isService()) {
+            String providerId = currentUser.providerId(null);
+            ticketService.getForProvider(ticketId, providerId);
+            MessageResult result = ticketService.addServiceConversationMessage(
+                    ticketId,
+                    conversationId,
+                    providerId,
+                    currentUser.displayName("Servis"),
+                    request.body()
+            );
+            ticketMessageBroadcaster.publishConversation(result.message());
+            publishTicketEvent("MESSAGE", result.ticket(), conversationId);
+            return TicketResponse.fromForService(result.ticket(), providerId);
+        }
+
+        currentUser.requireCustomerTicket(ticket);
+        MessageResult result = ticketService.addCustomerConversationMessage(
+                ticketId,
+                conversationId,
+                currentUser.displayName(ticket.getCustomerName()),
+                request.body()
+        );
+        ticketMessageBroadcaster.publishConversation(result.message());
+        publishTicketEvent("MESSAGE", result.ticket(), conversationId);
         return TicketResponse.fromForCustomer(result.ticket());
     }
 
     @PostMapping("/{ticketId}/messages/read")
     public TicketResponse markMessagesRead(@PathVariable String ticketId) {
         if (currentUser.isService()) {
-            ticketService.getForProvider(ticketId, currentUser.providerId(null));
-            return TicketResponse.fromForService(ticketService.markMessagesReadByService(ticketId));
+            String providerId = currentUser.providerId(null);
+            ticketService.getForProvider(ticketId, providerId);
+            return TicketResponse.fromForService(ticketService.markMessagesReadByService(ticketId), providerId);
         }
 
         Ticket ticket = ticketService.get(ticketId);
@@ -185,6 +252,27 @@ public class TicketController {
             currentUser.requireCustomerTicket(ticket);
         }
         return TicketResponse.fromForCustomer(ticketService.markMessagesReadByCustomer(ticketId));
+    }
+
+    @PostMapping("/{ticketId}/conversations/{conversationId}/messages/read")
+    public TicketResponse markConversationMessagesRead(
+            @PathVariable String ticketId,
+            @PathVariable String conversationId
+    ) {
+        if (currentUser.isService()) {
+            String providerId = currentUser.providerId(null);
+            ticketService.getForProvider(ticketId, providerId);
+            return TicketResponse.fromForService(
+                    ticketService.markConversationMessagesReadByService(ticketId, conversationId, providerId),
+                    providerId
+            );
+        }
+
+        Ticket ticket = ticketService.get(ticketId);
+        if (currentUser.isCustomer()) {
+            currentUser.requireCustomerTicket(ticket);
+        }
+        return TicketResponse.fromForCustomer(ticketService.markConversationMessagesReadByCustomer(ticketId, conversationId));
     }
 
     public record CreateTicketRequest(
@@ -223,6 +311,9 @@ public class TicketController {
     public record AddMessageRequest(@NotBlank String body) {
     }
 
+    public record TicketEventPayload(String type, String conversationId, TicketResponse ticket) {
+    }
+
     public record TicketResponse(
             String id,
             String customerId,
@@ -253,6 +344,7 @@ public class TicketController {
             BillingStatus billingStatus,
             String finalBillingNotes,
             List<OfferResponse> offers,
+            List<ConversationResponse> conversations,
             List<TicketMessagePayload> messages,
             int unreadMessageCount,
             TicketMessagePayload lastMessage,
@@ -268,13 +360,22 @@ public class TicketController {
         }
 
         static TicketResponse fromForService(Ticket ticket) {
-            return from(ticket, Viewer.SERVICE);
+            return from(ticket, Viewer.SERVICE, null);
+        }
+
+        static TicketResponse fromForService(Ticket ticket, String providerId) {
+            return from(ticket, Viewer.SERVICE, providerId);
         }
 
         private static TicketResponse from(Ticket ticket, Viewer viewer) {
+            return from(ticket, viewer, null);
+        }
+
+        private static TicketResponse from(Ticket ticket, Viewer viewer, String providerId) {
             List<TicketMessagePayload> messages = scopedMessages(ticket).stream()
                     .map(TicketMessagePayload::from)
                     .toList();
+            List<TicketConversation> conversations = scopedConversations(ticket, viewer, providerId);
 
             return new TicketResponse(
                     ticket.getId(),
@@ -305,13 +406,15 @@ public class TicketController {
                     ticket.getFinalActualCost(),
                     ticket.getBillingStatus(),
                     ticket.getFinalBillingNotes(),
-                    ticket.getOffers().stream()
-                            .filter(offer -> ticket.getId().equals(offer.getTicket().getId()))
+                    scopedOffers(ticket, viewer, providerId).stream()
                             .map(OfferResponse::from)
                             .toList(),
+                    conversations.stream()
+                            .map(conversation -> ConversationResponse.from(conversation, viewer))
+                            .toList(),
                     messages,
-                    unreadMessageCount(ticket, viewer),
-                    latestConversationMessage(ticket),
+                    unreadMessageCount(ticket, conversations, viewer),
+                    latestVisibleMessage(ticket, conversations),
                     ticket.getCreatedAt(),
                     ticket.getUpdatedAt()
             );
@@ -320,6 +423,7 @@ public class TicketController {
         private static List<TicketMessage> scopedMessages(Ticket ticket) {
             return ticket.getMessages().stream()
                     .filter(message -> ticket.getId().equals(message.getTicket().getId()))
+                    .filter(message -> message.getConversation() == null)
                     .sorted(Comparator
                             .comparing(TicketMessage::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
                             .thenComparing(TicketMessage::getSenderRole, Comparator.nullsLast(String::compareTo))
@@ -328,8 +432,33 @@ public class TicketController {
                     .toList();
         }
 
-        private static int unreadMessageCount(Ticket ticket, Viewer viewer) {
-            return (int) scopedMessages(ticket).stream()
+        private static List<TicketOffer> scopedOffers(Ticket ticket, Viewer viewer, String providerId) {
+            return ticket.getOffers().stream()
+                    .filter(offer -> ticket.getId().equals(offer.getTicket().getId()))
+                    .filter(offer -> viewer != Viewer.SERVICE
+                            || (providerId != null && offer.getProviderId().equals(providerId)))
+                    .sorted(Comparator
+                            .comparing(TicketOffer::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                            .thenComparing(TicketOffer::getId, Comparator.nullsLast(String::compareTo)))
+                    .toList();
+        }
+
+        private static List<TicketConversation> scopedConversations(Ticket ticket, Viewer viewer, String providerId) {
+            return ticket.getConversations().stream()
+                    .filter(conversation -> ticket.getId().equals(conversation.getTicket().getId()))
+                    .filter(conversation -> viewer != Viewer.SERVICE
+                            || (providerId != null && conversation.getProviderId().equals(providerId)))
+                    .sorted(Comparator
+                            .comparing(TicketConversation::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                            .thenComparing(TicketConversation::getProviderName, Comparator.nullsLast(String::compareTo))
+                            .thenComparing(TicketConversation::getId, Comparator.nullsLast(String::compareTo)))
+                    .toList();
+        }
+
+        private static int unreadMessageCount(Ticket ticket, List<TicketConversation> conversations, Viewer viewer) {
+            List<TicketMessage> visibleMessages = new ArrayList<>(scopedMessages(ticket));
+            conversations.forEach(conversation -> visibleMessages.addAll(TicketController.scopedMessages(conversation)));
+            return (int) visibleMessages.stream()
                     .filter(message -> switch (viewer) {
                         case CUSTOMER -> message.isUnreadForCustomer();
                         case SERVICE -> message.isUnreadForService();
@@ -338,8 +467,10 @@ public class TicketController {
                     .count();
         }
 
-        private static TicketMessagePayload latestConversationMessage(Ticket ticket) {
-            return scopedMessages(ticket).stream()
+        private static TicketMessagePayload latestVisibleMessage(Ticket ticket, List<TicketConversation> conversations) {
+            List<TicketMessage> visibleMessages = new ArrayList<>(scopedMessages(ticket));
+            conversations.forEach(conversation -> visibleMessages.addAll(TicketController.scopedMessages(conversation)));
+            return visibleMessages.stream()
                     .filter(message -> !"system".equals(message.getSenderRole()))
                     .max(Comparator.comparing(
                             TicketMessage::getCreatedAt,
@@ -348,12 +479,76 @@ public class TicketController {
                     .map(TicketMessagePayload::from)
                     .orElse(null);
         }
+    }
 
-        private enum Viewer {
-            ADMIN,
-            CUSTOMER,
-            SERVICE
+    public record ConversationResponse(
+            String id,
+            String ticketId,
+            String offerId,
+            String providerId,
+            String providerName,
+            ConversationStatus status,
+            ConversationClosedReason closedReason,
+            OfferResponse offer,
+            List<TicketMessagePayload> messages,
+            int unreadMessageCount,
+            TicketMessagePayload lastMessage,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        static ConversationResponse from(TicketConversation conversation, Viewer viewer) {
+            List<TicketMessagePayload> messages = scopedMessages(conversation).stream()
+                    .map(TicketMessagePayload::from)
+                    .toList();
+            return new ConversationResponse(
+                    conversation.getId(),
+                    conversation.getTicket().getId(),
+                    conversation.getOffer().getId(),
+                    conversation.getProviderId(),
+                    conversation.getProviderName(),
+                    conversation.getStatus(),
+                    conversation.getClosedReason(),
+                    OfferResponse.from(conversation.getOffer()),
+                    messages,
+                    TicketController.unreadMessageCount(conversation, viewer),
+                    latestMessage(conversation),
+                    conversation.getCreatedAt(),
+                    conversation.getUpdatedAt()
+            );
         }
+    }
+
+    private static List<TicketMessage> scopedMessages(TicketConversation conversation) {
+        return conversation.getMessages().stream()
+                .filter(message -> message.getConversation() != null
+                        && conversation.getId().equals(message.getConversation().getId()))
+                .sorted(Comparator
+                        .comparing(TicketMessage::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(TicketMessage::getSenderRole, Comparator.nullsLast(String::compareTo))
+                        .thenComparing(TicketMessage::getSenderName, Comparator.nullsLast(String::compareTo))
+                        .thenComparing(TicketMessage::getId, Comparator.nullsLast(String::compareTo)))
+                .toList();
+    }
+
+    private static int unreadMessageCount(TicketConversation conversation, Viewer viewer) {
+        return (int) scopedMessages(conversation).stream()
+                .filter(message -> switch (viewer) {
+                    case CUSTOMER -> message.isUnreadForCustomer();
+                    case SERVICE -> message.isUnreadForService();
+                    case ADMIN -> false;
+                })
+                .count();
+    }
+
+    private static TicketMessagePayload latestMessage(TicketConversation conversation) {
+        return scopedMessages(conversation).stream()
+                .filter(message -> !"system".equals(message.getSenderRole()))
+                .max(Comparator.comparing(
+                        TicketMessage::getCreatedAt,
+                        Comparator.nullsFirst(Comparator.naturalOrder())
+                ))
+                .map(TicketMessagePayload::from)
+                .orElse(null);
     }
 
     public record OfferResponse(
@@ -384,6 +579,64 @@ public class TicketController {
                     offer.getUpdatedAt()
             );
         }
+    }
+
+    private enum Viewer {
+        ADMIN,
+        CUSTOMER,
+        SERVICE
+    }
+
+    private void publishTicketEvent(String type, Ticket ticket, String conversationId) {
+        ticketMessageBroadcaster.publishCustomerTicket(
+                ticket.getCustomerId(),
+                new TicketEventPayload(type, conversationId, TicketResponse.fromForCustomer(ticket))
+        );
+
+        providerIds(ticket).forEach(providerId -> ticketMessageBroadcaster.publishProviderTicket(
+                providerId,
+                new TicketEventPayload(
+                        type,
+                        conversationIdForProvider(ticket, providerId),
+                        TicketResponse.fromForService(ticket, providerId)
+                )
+        ));
+    }
+
+    private void publishConversationMessages(List<TicketMessage> messages) {
+        messages.forEach(ticketMessageBroadcaster::publishConversation);
+    }
+
+    private static List<String> providerIds(Ticket ticket) {
+        List<String> providerIds = new ArrayList<>();
+        ticket.getOffers().stream()
+                .map(TicketOffer::getProviderId)
+                .filter(providerId -> providerId != null && !providerId.isBlank())
+                .forEach(providerIds::add);
+        ticket.getConversations().stream()
+                .map(TicketConversation::getProviderId)
+                .filter(providerId -> providerId != null && !providerId.isBlank())
+                .forEach(providerIds::add);
+        if (ticket.getAssignedProviderId() != null && !ticket.getAssignedProviderId().isBlank()) {
+            providerIds.add(ticket.getAssignedProviderId());
+        }
+        return providerIds.stream().distinct().toList();
+    }
+
+    private static String conversationIdForOffer(Ticket ticket, String offerId) {
+        return ticket.getConversations().stream()
+                .filter(conversation -> conversation.getOffer().getId().equals(offerId))
+                .map(TicketConversation::getId)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static String conversationIdForProvider(Ticket ticket, String providerId) {
+        return ticket.getConversations().stream()
+                .filter(conversation -> conversation.getProviderId().equals(providerId))
+                .map(TicketConversation::getId)
+                .findFirst()
+                .orElse(null);
     }
 
 }

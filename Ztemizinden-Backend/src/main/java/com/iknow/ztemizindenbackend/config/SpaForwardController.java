@@ -12,7 +12,8 @@ class SpaForwardController {
             "/service",
             "/service/**",
             "/admin",
-            "/admin/**"
+            "/admin/**",
+            "/reset-password"
     })
     String forwardToSpa() {
         return "forward:/index.html";

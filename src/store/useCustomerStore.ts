@@ -95,7 +95,9 @@ export type TicketCategory = 'Electric' | 'Mechanic' | 'Pneumatic' | 'Hydraulic'
 export type TicketPriority = 'Low' | 'Medium' | 'High' | 'Critical';
 export type TicketStatus = 'OPEN' | 'OFFERED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
 export type OfferType = 'DISCOVERY' | 'FIXED_PRICE';
-export type OfferStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN';
+export type OfferStatus = 'PENDING' | 'INVITED' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN';
+export type ConversationStatus = 'ACTIVE' | 'ACCEPTED' | 'CLOSED';
+export type ConversationClosedReason = 'REJECTED' | 'NOT_SELECTED';
 export type BillingStatus = 'AWAITING_CUSTOMER_APPROVAL' | 'APPROVED' | 'DISPUTED';
 
 export interface TicketOffer {
@@ -115,12 +117,29 @@ export interface TicketOffer {
 export interface TicketMessage {
   id: string;
   ticketId: string;
+  conversationId?: string | null;
   senderRole: 'customer' | 'service' | 'system';
   senderName: string;
   body: string;
   readByCustomer?: boolean;
   readByService?: boolean;
   createdAt: string;
+}
+
+export interface TicketConversation {
+  id: string;
+  ticketId: string;
+  offerId: string;
+  providerId: string;
+  providerName: string;
+  status: ConversationStatus;
+  closedReason?: ConversationClosedReason | null;
+  offer?: TicketOffer;
+  messages: TicketMessage[];
+  unreadMessageCount?: number;
+  lastMessage?: TicketMessage | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FinalBilling {
@@ -163,6 +182,7 @@ export interface Ticket {
   assignedProviderName?: string;
   serviceEta?: string;
   offers: TicketOffer[];
+  conversations: TicketConversation[];
   messages: TicketMessage[];
   unreadMessageCount?: number;
   lastMessage?: TicketMessage | null;
@@ -218,11 +238,15 @@ interface CustomerStoreState {
   // Ticket Actions
   createTicket: (ticket: CreateTicketInput) => Promise<Ticket>;
   cancelTicket: (id: string) => Promise<void>;
-  acceptOffer: (ticketId: string, offerId: string) => Promise<void>;
-  rejectOffer: (ticketId: string, offerId: string) => Promise<void>;
+  inviteOffer: (ticketId: string, offerId: string) => Promise<Ticket>;
+  acceptOffer: (ticketId: string, offerId: string) => Promise<Ticket>;
+  rejectOffer: (ticketId: string, offerId: string) => Promise<Ticket>;
   addTicketMessage: (ticketId: string, body: string) => Promise<void>;
+  addConversationMessage: (ticketId: string, conversationId: string, body: string) => Promise<void>;
   receiveTicketMessage: (message: TicketMessage) => void;
+  receiveTicketUpdate: (ticket: Ticket) => void;
   markTicketMessagesRead: (ticketId: string) => Promise<void>;
+  markConversationMessagesRead: (ticketId: string, conversationId: string) => Promise<void>;
   approveFinalBilling: (ticketId: string) => Promise<void>;
   disputeFinalBilling: (ticketId: string, reason: string) => Promise<void>;
   getTicketsByAsset: (assetId: string) => Ticket[];
@@ -377,6 +401,15 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
     set((state) => ({
       tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
     }));
+    return updatedTicket;
+  },
+
+  inviteOffer: async (ticketId, offerId) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/offers/${offerId}/invite`));
+    set((state) => ({
+      tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
+    }));
+    return updatedTicket;
   },
 
   rejectOffer: async (ticketId, offerId) => {
@@ -384,10 +417,21 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
     set((state) => ({
       tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
     }));
+    return updatedTicket;
   },
 
   addTicketMessage: async (ticketId, body) => {
     const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/messages`, { body }));
+    set((state) => ({
+      tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
+    }));
+  },
+
+  addConversationMessage: async (ticketId, conversationId, body) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(
+      `/tickets/${ticketId}/conversations/${conversationId}/messages`,
+      { body }
+    ));
     set((state) => ({
       tickets: state.tickets.map((t) => (t.id === ticketId ? updatedTicket : t)),
     }));
@@ -399,8 +443,29 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
     }));
   },
 
+  receiveTicketUpdate: (ticket) => {
+    const updatedTicket = normalizeTicket(ticket);
+    set((state) => {
+      const exists = state.tickets.some((item) => item.id === updatedTicket.id);
+      return {
+        tickets: exists
+          ? state.tickets.map((item) => (item.id === updatedTicket.id ? updatedTicket : item))
+          : [updatedTicket, ...state.tickets],
+      };
+    });
+  },
+
   markTicketMessagesRead: async (ticketId) => {
     const updatedTicket = normalizeTicket(await api.post<Ticket>(`/tickets/${ticketId}/messages/read`));
+    set((state) => ({
+      tickets: state.tickets.map((ticket) => (ticket.id === ticketId ? updatedTicket : ticket)),
+    }));
+  },
+
+  markConversationMessagesRead: async (ticketId, conversationId) => {
+    const updatedTicket = normalizeTicket(await api.post<Ticket>(
+      `/tickets/${ticketId}/conversations/${conversationId}/messages/read`
+    ));
     set((state) => ({
       tickets: state.tickets.map((ticket) => (ticket.id === ticketId ? updatedTicket : ticket)),
     }));
@@ -449,13 +514,15 @@ export const useCustomerStore = create<CustomerStoreState>()((set, get) => ({
 
 function normalizeTicket(ticket: Ticket): Ticket {
   const messages = sortTicketMessages(scopedMessages(ticket));
+  const conversations = scopedConversations(ticket).map((conversation) => normalizeConversation(conversation, 'customer'));
   return {
     ...ticket,
     mediaUrls: ticket.mediaUrls ?? [],
     offers: scopedOffers(ticket),
+    conversations,
     messages,
-    unreadMessageCount: ticket.unreadMessageCount ?? unreadMessagesForRole(messages, 'customer'),
-    lastMessage: scopedLastMessage(ticket, messages),
+    unreadMessageCount: ticket.unreadMessageCount ?? unreadMessagesForTicket(messages, conversations, 'customer'),
+    lastMessage: scopedLastMessage(ticket, messages, conversations),
   };
 }
 
@@ -464,14 +531,41 @@ function scopedOffers(ticket: Ticket): TicketOffer[] {
 }
 
 function scopedMessages(ticket: Ticket): TicketMessage[] {
-  return (ticket.messages ?? []).filter((message) => !message.ticketId || message.ticketId === ticket.id);
+  return (ticket.messages ?? []).filter((message) =>
+    (!message.ticketId || message.ticketId === ticket.id) && !message.conversationId
+  );
+}
+
+function scopedConversations(ticket: Ticket): TicketConversation[] {
+  return (ticket.conversations ?? []).filter((conversation) => !conversation.ticketId || conversation.ticketId === ticket.id);
+}
+
+function normalizeConversation(conversation: TicketConversation, role: 'customer' | 'service'): TicketConversation {
+  const messages = sortTicketMessages((conversation.messages ?? []).filter((message) =>
+    (!message.ticketId || message.ticketId === conversation.ticketId) &&
+    (!message.conversationId || message.conversationId === conversation.id)
+  ));
+
+  return {
+    ...conversation,
+    messages,
+    unreadMessageCount: conversation.unreadMessageCount ?? unreadMessagesForRole(messages, role),
+    lastMessage: conversation.lastMessage && conversation.lastMessage.senderRole !== 'system'
+      ? conversation.lastMessage
+      : latestConversationMessage(messages),
+  };
 }
 
 function appendTicketMessage(ticket: Ticket, message: TicketMessage, role: 'customer' | 'service'): Ticket {
   if (ticket.id !== message.ticketId) return ticket;
+  if (message.conversationId) {
+    return appendConversationMessage(ticket, message, role);
+  }
+
   const messages = ticket.messages ?? [];
   if (messages.some((item) => item.id === message.id)) return ticket;
   const nextMessages = sortTicketMessages([...messages, message]);
+  const conversations = ticket.conversations ?? [];
   const shouldIncrementUnread =
     role === 'customer'
       ? message.senderRole === 'service' && message.readByCustomer !== true
@@ -480,17 +574,56 @@ function appendTicketMessage(ticket: Ticket, message: TicketMessage, role: 'cust
   return {
     ...ticket,
     messages: nextMessages,
-    unreadMessageCount: (ticket.unreadMessageCount ?? unreadMessagesForRole(messages, role)) + (shouldIncrementUnread ? 1 : 0),
-    lastMessage: latestConversationMessage(nextMessages),
+    unreadMessageCount: (ticket.unreadMessageCount ?? unreadMessagesForTicket(messages, conversations, role)) + (shouldIncrementUnread ? 1 : 0),
+    lastMessage: latestConversationMessage([...nextMessages, ...conversationMessages(conversations)]),
     updatedAt: message.createdAt ?? ticket.updatedAt,
   };
 }
 
-function scopedLastMessage(ticket: Ticket, messages: TicketMessage[]) {
+function appendConversationMessage(ticket: Ticket, message: TicketMessage, role: 'customer' | 'service'): Ticket {
+  const conversations = ticket.conversations ?? [];
+  let didAppend = false;
+  const nextConversations = conversations.map((conversation) => {
+    if (conversation.id !== message.conversationId) return conversation;
+    if (conversation.messages.some((item) => item.id === message.id)) return conversation;
+
+    didAppend = true;
+    const messages = sortTicketMessages([...conversation.messages, message]);
+    const shouldIncrementUnread =
+      role === 'customer'
+        ? message.senderRole === 'service' && message.readByCustomer !== true
+        : message.senderRole === 'customer' && message.readByService !== true;
+
+    return {
+      ...conversation,
+      messages,
+      unreadMessageCount: (conversation.unreadMessageCount ?? unreadMessagesForRole(conversation.messages, role)) + (shouldIncrementUnread ? 1 : 0),
+      lastMessage: latestConversationMessage(messages),
+      updatedAt: message.createdAt ?? conversation.updatedAt,
+    };
+  });
+
+  if (!didAppend) return ticket;
+
+  const shouldIncrementUnread =
+    role === 'customer'
+      ? message.senderRole === 'service' && message.readByCustomer !== true
+      : message.senderRole === 'customer' && message.readByService !== true;
+
+  return {
+    ...ticket,
+    conversations: nextConversations,
+    unreadMessageCount: (ticket.unreadMessageCount ?? unreadMessagesForTicket(ticket.messages ?? [], conversations, role)) + (shouldIncrementUnread ? 1 : 0),
+    lastMessage: latestConversationMessage([...(ticket.messages ?? []), ...conversationMessages(nextConversations)]),
+    updatedAt: message.createdAt ?? ticket.updatedAt,
+  };
+}
+
+function scopedLastMessage(ticket: Ticket, messages: TicketMessage[], conversations: TicketConversation[]) {
   if (ticket.lastMessage && ticket.lastMessage.ticketId === ticket.id && ticket.lastMessage.senderRole !== 'system') {
     return ticket.lastMessage;
   }
-  return latestConversationMessage(messages);
+  return latestConversationMessage([...messages, ...conversationMessages(conversations)]);
 }
 
 function unreadMessagesForRole(messages: TicketMessage[], role: 'customer' | 'service') {
@@ -500,6 +633,21 @@ function unreadMessagesForRole(messages: TicketMessage[], role: 'customer' | 'se
     }
     return message.senderRole === 'customer' && message.readByService !== true;
   }).length;
+}
+
+function unreadMessagesForTicket(
+  messages: TicketMessage[],
+  conversations: TicketConversation[],
+  role: 'customer' | 'service'
+) {
+  return unreadMessagesForRole(messages, role) + conversations.reduce(
+    (total, conversation) => total + unreadMessagesForRole(conversation.messages, role),
+    0
+  );
+}
+
+function conversationMessages(conversations: TicketConversation[]) {
+  return conversations.flatMap((conversation) => conversation.messages ?? []);
 }
 
 // ==========================================

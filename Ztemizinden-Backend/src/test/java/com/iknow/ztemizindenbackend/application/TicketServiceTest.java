@@ -7,13 +7,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.iknow.ztemizindenbackend.domain.Asset;
 import com.iknow.ztemizindenbackend.domain.AssetRepository;
 import com.iknow.ztemizindenbackend.domain.Enums.AssetType;
+import com.iknow.ztemizindenbackend.domain.Enums.ConversationClosedReason;
+import com.iknow.ztemizindenbackend.domain.Enums.ConversationStatus;
+import com.iknow.ztemizindenbackend.domain.Enums.OfferStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferType;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketCategory;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketPriority;
+import com.iknow.ztemizindenbackend.domain.Enums.TicketStatus;
 import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
 import com.iknow.ztemizindenbackend.domain.Ticket;
+import com.iknow.ztemizindenbackend.domain.TicketConversation;
 import com.iknow.ztemizindenbackend.domain.TicketMessage;
+import com.iknow.ztemizindenbackend.domain.TicketOffer;
 import com.iknow.ztemizindenbackend.domain.TicketRepository;
 import java.math.BigDecimal;
 import java.lang.reflect.InvocationHandler;
@@ -126,6 +132,95 @@ class TicketServiceTest {
         assertEquals(false, serviceMessage.isUnreadForCustomer());
     }
 
+    @Test
+    void inviteOfferCreatesActiveConversationWithoutClosingOtherOffers() {
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        TicketOffer firstOffer = addOffer(ticket, "offer-1", "sp-1");
+        TicketOffer secondOffer = addOffer(ticket, "offer-2", "sp-2");
+        ticketsById.put(ticket.getId(), ticket);
+
+        TicketService.TicketMutationResult inviteResult = ticketService.inviteOffer(ticket.getId(), firstOffer.getId());
+        ticketService.inviteOffer(ticket.getId(), secondOffer.getId());
+
+        assertEquals(TicketStatus.OFFERED, ticket.getStatus());
+        assertEquals(OfferStatus.INVITED, firstOffer.getStatus());
+        assertEquals(OfferStatus.INVITED, secondOffer.getStatus());
+        assertEquals(1, inviteResult.messages().size());
+        assertEquals("system", inviteResult.messages().getFirst().getSenderRole());
+        assertEquals(2, ticket.getConversations().size());
+        assertEquals(2, ticket.getConversations().stream()
+                .filter(conversation -> conversation.getStatus() == ConversationStatus.ACTIVE)
+                .count());
+    }
+
+    @Test
+    void acceptInvitedOfferStartsJobAndClosesOtherSelectableConversations() {
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        TicketOffer selectedOffer = addOffer(ticket, "offer-1", "sp-1");
+        TicketOffer otherOffer = addOffer(ticket, "offer-2", "sp-2");
+        ticketsById.put(ticket.getId(), ticket);
+
+        ticketService.inviteOffer(ticket.getId(), selectedOffer.getId());
+        ticketService.inviteOffer(ticket.getId(), otherOffer.getId());
+
+        TicketService.TicketMutationResult acceptResult = ticketService.acceptOffer(ticket.getId(), selectedOffer.getId());
+
+        TicketConversation selectedConversation = conversationForOffer(ticket, selectedOffer);
+        TicketConversation otherConversation = conversationForOffer(ticket, otherOffer);
+        assertEquals(TicketStatus.IN_PROGRESS, ticket.getStatus());
+        assertEquals("sp-1", ticket.getAssignedProviderId());
+        assertEquals(OfferStatus.ACCEPTED, selectedOffer.getStatus());
+        assertEquals(OfferStatus.REJECTED, otherOffer.getStatus());
+        assertEquals(ConversationStatus.ACCEPTED, selectedConversation.getStatus());
+        assertEquals(ConversationStatus.CLOSED, otherConversation.getStatus());
+        assertEquals(ConversationClosedReason.NOT_SELECTED, otherConversation.getClosedReason());
+        assertEquals(2, acceptResult.messages().size());
+    }
+
+    @Test
+    void rejectInvitedOfferClosesConversationAndKeepsTicketOpenForNewOffers() {
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        TicketOffer offer = addOffer(ticket, "offer-1", "sp-1");
+        ticketsById.put(ticket.getId(), ticket);
+
+        ticketService.inviteOffer(ticket.getId(), offer.getId());
+        TicketConversation conversation = conversationForOffer(ticket, offer);
+        ReflectionTestUtils.setField(conversation, "id", "conversation-1");
+
+        TicketService.TicketMutationResult rejectResult = ticketService.rejectOffer(ticket.getId(), offer.getId());
+
+        assertEquals(TicketStatus.OPEN, ticket.getStatus());
+        assertEquals(OfferStatus.REJECTED, offer.getStatus());
+        assertEquals(ConversationStatus.CLOSED, conversation.getStatus());
+        assertEquals(ConversationClosedReason.REJECTED, conversation.getClosedReason());
+        assertEquals(1, rejectResult.messages().size());
+        assertThrows(IllegalStateException.class, () -> ticketService.addCustomerConversationMessage(
+                ticket.getId(),
+                conversation.getId(),
+                "Customer",
+                "Hala gorusebilir miyiz?"
+        ));
+    }
+
+    @Test
+    void providerCannotWriteToAnotherProvidersConversation() {
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        TicketOffer offer = addOffer(ticket, "offer-1", "sp-1");
+        ticketsById.put(ticket.getId(), ticket);
+
+        ticketService.inviteOffer(ticket.getId(), offer.getId());
+        TicketConversation conversation = conversationForOffer(ticket, offer);
+        ReflectionTestUtils.setField(conversation, "id", "conversation-1");
+
+        assertThrows(AccessDeniedException.class, () -> ticketService.addServiceConversationMessage(
+                ticket.getId(),
+                conversation.getId(),
+                "sp-2",
+                "Other Provider",
+                "Bu thread bana ait degil"
+        ));
+    }
+
     private ServiceProvider provider(String id, TicketCategory specialty) {
         ServiceProvider provider = new ServiceProvider(
                 "Provider " + id,
@@ -173,6 +268,26 @@ class TicketServiceTest {
         );
         ReflectionTestUtils.setField(ticket, "id", id);
         return ticket;
+    }
+
+    private TicketOffer addOffer(Ticket ticket, String id, String providerId) {
+        TicketOffer offer = ticket.addOffer(
+                providerId,
+                "Provider " + providerId,
+                OfferType.FIXED_PRICE,
+                BigDecimal.valueOf(1_000),
+                "Bugun",
+                "We can help"
+        );
+        ReflectionTestUtils.setField(offer, "id", id);
+        return offer;
+    }
+
+    private TicketConversation conversationForOffer(Ticket ticket, TicketOffer offer) {
+        return ticket.getConversations().stream()
+                .filter(conversation -> conversation.getOffer().getId().equals(offer.getId()))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static InvocationHandler unsupportedRepository() {

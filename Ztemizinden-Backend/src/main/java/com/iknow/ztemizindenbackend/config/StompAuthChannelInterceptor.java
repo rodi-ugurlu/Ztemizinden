@@ -24,6 +24,10 @@ import org.springframework.stereotype.Component;
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static final String TICKET_MESSAGE_TOPIC_PREFIX = "/topic/tickets/";
     private static final String TICKET_MESSAGE_TOPIC_SUFFIX = "/messages";
+    private static final String CONVERSATION_TOPIC_MARKER = "/conversations/";
+    private static final String CUSTOMER_TICKET_TOPIC_PREFIX = "/topic/customers/";
+    private static final String PROVIDER_TICKET_TOPIC_PREFIX = "/topic/providers/";
+    private static final String TICKET_EVENT_TOPIC_SUFFIX = "/tickets";
 
     private final JwtDecoder jwtDecoder;
     private final SecurityProperties securityProperties;
@@ -71,7 +75,35 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private void requireSubscriptionAccess(StompHeaderAccessor accessor) {
         String destination = accessor.getDestination();
-        if (destination == null || !isTicketMessageTopic(destination)) {
+        if (destination == null) {
+            return;
+        }
+        if (isCustomerTicketTopic(destination)) {
+            String customerId = destination.substring(
+                    CUSTOMER_TICKET_TOPIC_PREFIX.length(),
+                    destination.length() - TICKET_EVENT_TOPIC_SUFFIX.length()
+            );
+            ticketRealtimeAccess.requireCanSubscribeCustomer(customerId, accessor.getUser());
+            return;
+        }
+        if (isProviderTicketTopic(destination)) {
+            String providerId = destination.substring(
+                    PROVIDER_TICKET_TOPIC_PREFIX.length(),
+                    destination.length() - TICKET_EVENT_TOPIC_SUFFIX.length()
+            );
+            ticketRealtimeAccess.requireCanSubscribeProvider(providerId, accessor.getUser());
+            return;
+        }
+        if (isConversationMessageTopic(destination)) {
+            String topicPath = destination.substring(
+                    TICKET_MESSAGE_TOPIC_PREFIX.length(),
+                    destination.length() - TICKET_MESSAGE_TOPIC_SUFFIX.length()
+            );
+            String[] parts = topicPath.split(CONVERSATION_TOPIC_MARKER, 2);
+            ticketRealtimeAccess.requireCanSubscribeConversation(parts[0], parts[1], accessor.getUser());
+            return;
+        }
+        if (!isTicketMessageTopic(destination)) {
             return;
         }
         String ticketId = destination.substring(
@@ -84,7 +116,34 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private boolean isTicketMessageTopic(String destination) {
         return destination.startsWith(TICKET_MESSAGE_TOPIC_PREFIX)
                 && destination.endsWith(TICKET_MESSAGE_TOPIC_SUFFIX)
+                && !destination.contains(CONVERSATION_TOPIC_MARKER)
                 && destination.length() > TICKET_MESSAGE_TOPIC_PREFIX.length() + TICKET_MESSAGE_TOPIC_SUFFIX.length();
+    }
+
+    private boolean isConversationMessageTopic(String destination) {
+        if (!destination.startsWith(TICKET_MESSAGE_TOPIC_PREFIX)
+                || !destination.endsWith(TICKET_MESSAGE_TOPIC_SUFFIX)
+                || !destination.contains(CONVERSATION_TOPIC_MARKER)) {
+            return false;
+        }
+        String topicPath = destination.substring(
+                TICKET_MESSAGE_TOPIC_PREFIX.length(),
+                destination.length() - TICKET_MESSAGE_TOPIC_SUFFIX.length()
+        );
+        String[] parts = topicPath.split(CONVERSATION_TOPIC_MARKER, 2);
+        return parts.length == 2 && !parts[0].isBlank() && !parts[1].isBlank();
+    }
+
+    private boolean isCustomerTicketTopic(String destination) {
+        return destination.startsWith(CUSTOMER_TICKET_TOPIC_PREFIX)
+                && destination.endsWith(TICKET_EVENT_TOPIC_SUFFIX)
+                && destination.length() > CUSTOMER_TICKET_TOPIC_PREFIX.length() + TICKET_EVENT_TOPIC_SUFFIX.length();
+    }
+
+    private boolean isProviderTicketTopic(String destination) {
+        return destination.startsWith(PROVIDER_TICKET_TOPIC_PREFIX)
+                && destination.endsWith(TICKET_EVENT_TOPIC_SUFFIX)
+                && destination.length() > PROVIDER_TICKET_TOPIC_PREFIX.length() + TICKET_EVENT_TOPIC_SUFFIX.length();
     }
 
     private String bearerToken(StompHeaderAccessor accessor) {
