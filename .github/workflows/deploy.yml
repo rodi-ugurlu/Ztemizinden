@@ -1,0 +1,80 @@
+name: Ztemizinden CI/CD Deployment
+
+on:
+  push:
+    branches:
+      - prod
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Build Full-Stack JAR
+        run: |
+          cd Ztemizinden-Backend
+          chmod +x mvnw
+          ./mvnw -Pfullstack clean package
+
+      - name: Copy JAR to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "Ztemizinden-Backend/target/ztemizinden.jar"
+          target: "/tmp"
+          strip_components: 2
+
+      - name: Deploy and Restart Service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            echo "Starting deployment execution..."
+            
+            # Check if source file exists in /tmp
+            if [ ! -f /tmp/ztemizinden.jar ]; then
+              echo "Error: /tmp/ztemizinden.jar not found!"
+              exit 1
+            fi
+            
+            # Ensure target directory exists
+            mkdir -p /opt/ztemizinden
+            
+            # Move the jar to deployment directory
+            mv /tmp/ztemizinden.jar /opt/ztemizinden/ztemizinden.jar
+            
+            # Fix ownership
+            chown ztemizinden:ztemizinden /opt/ztemizinden/ztemizinden.jar
+            
+            # Restart ztemizinden systemd service
+            echo "Restarting ztemizinden service..."
+            systemctl restart ztemizinden
+            
+            # Wait for service startup verification
+            sleep 5
+            
+            # Check service status
+            systemctl status ztemizinden --no-pager
+            echo "Deployment completed successfully!"
