@@ -23,8 +23,6 @@ interface AnimatedAuthPageProps {
   initialView: AuthView;
 }
 
-const localDemoPassword = import.meta.env.DEV ? 'demo123' : '';
-
 const customerSlogans = [
   {
     tr: 'ARIZALARINIZ İÇİN HIZLI VE GÜVENİLİR ÇÖZÜM',
@@ -163,8 +161,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     initialRole === 'service' ? initialView : 'login'
   );
   const [customerLogin, setCustomerLogin] = useState({
-    email: 'customer@demo.com',
-    password: localDemoPassword,
+    email: '',
+    password: '',
   });
   const [customerRegister, setCustomerRegister] = useState({
     firstName: '',
@@ -176,8 +174,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     terms: false,
   });
   const [serviceLogin, setServiceLogin] = useState({
-    identifier: 'service@demo.com',
-    secret: localDemoPassword,
+    identifier: '',
+    secret: '',
   });
   const [serviceRegister, setServiceRegister] = useState({
     companyName: '',
