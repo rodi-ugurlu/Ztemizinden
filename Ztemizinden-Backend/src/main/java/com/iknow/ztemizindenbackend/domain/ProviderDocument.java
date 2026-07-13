@@ -32,6 +32,9 @@ public class ProviderDocument extends BaseEntity {
     @Column(nullable = false)
     private String originalFileName;
 
+    @Column(length = 64)
+    private String contentSha256;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ProviderDocumentStatus status = ProviderDocumentStatus.PENDING;
@@ -42,10 +45,15 @@ public class ProviderDocument extends BaseEntity {
     private String notes;
 
     ProviderDocument(ServiceProvider provider, String type, String url, String originalFileName) {
+        this(provider, type, url, originalFileName, null);
+    }
+
+    ProviderDocument(ServiceProvider provider, String type, String url, String originalFileName, String contentSha256) {
         this.provider = provider;
         this.type = type;
         this.url = url;
         this.originalFileName = originalFileName;
+        this.contentSha256 = contentSha256;
     }
 
     void verify(String notes) {

@@ -10,6 +10,7 @@ import com.iknow.ztemizindenbackend.domain.Enums.CustomerStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +41,7 @@ public class CustomerController {
         if (email == null) {
             throw new BadRequestException("Customer email is missing from token");
         }
-        return CustomerResponse.from(customerService.getByEmail(email));
+        return CustomerResponse.from(customerService.getCurrent(currentUser.subject(), email));
     }
 
     @PutMapping("/me")
@@ -78,25 +79,25 @@ public class CustomerController {
     }
 
     public record CreateCustomerRequest(
-            @NotBlank String name,
-            @Email @NotBlank String email,
-            @NotBlank String phone,
-            String companyName,
-            String city,
-            String district,
-            @NotBlank String password
+            @NotBlank @Size(max = 255) String name,
+            @Email @NotBlank @Size(max = 255) String email,
+            @NotBlank @Size(max = 255) String phone,
+            @NotBlank @Size(max = 255) String companyName,
+            @NotBlank @Size(max = 255) String city,
+            @NotBlank @Size(max = 255) String district,
+            @NotBlank @Size(min = 8, max = 128) String password
     ) {
     }
 
     public record UpdateCustomerProfileRequest(
-            @NotBlank String contactName,
-            @NotBlank String companyName,
-            @NotBlank String phone,
-            @NotBlank String city,
-            @NotBlank String district,
-            String address,
-            String taxNumber,
-            String logoUrl
+            @NotBlank @Size(max = 255) String contactName,
+            @NotBlank @Size(max = 255) String companyName,
+            @NotBlank @Size(max = 255) String phone,
+            @NotBlank @Size(max = 255) String city,
+            @NotBlank @Size(max = 255) String district,
+            @Size(max = 500) String address,
+            @Size(max = 100) String taxNumber,
+            @Size(max = 1_000) String logoUrl
     ) {
     }
 

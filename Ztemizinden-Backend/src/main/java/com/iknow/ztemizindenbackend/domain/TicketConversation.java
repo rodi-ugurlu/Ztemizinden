@@ -17,6 +17,7 @@ import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 @Getter
 @Entity
@@ -45,6 +46,7 @@ public class TicketConversation extends BaseEntity {
     private ConversationClosedReason closedReason;
 
     @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
     private Set<TicketMessage> messages = new LinkedHashSet<>();
 
     TicketConversation(Ticket ticket, TicketOffer offer) {
@@ -67,6 +69,16 @@ public class TicketConversation extends BaseEntity {
     void closeNotSelected() {
         status = ConversationStatus.CLOSED;
         closedReason = ConversationClosedReason.NOT_SELECTED;
+    }
+
+    void closeTicketCancelled() {
+        status = ConversationStatus.CLOSED;
+        closedReason = ConversationClosedReason.TICKET_CANCELLED;
+    }
+
+    void closeTicketClosed() {
+        status = ConversationStatus.CLOSED;
+        closedReason = ConversationClosedReason.TICKET_CLOSED;
     }
 
     TicketMessage addCustomerMessage(String senderName, String body) {

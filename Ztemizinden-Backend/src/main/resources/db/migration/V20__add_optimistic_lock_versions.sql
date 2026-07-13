@@ -1,0 +1,10 @@
+alter table assets add column if not exists version bigint not null default 0;
+alter table auth_users add column if not exists version bigint not null default 0;
+alter table customers add column if not exists version bigint not null default 0;
+alter table password_reset_tokens add column if not exists version bigint not null default 0;
+alter table provider_documents add column if not exists version bigint not null default 0;
+alter table service_providers add column if not exists version bigint not null default 0;
+alter table ticket_conversations add column if not exists version bigint not null default 0;
+alter table ticket_messages add column if not exists version bigint not null default 0;
+alter table ticket_offers add column if not exists version bigint not null default 0;
+alter table tickets add column if not exists version bigint not null default 0;

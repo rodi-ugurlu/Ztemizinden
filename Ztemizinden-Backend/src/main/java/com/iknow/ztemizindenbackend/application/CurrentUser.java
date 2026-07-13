@@ -42,6 +42,16 @@ public class CurrentUser {
         if (claimCustomerId != null) {
             return claimCustomerId;
         }
+        String identitySubject = subject();
+        if (identitySubject != null) {
+            return customerRepository.findByIdentitySubject(identitySubject)
+                    .map(customer -> customer.getId())
+                    .orElseGet(() -> customerIdByEmailOrFallback(requestedCustomerId));
+        }
+        return customerIdByEmailOrFallback(requestedCustomerId);
+    }
+
+    private String customerIdByEmailOrFallback(String requestedCustomerId) {
         String email = email();
         if (email != null) {
             return customerRepository.findByEmailIgnoreCase(email)
@@ -59,6 +69,16 @@ public class CurrentUser {
         if (claimProviderId != null) {
             return claimProviderId;
         }
+        String identitySubject = subject();
+        if (identitySubject != null) {
+            return serviceProviderRepository.findByIdentitySubject(identitySubject)
+                    .map(provider -> provider.getId())
+                    .orElseGet(() -> providerIdByEmailOrFallback(requestedProviderId));
+        }
+        return providerIdByEmailOrFallback(requestedProviderId);
+    }
+
+    private String providerIdByEmailOrFallback(String requestedProviderId) {
         String email = email();
         if (email != null) {
             return serviceProviderRepository.findByEmailIgnoreCase(email)
@@ -86,6 +106,11 @@ public class CurrentUser {
 
     public String email() {
         return claim("email");
+    }
+
+    public String subject() {
+        Jwt jwt = jwt();
+        return jwt == null || jwt.getSubject() == null || jwt.getSubject().isBlank() ? null : jwt.getSubject();
     }
 
     private String claim(String name) {

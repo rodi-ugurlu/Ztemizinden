@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.iknow.ztemizindenbackend.domain.Asset;
 import com.iknow.ztemizindenbackend.domain.AssetRepository;
 import com.iknow.ztemizindenbackend.domain.Enums.AssetType;
+import com.iknow.ztemizindenbackend.domain.Enums.AssetStatus;
+import com.iknow.ztemizindenbackend.domain.Enums.BillingStatus;
+import com.iknow.ztemizindenbackend.domain.Enums.BillingDisputeDecision;
 import com.iknow.ztemizindenbackend.domain.Enums.ConversationClosedReason;
 import com.iknow.ztemizindenbackend.domain.Enums.ConversationStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferStatus;
@@ -38,15 +41,26 @@ class TicketServiceTest {
     private final Map<String, Ticket> ticketsById = new HashMap<>();
     private final Map<String, ServiceProvider> providersById = new HashMap<>();
     private List<Ticket> opportunityTickets = List.of();
+    private boolean anotherTicketRequiresMaintenance;
 
     private final TicketRepository ticketRepository = repositoryProxy(TicketRepository.class, (proxy, method, args) -> {
         return switch (method.getName()) {
             case "findById" -> Optional.ofNullable(ticketsById.get((String) args[0]));
+            case "findByIdForUpdate" -> Optional.ofNullable(ticketsById.get((String) args[0]));
             case "findByStatusInOrderByCreatedAtAsc" -> opportunityTickets;
+            case "existsByAssetIdAndIdNotAndStatusIn" -> anotherTicketRequiresMaintenance;
             default -> throw new UnsupportedOperationException(method.getName());
         };
     });
-    private final AssetRepository assetRepository = repositoryProxy(AssetRepository.class, unsupportedRepository());
+    private final AssetRepository assetRepository = repositoryProxy(AssetRepository.class, (proxy, method, args) -> {
+        if ("findByIdForUpdate".equals(method.getName())) {
+            return ticketsById.values().stream()
+                    .map(Ticket::getAsset)
+                    .filter(asset -> asset.getId().equals(args[0]))
+                    .findFirst();
+        }
+        throw new UnsupportedOperationException(method.getName());
+    });
     private final ServiceProviderRepository serviceProviderRepository = repositoryProxy(
             ServiceProviderRepository.class,
             (proxy, method, args) -> {
@@ -59,7 +73,8 @@ class TicketServiceTest {
     private final TicketService ticketService = new TicketService(
             ticketRepository,
             assetRepository,
-            serviceProviderRepository
+            serviceProviderRepository,
+            new ProviderTicketAccessPolicy()
     );
 
     @Test
@@ -219,6 +234,170 @@ class TicketServiceTest {
                 "Other Provider",
                 "Bu thread bana ait degil"
         ));
+    }
+
+    @Test
+    void nonSelectedProviderLosesTicketAccessAfterAnotherOfferIsAccepted() {
+        ServiceProvider firstProvider = provider("sp-1", TicketCategory.HYDRAULIC);
+        ServiceProvider secondProvider = provider("sp-2", TicketCategory.HYDRAULIC);
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        TicketOffer selectedOffer = addOffer(ticket, "offer-1", "sp-1");
+        addOffer(ticket, "offer-2", "sp-2");
+        ticketsById.put(ticket.getId(), ticket);
+        providersById.put("sp-1", firstProvider);
+        providersById.put("sp-2", secondProvider);
+
+        ticketService.acceptOffer(ticket.getId(), selectedOffer.getId());
+
+        assertSame(ticket, ticketService.getForProvider(ticket.getId(), "sp-1"));
+        assertThrows(
+                AccessDeniedException.class,
+                () -> ticketService.getForProvider(ticket.getId(), "sp-2")
+        );
+    }
+
+    @Test
+    void directAssignmentRejectsOtherOffersAndClosesTheirConversations() {
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        TicketOffer selectedOffer = addOffer(ticket, "offer-1", "sp-1");
+        TicketOffer otherOffer = addOffer(ticket, "offer-2", "sp-2");
+        ticket.inviteOffer(selectedOffer.getId());
+        ticket.inviteOffer(otherOffer.getId());
+
+        ticket.assignProvider("sp-1", "Provider sp-1");
+
+        assertEquals(OfferStatus.ACCEPTED, selectedOffer.getStatus());
+        assertEquals(OfferStatus.REJECTED, otherOffer.getStatus());
+        assertEquals(ConversationStatus.ACCEPTED, conversationForOffer(ticket, selectedOffer).getStatus());
+        assertEquals(ConversationStatus.CLOSED, conversationForOffer(ticket, otherOffer).getStatus());
+        assertEquals(
+                ConversationClosedReason.NOT_SELECTED,
+                conversationForOffer(ticket, otherOffer).getClosedReason()
+        );
+    }
+
+    @Test
+    void resolvedTicketWaitingForBillingApprovalCannotBeCancelled() {
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        ticket.assignProvider("sp-1", "Provider sp-1");
+        ticket.submitFinalBilling(BigDecimal.valueOf(1_250), "Work completed");
+
+        assertEquals(TicketStatus.RESOLVED, ticket.getStatus());
+        assertEquals(BillingStatus.AWAITING_CUSTOMER_APPROVAL, ticket.getBillingStatus());
+        assertThrows(IllegalStateException.class, ticket::cancel);
+        assertEquals(TicketStatus.RESOLVED, ticket.getStatus());
+        assertEquals(BillingStatus.AWAITING_CUSTOMER_APPROVAL, ticket.getBillingStatus());
+    }
+
+    @Test
+    void cancellingOneTicketKeepsAssetUnderMaintenanceWhenAnotherTicketIsActive() {
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        ticket.assignProvider("sp-1", "Provider sp-1");
+        ticketsById.put(ticket.getId(), ticket);
+        anotherTicketRequiresMaintenance = true;
+
+        ticketService.cancel(ticket.getId());
+
+        assertEquals(TicketStatus.CANCELLED, ticket.getStatus());
+        assertEquals(AssetStatus.UNDER_MAINTENANCE, ticket.getAsset().getStatus());
+    }
+
+    @Test
+    void cancellingLastActiveTicketRestoresAssetToActive() {
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        ticket.assignProvider("sp-1", "Provider sp-1");
+        ticketsById.put(ticket.getId(), ticket);
+        anotherTicketRequiresMaintenance = false;
+
+        ticketService.cancel(ticket.getId());
+
+        assertEquals(TicketStatus.CANCELLED, ticket.getStatus());
+        assertEquals(AssetStatus.ACTIVE, ticket.getAsset().getStatus());
+    }
+
+    @Test
+    void approvingBillingKeepsAssetUnderMaintenanceWhenAnotherTicketIsActive() {
+        Ticket ticket = ticket("ticket-hyd", TicketCategory.HYDRAULIC);
+        ticket.assignProvider("sp-1", "Provider sp-1");
+        ticket.submitFinalBilling(BigDecimal.valueOf(1_250), "Work completed");
+        ticketsById.put(ticket.getId(), ticket);
+        anotherTicketRequiresMaintenance = true;
+
+        ticketService.approveFinalBilling(ticket.getId());
+
+        assertEquals(TicketStatus.CLOSED, ticket.getStatus());
+        assertEquals(BillingStatus.APPROVED, ticket.getBillingStatus());
+        assertEquals(AssetStatus.UNDER_MAINTENANCE, ticket.getAsset().getStatus());
+    }
+
+    @Test
+    void cancellationClosesConversationsAndRejectsFurtherMessages() {
+        Ticket ticket = ticket("ticket-cancel", TicketCategory.HYDRAULIC);
+        TicketOffer offer = addOffer(ticket, "offer-1", "sp-1");
+        ticket.inviteOffer(offer.getId());
+        TicketConversation conversation = conversationForOffer(ticket, offer);
+        ReflectionTestUtils.setField(conversation, "id", "conversation-1");
+        ticketsById.put(ticket.getId(), ticket);
+
+        TicketService.TicketMutationResult result = ticketService.cancel(ticket.getId());
+
+        assertEquals(TicketStatus.CANCELLED, ticket.getStatus());
+        assertEquals(OfferStatus.REJECTED, offer.getStatus());
+        assertEquals(ConversationStatus.CLOSED, conversation.getStatus());
+        assertEquals(ConversationClosedReason.TICKET_CANCELLED, conversation.getClosedReason());
+        assertEquals(1, result.messages().size());
+        assertThrows(IllegalStateException.class, () -> ticket.addCustomerMessage("Bu yazilmamali"));
+        assertThrows(IllegalStateException.class, () -> ticket.addServiceMessage("Service", "Bu da yazilmamali"));
+    }
+
+    @Test
+    void adminCanReturnDisputedBillingToProviderForRevision() {
+        Ticket ticket = ticket("ticket-revision", TicketCategory.HYDRAULIC);
+        ticket.assignProvider("sp-1", "Provider sp-1");
+        ticket.submitFinalBilling(BigDecimal.valueOf(1_250), "Work completed");
+        ticket.disputeFinalBilling("Amount is incorrect");
+        ticketsById.put(ticket.getId(), ticket);
+
+        ticketService.resolveBillingDispute(
+                ticket.getId(),
+                new TicketService.ResolveBillingDisputeCommand(
+                        BillingDisputeDecision.REQUEST_REVISION,
+                        "Please submit corrected labor cost"
+                )
+        );
+
+        assertEquals(TicketStatus.IN_PROGRESS, ticket.getStatus());
+        assertEquals(null, ticket.getBillingStatus());
+        assertEquals(null, ticket.getFinalActualCost());
+        assertEquals(null, ticket.getFinalBillingNotes());
+        assertEquals(AssetStatus.UNDER_MAINTENANCE, ticket.getAsset().getStatus());
+    }
+
+    @Test
+    void adminCanApproveDisputedBillingAndCloseConversation() {
+        Ticket ticket = ticket("ticket-dispute", TicketCategory.HYDRAULIC);
+        TicketOffer offer = addOffer(ticket, "offer-1", "sp-1");
+        ticket.acceptOffer(offer.getId());
+        TicketConversation conversation = conversationForOffer(ticket, offer);
+        ReflectionTestUtils.setField(conversation, "id", "conversation-1");
+        ticket.submitFinalBilling(BigDecimal.valueOf(1_250), "Work completed");
+        ticket.disputeFinalBilling("Amount is incorrect");
+        ticketsById.put(ticket.getId(), ticket);
+
+        TicketService.TicketMutationResult result = ticketService.resolveBillingDispute(
+                ticket.getId(),
+                new TicketService.ResolveBillingDisputeCommand(
+                        BillingDisputeDecision.APPROVE,
+                        "Invoice evidence was accepted"
+                )
+        );
+
+        assertEquals(TicketStatus.CLOSED, ticket.getStatus());
+        assertEquals(BillingStatus.APPROVED, ticket.getBillingStatus());
+        assertEquals(ConversationStatus.CLOSED, conversation.getStatus());
+        assertEquals(ConversationClosedReason.TICKET_CLOSED, conversation.getClosedReason());
+        assertEquals(1, result.messages().size());
+        assertThrows(IllegalStateException.class, () -> ticket.addCustomerMessage("Bu yazilmamali"));
     }
 
     private ServiceProvider provider(String id, TicketCategory specialty) {

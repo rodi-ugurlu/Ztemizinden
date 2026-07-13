@@ -72,9 +72,22 @@ Beklenen cevap `101 Switching Protocols`. `200`, `301`, `404`, `502` veya timeou
 Prod env icinde mutlaka degistirilecek alanlar:
 
 - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`
-- `APP_JWT_SECRET`
+- `KEYCLOAK_ISSUER_URI`, `KEYCLOAK_JWK_SET_URI`, `KEYCLOAK_ADMIN_BASE_URL`
+- `KEYCLOAK_ADMIN_CLIENT_SECRET`, `KEYCLOAK_PASSWORD_RESET_REDIRECT_URI`
 - `APP_CORS_ALLOWED_ORIGIN_PATTERNS`
 - `deploy/nginx-ztemizinden.conf` icindeki `server_name`
+
+Frontend build edilmeden once `VITE_KEYCLOAK_URL`, `VITE_KEYCLOAK_REALM` ve
+`VITE_KEYCLOAK_CLIENT_ID` production degerlerine ayarlanmalidir. Keycloak realm
+SMTP ayari olmadan parola kurulum/sifirlama e-postalari gonderilemez.
+
+Mevcut production realm'i uzlastirirken `KEYCLOAK_WEB_URL=https://DOMAININIZ`
+verilmelidir; bu deger Keycloak redirect URI, web origin ve logout redirect
+ayarlarindaki localhost degerlerini production adresiyle degistirir.
+
+Mevcut yerel-auth kullanicilarinin ilk gecisinde yalnizca bir instance icin
+`KEYCLOAK_MIGRATE_LEGACY_USERS=true` kullanin. Kuyruktaki tum kayitlarin
+`completed_at` degeri dolduktan sonra flag'i tekrar `false` yapin.
 
 ## Database
 

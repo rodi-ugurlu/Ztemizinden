@@ -45,6 +45,49 @@ class TicketControllerResponseTest {
         assertEquals(0, response.conversations().size());
     }
 
+    @Test
+    void nonAssignedServiceResponseDoesNotExposeTicketLevelMessages() {
+        Ticket ticket = ticket("ticket-1");
+        ticket.addCustomerMessage("Customer", "Private execution detail");
+
+        TicketController.TicketResponse response = TicketController.TicketResponse.fromForService(ticket, "sp-1");
+
+        assertEquals(0, response.messages().size());
+        assertEquals(0, response.unreadMessageCount());
+    }
+
+    @Test
+    void assignedServiceResponseIncludesTicketLevelMessages() {
+        Ticket ticket = ticket("ticket-1");
+        ticket.assignProvider("sp-1", "Provider sp-1");
+        ticket.addCustomerMessage("Customer", "Assigned provider detail");
+
+        TicketController.TicketResponse response = TicketController.TicketResponse.fromForService(ticket, "sp-1");
+
+        assertEquals(2, response.messages().size());
+        assertEquals(1, response.unreadMessageCount());
+    }
+
+    @Test
+    void nonSelectedServiceEventPayloadHidesExecutionDetails() {
+        Ticket ticket = ticket("ticket-1");
+        TicketOffer selected = addOffer(ticket, "offer-1", "sp-1");
+        addOffer(ticket, "offer-2", "sp-2");
+        ticket.acceptOffer(selected.getId());
+        ticket.submitFinalBilling(BigDecimal.valueOf(900), "Private billing note");
+
+        TicketController.TicketResponse response = TicketController.TicketResponse.fromForService(ticket, "sp-2");
+
+        assertEquals(null, response.assignedProviderId());
+        assertEquals(null, response.assignedProviderName());
+        assertEquals(null, response.serviceEta());
+        assertEquals(null, response.finalEstimatedCost());
+        assertEquals(null, response.finalActualCost());
+        assertEquals(null, response.billingStatus());
+        assertEquals(null, response.finalBillingNotes());
+        assertEquals(0, response.messages().size());
+    }
+
     private Ticket ticket(String id) {
         Asset asset = new Asset(
                 "cust-1",

@@ -13,3 +13,7 @@ spring:
 app:
   security:
     enabled: false
+  keycloak:
+    issuer-uri: http://localhost:8081/realms/ztemizinden
+    jwk-set-uri: http://localhost:8081/realms/ztemizinden/protocol/openid-connect/certs
+    admin-client-secret: ztemizinden-test-admin-secret

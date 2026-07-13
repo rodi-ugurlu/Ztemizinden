@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { formatLocation } from '@/lib/locations';
 import {
   Select,
@@ -32,6 +33,7 @@ import {
 import {
   useAdminStore,
   type GlobalTicket,
+  type BillingDisputeDecision,
   type ProviderMatch,
   type SlaStatus,
 } from '@/store/useAdminStore';
@@ -63,6 +65,7 @@ export default function DispatchPage() {
     fetchProviders,
     fetchQueue,
     assignTicket,
+    resolveBillingDispute,
     getProviderMatches,
     getSlaStatus,
     getMetrics,
@@ -76,6 +79,11 @@ export default function DispatchPage() {
   const [selectedProvider, setSelectedProvider] = useState<string>('');
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignError, setAssignError] = useState('');
+  const [isBillingDialogOpen, setIsBillingDialogOpen] = useState(false);
+  const [billingDecision, setBillingDecision] = useState<BillingDisputeDecision>('REQUEST_REVISION');
+  const [billingNote, setBillingNote] = useState('');
+  const [billingError, setBillingError] = useState('');
+  const [isResolvingBilling, setIsResolvingBilling] = useState(false);
   const metrics = getMetrics();
   const selectedMatches = selectedTicket ? getProviderMatches(selectedTicket.id) : [];
 
@@ -130,6 +138,29 @@ export default function DispatchPage() {
     setFilterStatus('all');
     setFilterCategory('all');
     setFilterPriority('all');
+  };
+
+  const openBillingDialog = (ticket: GlobalTicket) => {
+    setSelectedTicket(ticket);
+    setBillingDecision('REQUEST_REVISION');
+    setBillingNote('');
+    setBillingError('');
+    setIsBillingDialogOpen(true);
+  };
+
+  const handleResolveBilling = async () => {
+    if (!selectedTicket || !billingNote.trim()) return;
+    setIsResolvingBilling(true);
+    setBillingError('');
+    try {
+      await resolveBillingDispute(selectedTicket.id, billingDecision, billingNote.trim());
+      setIsBillingDialogOpen(false);
+      setSelectedTicket(null);
+    } catch (resolutionError) {
+      setBillingError(resolutionError instanceof Error ? resolutionError.message : 'İtiraz sonuçlandırılamadı');
+    } finally {
+      setIsResolvingBilling(false);
+    }
   };
 
   const hasActiveFilters =
@@ -334,7 +365,17 @@ export default function DispatchPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {ticket.status === 'Open' && (
+                      {ticket.billingStatus === 'DISPUTED' ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                          onClick={() => openBillingDialog(ticket)}
+                        >
+                          <AlertTriangle className="w-3 h-3 mr-1" />
+                          İtirazı Çöz
+                        </Button>
+                      ) : ticket.status === 'Open' ? (
                         <Button
                           size="sm"
                           className="bg-red-600 hover:bg-red-700"
@@ -343,7 +384,7 @@ export default function DispatchPage() {
                           <Truck className="w-3 h-3 mr-1" />
                           Ata
                         </Button>
-                      )}
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 );
@@ -485,6 +526,62 @@ export default function DispatchPage() {
             >
               <CheckCircle2 className="w-4 h-4 mr-2" />
               {isAssigning ? 'Atanıyor...' : 'Ata'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isBillingDialogOpen} onOpenChange={setIsBillingDialogOpen}>
+        <DialogContent className="bg-white border-slate-200 text-slate-900 max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              Fatura İtirazını Sonuçlandır
+            </DialogTitle>
+            <DialogDescription>{selectedTicket?.title}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Operasyon kararı</Label>
+              <Select
+                value={billingDecision}
+                onValueChange={(value) => setBillingDecision(value as BillingDisputeDecision)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="REQUEST_REVISION">Servisten revizyon iste</SelectItem>
+                  <SelectItem value="APPROVE">Mevcut faturayı onayla ve kapat</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="billing-resolution-note">Karar notu</Label>
+              <Textarea
+                id="billing-resolution-note"
+                value={billingNote}
+                onChange={(event) => setBillingNote(event.target.value)}
+                maxLength={2000}
+                placeholder="Kararın gerekçesini ve servisten beklenen düzeltmeyi yazın..."
+              />
+            </div>
+            {billingError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                {billingError}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsBillingDialogOpen(false)}>
+              Vazgeç
+            </Button>
+            <Button
+              onClick={() => void handleResolveBilling()}
+              disabled={!billingNote.trim() || isResolvingBilling}
+              className={billingDecision === 'APPROVE' ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-600 hover:bg-amber-700'}
+            >
+              {isResolvingBilling ? 'Kaydediliyor...' : 'Kararı Uygula'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -78,7 +78,7 @@ export default function RequestsPage() {
     if (user?.id) {
       void fetchTickets(user.id);
     }
-  }, [fetchTickets, user?.id]);
+  }, [fetchTickets, user]);
 
   const handleTicketEvent = useCallback(
     (event: { ticket: Ticket }) => {
@@ -90,7 +90,7 @@ export default function RequestsPage() {
   const refreshTicketsSilently = useCallback(async () => {
     if (!user?.id) return;
     await fetchTickets(user.id, { silent: true });
-  }, [fetchTickets, user?.id]);
+  }, [fetchTickets, user]);
 
   useTicketEventRefresh({
     scope: 'customer',

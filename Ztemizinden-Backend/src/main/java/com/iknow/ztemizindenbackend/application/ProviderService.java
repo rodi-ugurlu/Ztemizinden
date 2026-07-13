@@ -1,7 +1,6 @@
 package com.iknow.ztemizindenbackend.application;
 
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderStatus;
-import com.iknow.ztemizindenbackend.domain.Enums.ProviderDocumentStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketCategory;
 import com.iknow.ztemizindenbackend.domain.NotFoundException;
 import com.iknow.ztemizindenbackend.domain.ProviderDocument;
@@ -17,22 +16,38 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ProviderService {
     private final ServiceProviderRepository serviceProviderRepository;
-    private final AuthService authService;
+    private final KeycloakIdentityService keycloakIdentityService;
 
     @Transactional(readOnly = true)
     public List<ServiceProvider> list() {
-        return serviceProviderRepository.findAll();
+        List<ServiceProvider> providers = serviceProviderRepository.findAll();
+        providers.forEach(this::initializeDocuments);
+        return providers;
     }
 
     @Transactional(readOnly = true)
     public List<ServiceProvider> verifiedProviders() {
-        return serviceProviderRepository.findByStatusOrderByCreatedAtDesc(ProviderStatus.VERIFIED);
+        List<ServiceProvider> providers = serviceProviderRepository.findByStatusOrderByCreatedAtDesc(ProviderStatus.VERIFIED);
+        providers.forEach(this::initializeDocuments);
+        return providers;
     }
 
     @Transactional(readOnly = true)
     public ServiceProvider getByEmail(String email) {
-        return serviceProviderRepository.findByEmailIgnoreCase(email)
+        ServiceProvider provider = serviceProviderRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new NotFoundException("Provider not found"));
+        initializeDocuments(provider);
+        return provider;
+    }
+
+    @Transactional(readOnly = true)
+    public ServiceProvider getCurrent(String identitySubject, String email) {
+        ServiceProvider provider = identitySubject == null || identitySubject.isBlank()
+                ? getByEmail(email)
+                : serviceProviderRepository.findByIdentitySubject(identitySubject)
+                        .orElseGet(() -> getByEmail(email));
+        initializeDocuments(provider);
+        return provider;
     }
 
     @Transactional
@@ -72,49 +87,89 @@ public class ProviderService {
                 command.coverageDistricts()
         );
 
-        ServiceProvider savedProvider = serviceProviderRepository.save(provider);
-        authService.createServiceUser(savedProvider, command.password());
+        ServiceProvider savedProvider = serviceProviderRepository.saveAndFlush(provider);
+        String identitySubject = keycloakIdentityService.provisionServiceProvider(
+                savedProvider.getId(),
+                savedProvider.getEmail(),
+                savedProvider.getName(),
+                command.password()
+        );
+        savedProvider.linkIdentity(identitySubject);
         return savedProvider;
     }
 
     @Transactional
     public ServiceProvider verify(String providerId) {
-        ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException("Provider not found"));
+        ServiceProvider provider = getForUpdate(providerId);
         requireVerifiedDocuments(provider);
+        boolean previouslyEnabled = provider.getStatus() == ProviderStatus.VERIFIED;
+        keycloakIdentityService.enableUser(provider.getIdentitySubject(), provider.getEmail());
+        keycloakIdentityService.restoreEnabledAfterRollback(
+                provider.getIdentitySubject(),
+                provider.getEmail(),
+                previouslyEnabled
+        );
         provider.verify();
-        authService.enableUser(provider.getEmail());
         return provider;
     }
 
     @Transactional
     public ServiceProvider reject(String providerId) {
-        ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException("Provider not found"));
+        ServiceProvider provider = getForUpdate(providerId);
+        boolean previouslyEnabled = provider.getStatus() == ProviderStatus.VERIFIED;
+        keycloakIdentityService.disableUser(provider.getIdentitySubject(), provider.getEmail());
+        keycloakIdentityService.restoreEnabledAfterRollback(
+                provider.getIdentitySubject(),
+                provider.getEmail(),
+                previouslyEnabled
+        );
         provider.suspend();
-        authService.disableUser(provider.getEmail());
+        initializeDocuments(provider);
         return provider;
     }
 
     @Transactional
     public ServiceProvider setTrusted(String providerId, boolean trusted) {
-        ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException("Provider not found"));
+        ServiceProvider provider = getForUpdate(providerId);
         provider.setTrusted(trusted);
+        initializeDocuments(provider);
+        return provider;
+    }
+
+    @Transactional
+    public ServiceProvider updateLandingRequest(String identitySubject, String email, boolean visible) {
+        ServiceProvider provider = getCurrent(identitySubject, email);
+        if (visible) {
+            provider.requestLandingVisibility();
+        } else {
+            provider.hideFromLanding();
+        }
+        return provider;
+    }
+
+    @Transactional
+    public ServiceProvider approveLandingVisibility(String providerId) {
+        ServiceProvider provider = getForUpdate(providerId);
+        provider.approveLandingVisibility();
+        return provider;
+    }
+
+    @Transactional
+    public ServiceProvider rejectLandingVisibility(String providerId) {
+        ServiceProvider provider = getForUpdate(providerId);
+        provider.rejectLandingVisibility();
         return provider;
     }
 
     @Transactional
     public ProviderDocument addDocument(String providerId, AddDocumentCommand command) {
-        ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException("Provider not found"));
-        return provider.addDocument(command.type(), command.url(), command.originalFileName());
+        ServiceProvider provider = getForUpdate(providerId);
+        return provider.addDocument(command.type(), command.url(), command.originalFileName(), command.contentSha256());
     }
 
     @Transactional
     public ProviderDocument verifyDocument(String providerId, String documentId, String notes) {
-        ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException("Provider not found"));
+        ServiceProvider provider = getForUpdate(providerId);
         provider.verifyDocument(documentId, notes);
         return provider.getDocuments().stream()
                 .filter(document -> document.getId().equals(documentId))
@@ -124,8 +179,7 @@ public class ProviderService {
 
     @Transactional
     public ProviderDocument rejectDocument(String providerId, String documentId, String notes) {
-        ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException("Provider not found"));
+        ServiceProvider provider = getForUpdate(providerId);
         provider.rejectDocument(documentId, notes);
         return provider.getDocuments().stream()
                 .filter(document -> document.getId().equals(documentId))
@@ -162,17 +216,24 @@ public class ProviderService {
     ) {
     }
 
-    public record AddDocumentCommand(String type, String url, String originalFileName) {
+    public record AddDocumentCommand(String type, String url, String originalFileName, String contentSha256) {
+        public AddDocumentCommand(String type, String url, String originalFileName) {
+            this(type, url, originalFileName, null);
+        }
+    }
+
+    private void initializeDocuments(ServiceProvider provider) {
+        provider.getDocuments().size();
     }
 
     private void requireVerifiedDocuments(ServiceProvider provider) {
-        if (provider.getDocuments().isEmpty()) {
-            throw new IllegalStateException("Provider must upload at least one document before approval");
-        }
-        boolean hasUnverifiedDocument = provider.getDocuments().stream()
-                .anyMatch(document -> document.getStatus() != ProviderDocumentStatus.VERIFIED);
-        if (hasUnverifiedDocument) {
-            throw new IllegalStateException("All provider documents must be verified before approval");
-        }
+        provider.requireApprovalReadyDocuments();
+    }
+
+    private ServiceProvider getForUpdate(String providerId) {
+        ServiceProvider provider = serviceProviderRepository.findByIdForUpdate(providerId)
+                .orElseThrow(() -> new NotFoundException("Provider not found"));
+        initializeDocuments(provider);
+        return provider;
     }
 }

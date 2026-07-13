@@ -23,9 +23,9 @@ The Ztemizinden backend is built using modern enterprise Java technologies:
 * **Database:** PostgreSQL (production & local)
 * **In-Memory/Testing Database:** H2 Database (configured for automated JUnit testing)
 * **Database Migrations:** Flyway (schema configuration management)
-* **Security & Token Handling:** Spring OAuth2 Resource Server & Nimbus JWT (RSA/HMAC token signing)
+* **Security & Token Handling:** Keycloak Authorization Code + PKCE and Spring OAuth2 Resource Server (RS256/JWK)
 * **Build System:** Maven (using `mvnw` Maven Wrapper)
-* **Containerization:** Docker Compose for local infrastructure seeding (PostgreSQL and Keycloak-optional)
+* **Containerization:** Docker Compose for PostgreSQL and Keycloak
 
 ---
 
@@ -36,18 +36,18 @@ The Ztemizinden backend is built using modern enterprise Java technologies:
 * Docker Desktop or Docker Engine running.
 
 ### Infrastructure Provisioning
-To run the local database, execute the following command from the backend root:
+To run the local database and identity provider, execute the following command from the backend root:
 ```bash
-docker compose up -d postgres
+docker compose up -d
 ```
-This spins up PostgreSQL on port `55432`.
+This spins up PostgreSQL on port `55432` and Keycloak on port `8081`.
 
 ### Running the Application
-Run the boot application with internal JWT security enabled (default local development profile):
+Reconcile an existing local realm, then run the application:
 ```bash
-APP_SECURITY_ENABLED=true \
-APP_JWT_SECRET=ZtemizindenLocalJwtSecretMustBeAtLeast32Chars! \
-APP_JWT_ISSUER=ztemizinden \
+cd ..
+KEYCLOAK_IMPORT_DEMO_USERS=true npm run keycloak:reconcile
+cd Ztemizinden-Backend
 ./mvnw spring-boot:run
 ```
 
@@ -67,25 +67,27 @@ All system configurations reside in `src/main/resources/application.yml`. Key en
 | `DB_URL` | PostgreSQL Connection JDBC URL | `jdbc:postgresql://localhost:55432/ztemizinden` |
 | `DB_USERNAME` | DB username | `ztemizinden` |
 | `DB_PASSWORD` | DB password | `ztemizinden` |
-| `APP_SECURITY_ENABLED` | Enable/disable JWT route security | `true` |
-| `APP_JWT_SECRET` | Secret key for local HS256 JWT validation | `ZtemizindenLocalJwtSecretMustBeAtLeast32Chars!` |
-| `APP_JWT_ISSUER` | Expected JWT issuer claim | `ztemizinden` |
+| `APP_SECURITY_ENABLED` | Enable/disable resource-server route security | `true` |
+| `KEYCLOAK_ISSUER_URI` | Exact accepted token issuer | `http://localhost:8081/realms/ztemizinden` |
+| `KEYCLOAK_JWK_SET_URI` | Keycloak signing-key endpoint | Local realm certs endpoint |
+| `KEYCLOAK_AUDIENCE` | Required API token audience | `ztemizinden-api` |
+| `KEYCLOAK_ADMIN_CLIENT_SECRET` | Backend provisioning service-account secret | Local-only development secret |
+| `KEYCLOAK_MIGRATE_LEGACY_USERS` | Run the idempotent one-time identity queue | `false` |
 | `APP_UPLOAD_DIR` | Root folder for media/document filesystem storage | `uploads` |
-| `APP_DEMO_ENSURE_ACCOUNTS` | Seed demo accounts on application startup | `true` |
-| `APP_DEMO_RESET_AND_SEED` | Reset DB and populate rich presentation demo data | `true` |
-| `APP_KEYCLOAK_PROVISIONING_ENABLED` | Enable dynamic Keycloak synchronization | `false` |
+| `APP_DEMO_ENSURE_ACCOUNTS` | Seed demo accounts on application startup outside production | `false` |
+| `APP_DEMO_RESET_AND_SEED` | Reset DB and populate rich presentation demo data outside production | `false` |
 
 ---
 
 ## 5. Local Demo Accounts
 
-When `APP_DEMO_ENSURE_ACCOUNTS` or `APP_DEMO_RESET_AND_SEED` is active, the database is auto-populated with the following user credentials for development testing:
+The local realm can import these development-only identities:
 
 | Email / Username | Password | Role | Entity Mapped | Details |
 | --- | --- | --- | --- | --- |
-| `customer@demo.com` | `demo123` | `CUSTOMER` | Customer (`cust-001`) | Ayşe Demir (Ztemizinden Demo Fabrika) |
-| `service@demo.com` | `demo123` | `SERVICE` | Service Provider (`sp-001`) | Kadıköy-based qualified maintenance team |
-| `admin@demo.com` | `demo123` | `ADMIN` | None | Operations Center administrator account |
+| `customer@demo.com` | `Demo123!` | `CUSTOMER` | Resolved by subject/domain claim, then e-mail fallback | Customer portal |
+| `service@demo.com` | `Demo123!` | `SERVICE` | Resolved by subject/domain claim, then e-mail fallback | Service portal |
+| `admin@demo.com` | `Demo123!` | `ADMIN` | None | Operations portal |
 
 > [!TIP]
-> Flyway migrations create default internal credentials using Spring Security's `{noop}` delegating prefix (plaintext storage `demo123`), making local sign-in easy without requiring complex OAuth2 external setup.
+> Demo passwords live only in the local Keycloak import. Production must not import demo users or reuse the local service-account secret.

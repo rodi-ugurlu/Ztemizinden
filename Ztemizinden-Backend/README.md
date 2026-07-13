@@ -1,135 +1,122 @@
 # Ztemizinden Backend
 
-Spring Boot backend for the MVP1 maintenance workflow.
+Spring Boot backend for the Maintly maintenance workflow.
 
 ## Stack
 
-- Java 21
-- Spring Boot 4
-- PostgreSQL
-- Flyway
-- Internal JWT auth with Spring OAuth2 Resource Server
+- Java 21 / Spring Boot 4
+- PostgreSQL / Flyway
+- Keycloak 26.2.4
+- Spring OAuth2 Resource Server with issuer, JWK and audience validation
 
-## Local Infrastructure
+Keycloak is the only authentication, password and token authority. The backend does not expose a login/token endpoint and does not store user passwords.
+
+## Local Run
+
+From this directory:
 
 ```bash
-docker compose up -d postgres
+docker compose up -d
+cd ..
+KEYCLOAK_IMPORT_DEMO_USERS=true npm run keycloak:reconcile
+cd Ztemizinden-Backend
+./mvnw spring-boot:run
 ```
 
 Services:
 
 - PostgreSQL: `localhost:55432`
+- Keycloak: `http://localhost:8081`
+- Backend: `http://localhost:8080`
 
-Keycloak service is still present in `docker-compose.yml` for reference, but the current MVP auth path does not depend on it.
+Local demo identities are imported into Keycloak only:
 
-Local internal JWT users:
+- `customer@demo.com / Demo123!`
+- `service@demo.com / Demo123!`
+- `admin@demo.com / Demo123!`
 
-- `customer@demo.com / demo123`
-- `service@demo.com / demo123`
-- `admin@demo.com / demo123`
+The realm import is used for an empty Keycloak database. For an existing realm, `npm run keycloak:reconcile` updates realm settings, roles, clients, PKCE/audience mappers and service-account privileges without deleting the realm.
 
-## Run Backend
-
-```bash
-./mvnw spring-boot:run
-```
-
-Default local config enables API security:
+For production reconciliation, provide the external app URL and Keycloak admin credentials only for that one-time command:
 
 ```bash
-APP_SECURITY_ENABLED=true
+KEYCLOAK_ADMIN_BASE_URL=https://auth.example.com \
+KEYCLOAK_ADMIN_USERNAME=<keycloak-admin> \
+KEYCLOAK_ADMIN_PASSWORD=<keycloak-admin-password> \
+KEYCLOAK_ADMIN_CLIENT_SECRET=<backend-service-account-secret> \
+KEYCLOAK_WEB_URL=https://app.example.com \
+npm run keycloak:reconcile
 ```
 
-Flyway `V7__remove_demo_seed_content.sql` removes presentation seed tickets, assets, offers, provider documents, and extra demo providers. Local screens therefore start with clean user-created product data while keeping the demo account anchors for login.
-Flyway `V10__internal_auth_users.sql` creates internal auth users for demo login and migrates existing customers/providers with temporary `demo123` passwords.
+`KEYCLOAK_WEB_URL` replaces local redirect URIs, web origins and post-logout redirects. Do not set `KEYCLOAK_IMPORT_DEMO_USERS=true` in production.
 
-Run with internal JWT settings:
+## Authentication Flow
+
+- Browser: Keycloak Authorization Code flow with PKCE S256.
+- API: RS256 bearer token validated against Keycloak JWKs.
+- Required API audience: `ztemizinden-api`.
+- Roles: Keycloak realm roles `CUSTOMER`, `SERVICE`, `ADMIN`.
+- Registration: backend creates the domain row, provisions the Keycloak user with the backend service account, and compensates the Keycloak user if the DB transaction rolls back.
+- Provider approval/rejection enables or disables the matching Keycloak identity.
+- Password reset: backend requests Keycloak's `UPDATE_PASSWORD` action email. SMTP must be configured in the Keycloak realm.
+
+Local defaults are in `application.yml`. Production must provide at least:
 
 ```bash
-APP_SECURITY_ENABLED=true \
-APP_JWT_SECRET=change-this-secret-to-a-long-random-value \
-APP_JWT_ISSUER=ztemizinden \
-./mvnw spring-boot:run
+SPRING_PROFILES_ACTIVE=prod
+KEYCLOAK_ISSUER_URI=https://auth.example.com/realms/ztemizinden
+KEYCLOAK_JWK_SET_URI=https://auth.example.com/realms/ztemizinden/protocol/openid-connect/certs
+KEYCLOAK_ADMIN_BASE_URL=https://auth.example.com
+KEYCLOAK_ADMIN_CLIENT_SECRET=<unique-secret>
+KEYCLOAK_PASSWORD_RESET_REDIRECT_URI=https://app.example.com/customer/login
 ```
 
-Customers receive the `CUSTOMER` role immediately. Service providers receive the `SERVICE` role so they can sign in and upload documents, but ticket opportunities and service jobs remain blocked until operations approves the provider record.
+The production profile refuses HTTP issuers, the local service-account secret, disabled API security and demo data flags.
 
-Temporarily disable security for debugging:
+## Existing User Rollout
+
+Flyway V22 removes the obsolete local auth tables and deliberately does not copy password hashes. It copies only e-mail, role and domain links into `keycloak_identity_migration_queue`.
+
+For the first rollout, configure Keycloak SMTP and start one application instance with:
+
+```bash
+KEYCLOAK_MIGRATE_LEGACY_USERS=true ./mvnw spring-boot:run
+```
+
+The runner is idempotent: it provisions or updates Keycloak identities, links `identity_subject`, assigns realm roles and sends enabled users a Keycloak password-setup email. Failed rows retain `last_error` and can be retried. Disable the flag after every queue row has `completed_at`.
+
+## Debug Security Bypass
+
+Only for local payload debugging:
 
 ```bash
 APP_SECURITY_ENABLED=false ./mvnw spring-boot:run
 ```
 
-## Fullstack Jar
-
-Repo kokunden:
-
-```bash
-npm run build:jar
-```
-
-Backend klasorunden:
-
-```bash
-./mvnw -Pfullstack clean package
-```
-
-`fullstack` profili root React uygulamasinda `npm ci` ve `npm run build` calistirir, `dist` ciktisini Spring Boot static kaynaklarina kopyalar ve `target/ztemizinden.jar` uretir.
+This is rejected by the `prod` profile.
 
 ## Upload Storage
-
-V1 stores ticket media and provider documents on the backend local filesystem.
 
 ```bash
 APP_UPLOAD_DIR=uploads
 ```
 
-Uploaded files are served from:
+Uploaded files are served from `/uploads/...`; provider documents require `ADMIN` when security is enabled. Orphan upload cleanup runs on the configured schedule after a grace period.
 
-- `/uploads/ticket-media/...`
-- `/uploads/provider-documents/...` (admin-only when API security is enabled)
-
-## CORS
-
-Localhost is allowed by default. For Vercel + ngrok beta runs:
-
-```bash
-APP_CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://*.vercel.app,https://*.ngrok-free.app,https://*.ngrok.app,https://*.ngrok.io
-```
-
-## MVP1 API Surface
-
-- `POST /api/auth/login`
-- `POST /api/assets`
-- `GET /api/assets?ownerId=...`
-- `POST /api/customers`
-- `GET /api/customers/me`
-- `POST /api/tickets`
-- `GET /api/tickets?customerId=...`
-- `POST /api/tickets/{ticketId}/offers`
-- `POST /api/tickets/{ticketId}/offers/{offerId}/accept`
-- `POST /api/tickets/{ticketId}/offers/{offerId}/reject`
-- `POST /api/tickets/{ticketId}/cancel`
-- `POST /api/tickets/{ticketId}/messages`
-- `POST /api/tickets/{ticketId}/billing`
-- `POST /api/tickets/{ticketId}/billing/approve`
-- `POST /api/tickets/{ticketId}/billing/dispute`
-- `POST /api/uploads/ticket-media`
-- `POST /api/uploads/provider-documents`
-- `POST /api/providers`
-- `GET /api/providers/me`
-- `POST /api/providers/{providerId}/approve`
-- `POST /api/providers/{providerId}/reject`
-- `POST /api/providers/{providerId}/verify`
-- `PUT /api/providers/{providerId}/trusted`
-- `POST /api/providers/{providerId}/documents/{documentId}/verify`
-- `POST /api/providers/{providerId}/documents/{documentId}/reject`
-- `GET /api/admin/dispatch/queue`
-- `GET /api/admin/dispatch/tickets/{ticketId}/matches`
-- `POST /api/admin/dispatch/tickets/{ticketId}/assign`
-
-## Verify
+## Build and Verify
 
 ```bash
 ./mvnw test
+./mvnw package
+cd ..
+npm run build
+npm run keycloak:verify
+```
+
+`npm run keycloak:verify` is a local E2E check. It temporarily enables direct grants, verifies CUSTOMER/SERVICE/ADMIN claims and protected API calls, checks missing/wrong-audience tokens return 401, and restores the client setting in `finally`.
+
+For a fullstack jar from the repository root:
+
+```bash
+npm run build:jar
 ```

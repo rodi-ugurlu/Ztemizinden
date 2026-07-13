@@ -1,5 +1,4 @@
 import { type FormEvent, type KeyboardEvent, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import {
   normalizeExpertiseTag,
@@ -151,8 +150,7 @@ function DocumentPicker({
 }
 
 export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedAuthPageProps) {
-  const navigate = useNavigate();
-  const { loginWithPassword, isLoading, error, setError } = useAuthStore();
+  const { loginWithIdentityProvider, isLoading, error, setError } = useAuthStore();
   const [activeRole, setActiveRole] = useState<AuthRole>(initialRole);
   const [customerView, setCustomerView] = useState<AuthView>(
     initialRole === 'customer' ? initialView : 'login'
@@ -162,7 +160,6 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   );
   const [customerLogin, setCustomerLogin] = useState({
     email: '',
-    password: '',
   });
   const [customerRegister, setCustomerRegister] = useState({
     firstName: '',
@@ -175,7 +172,6 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   });
   const [serviceLogin, setServiceLogin] = useState({
     identifier: '',
-    secret: '',
   });
   const [serviceRegister, setServiceRegister] = useState({
     companyName: '',
@@ -291,8 +287,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     event.preventDefault();
     clearFeedback();
     try {
-      const signedInUser = await loginWithPassword('customer', customerLogin.email, customerLogin.password);
-      navigate(dashboardPathForRole(signedInUser.role ?? 'customer'));
+      await loginWithIdentityProvider('customer', customerLogin.email);
     } catch {
       // Store error is rendered below the form.
     }
@@ -302,8 +297,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     event.preventDefault();
     clearFeedback();
     try {
-      const signedInUser = await loginWithPassword('service', serviceLogin.identifier, serviceLogin.secret);
-      navigate(dashboardPathForRole(signedInUser.role ?? 'service'));
+      await loginWithIdentityProvider('service', serviceLogin.identifier);
     } catch {
       // Store error is rendered below the form.
     }
@@ -335,6 +329,12 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     event.preventDefault();
     clearFeedback();
 
+    const passwordError = validatePassword(customerRegister.password);
+    if (passwordError) {
+      setLocalError(passwordError);
+      return;
+    }
+
     if (customerRegister.password !== customerRegister.confirmPassword) {
       setLocalError('Şifreler eşleşmiyor');
       return;
@@ -355,20 +355,19 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
         phone: customerRegister.phone,
         companyName: customerName,
         city: 'Istanbul',
+        district: 'Belirtilmedi',
         password: customerRegister.password,
       });
       accountCreated = true;
-      setLocalNotice('Fabrika/İşletme hesabınız oluşturuldu. Giriş yapılıyor...');
-      const signedInUser = await loginWithPassword('customer', customerRegister.email, customerRegister.password);
-      navigate(dashboardPathForRole(signedInUser.role ?? 'customer'));
+      setLocalNotice('Hesabınız Keycloak üzerinde oluşturuldu. Güvenli giriş ekranına yönlendiriliyorsunuz...');
+      await loginWithIdentityProvider('customer', customerRegister.email);
     } catch (submitError) {
       if (accountCreated) {
         setCustomerView('login');
         setCustomerLogin({
           email: customerRegister.email,
-          password: customerRegister.password,
         });
-        setLocalNotice('Hesap oluşturuldu. E-posta ve şifrenizle giriş yapabilirsiniz.');
+        setLocalNotice('Hesap oluşturuldu. Keycloak giriş ekranından devam edebilirsiniz.');
         setLocalError(
           submitError instanceof Error
             ? `Otomatik giriş yapılamadı: ${submitError.message}`
@@ -387,6 +386,12 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   const handleServiceRegister = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     clearFeedback();
+
+    const passwordError = validatePassword(serviceRegister.password);
+    if (passwordError) {
+      setLocalError(passwordError);
+      return;
+    }
 
     if (serviceRegister.password !== serviceRegister.confirmPassword) {
       setLocalError('Şifreler eşleşmiyor');
@@ -458,18 +463,17 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       });
       await api.upload<{ id: string }>('/providers', formData);
       providerCreated = true;
-      setLocalNotice('Başvurunuz alındı. Servis paneliniz açılıyor...');
-      const signedInUser = await loginWithPassword('service', serviceRegister.email, serviceRegister.password);
-      navigate(dashboardPathForRole(signedInUser.role ?? 'service'));
+      setServiceView('login');
+      setServiceLogin({ identifier: serviceRegister.email });
+      setLocalNotice('Başvurunuz alındı. Hesabınız operasyon onayından sonra Keycloak girişine açılacak.');
     } catch (submitError) {
       if (providerCreated) {
         setServiceView('login');
         setServiceLogin((prev) => ({
           ...prev,
           identifier: serviceRegister.email,
-          secret: serviceRegister.password,
         }));
-        setLocalNotice('Başvurunuz alındı. E-posta ve şifrenizle servis paneline giriş yapabilirsiniz.');
+        setLocalNotice('Başvurunuz alındı. Operasyon onayından sonra Keycloak ile giriş yapabilirsiniz.');
         setLocalError(
           submitError instanceof Error
             ? `Otomatik giriş yapılamadı: ${submitError.message}`
@@ -522,23 +526,6 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                     }
                   />
                 </div>
-                <div className="animated-auth__input-field">
-                  <FieldIcon name="lock" />
-                  <input
-                    name="password"
-                    type="password"
-                    placeholder="Şifre"
-                    autoComplete="current-password"
-                    required
-                    value={customerLogin.password}
-                    onChange={(event) =>
-                      setCustomerLogin((prev) => ({
-                        ...prev,
-                        password: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
                 <button
                   className="animated-auth__forgot-link"
                   type="button"
@@ -548,7 +535,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                   {isResetRequesting ? 'Bağlantı gönderiliyor...' : 'Şifremi unuttum'}
                 </button>
                 <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isLoading}>
-                  {isLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
+                  {isLoading ? 'Keycloak açılıyor...' : 'Keycloak ile Giriş Yap'}
                 </button>
                 <button
                   className="animated-auth__form-switch"
@@ -731,23 +718,6 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                     }
                   />
                 </div>
-                <div className="animated-auth__input-field">
-                  <FieldIcon name="lock" />
-                  <input
-                    name="secret"
-                    type="password"
-                    placeholder="Şifre"
-                    autoComplete="current-password"
-                    required
-                    value={serviceLogin.secret}
-                    onChange={(event) =>
-                      setServiceLogin((prev) => ({
-                        ...prev,
-                        secret: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
                 <button
                   className="animated-auth__forgot-link"
                   type="button"
@@ -757,7 +727,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                   {isResetRequesting ? 'Bağlantı gönderiliyor...' : 'Şifremi unuttum'}
                 </button>
                 <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isLoading}>
-                  {isLoading ? 'Giriş yapılıyor...' : 'Servis Girişi'}
+                  {isLoading ? 'Keycloak açılıyor...' : 'Keycloak ile Servis Girişi'}
                 </button>
                 <p className="animated-auth__social-text">
                   Yetkili servis hesabınızla panelinize erişebilirsiniz.
@@ -1097,6 +1067,10 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   );
 }
 
-function dashboardPathForRole(role: AuthRole | 'admin') {
-  return `/${role}/dashboard`;
+function validatePassword(password: string): string | null {
+  if (password.length < 8) return 'Şifre en az 8 karakter olmalıdır.';
+  if (!/[A-Z]/.test(password)) return 'Şifre en az bir büyük harf içermelidir.';
+  if (!/[a-z]/.test(password)) return 'Şifre en az bir küçük harf içermelidir.';
+  if (!/\d/.test(password)) return 'Şifre en az bir rakam içermelidir.';
+  return null;
 }

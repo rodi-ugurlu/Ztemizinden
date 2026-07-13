@@ -27,6 +27,7 @@ import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 @Getter
 @Entity
@@ -93,17 +94,21 @@ public class Ticket extends BaseEntity {
     private BillingStatus billingStatus;
 
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
     private List<TicketOffer> offers = new ArrayList<>();
 
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
     private Set<TicketConversation> conversations = new LinkedHashSet<>();
 
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
     private Set<TicketMessage> messages = new LinkedHashSet<>();
 
     @ElementCollection
     @CollectionTable(name = "ticket_media_urls", joinColumns = @JoinColumn(name = "ticket_id"))
     @Column(name = "media_url", nullable = false, length = 1_000)
+    @BatchSize(size = 50)
     private Set<String> mediaUrls = new LinkedHashSet<>();
 
     public Ticket(
@@ -258,6 +263,37 @@ public class Ticket extends BaseEntity {
         if (status != TicketStatus.OPEN && status != TicketStatus.OFFERED) {
             throw new IllegalStateException("Only open tickets can be assigned");
         }
+
+        TicketOffer selectedOffer = offers.stream()
+                .filter(offer -> providerId.equals(offer.getProviderId()))
+                .filter(TicketOffer::isSelectable)
+                .max(Comparator.comparing(
+                        TicketOffer::getCreatedAt,
+                        Comparator.nullsFirst(Comparator.naturalOrder())
+                ))
+                .orElse(null);
+
+        offers.stream()
+                .filter(offer -> offer != selectedOffer)
+                .forEach(TicketOffer::reject);
+
+        conversations.stream()
+                .filter(conversation -> conversation.getOffer() != selectedOffer)
+                .filter(TicketConversation::isWritable)
+                .forEach(conversation -> {
+                    conversation.closeNotSelected();
+                    conversation.addSystemMessage("Operasyon baska bir servis atadigi icin gorusme kapatildi.");
+                });
+
+        if (selectedOffer != null) {
+            selectedOffer.accept();
+            TicketConversation selectedConversation = conversationForOfferOrCreate(selectedOffer);
+            selectedConversation.accept();
+            selectedConversation.addSystemMessage("Teklif operasyon tarafindan secildi ve servis sureci baslatildi.");
+            serviceEta = selectedOffer.getEta();
+            finalEstimatedCost = selectedOffer.getEstimatedCost();
+        }
+
         assignedProviderId = providerId;
         assignedProviderName = providerName;
         status = TicketStatus.IN_PROGRESS;
@@ -283,6 +319,7 @@ public class Ticket extends BaseEntity {
         billingStatus = BillingStatus.APPROVED;
         status = TicketStatus.CLOSED;
         asset.markActive();
+        closeConversationsForClosedTicket();
         addSystemMessage("Hak edis onaylandi ve talep kapatildi.");
     }
 
@@ -296,12 +333,35 @@ public class Ticket extends BaseEntity {
     }
 
     public void cancel() {
-        if (status == TicketStatus.CLOSED || status == TicketStatus.CANCELLED) {
+        if (status != TicketStatus.OPEN && status != TicketStatus.OFFERED && status != TicketStatus.IN_PROGRESS) {
             throw new IllegalStateException("Ticket cannot be cancelled");
         }
+        offers.stream()
+                .filter(TicketOffer::isSelectable)
+                .forEach(TicketOffer::reject);
+        closeConversationsForCancelledTicket();
         status = TicketStatus.CANCELLED;
         asset.markActive();
         addSystemMessage("Talep iptal edildi.");
+    }
+
+    public void approveDisputedBilling(String resolutionNote) {
+        ensureDisputedBilling();
+        billingStatus = BillingStatus.APPROVED;
+        status = TicketStatus.CLOSED;
+        asset.markActive();
+        closeConversationsForClosedTicket();
+        addSystemMessage("Fatura itirazi operasyon tarafindan onay ile sonuclandirildi. " + resolutionNote);
+    }
+
+    public void requestBillingRevision(String resolutionNote) {
+        ensureDisputedBilling();
+        finalActualCost = null;
+        finalBillingNotes = null;
+        billingStatus = null;
+        status = TicketStatus.IN_PROGRESS;
+        asset.markUnderMaintenance();
+        addSystemMessage("Fatura itirazi sonrasi servis revizyonu istendi. " + resolutionNote);
     }
 
     public TicketMessage addCustomerMessage(String body) {
@@ -309,12 +369,14 @@ public class Ticket extends BaseEntity {
     }
 
     public TicketMessage addCustomerMessage(String senderName, String body) {
+        ensureMessagesWritable();
         TicketMessage message = new TicketMessage(this, "customer", displayName(senderName, customerName), body);
         messages.add(message);
         return message;
     }
 
     public TicketMessage addServiceMessage(String senderName, String body) {
+        ensureMessagesWritable();
         TicketMessage message = new TicketMessage(this, "service", displayName(senderName, assignedProviderName), body);
         messages.add(message);
         return message;
@@ -366,6 +428,36 @@ public class Ticket extends BaseEntity {
         if (status != TicketStatus.OPEN && status != TicketStatus.OFFERED) {
             throw new IllegalStateException("Ticket is not open for offers");
         }
+    }
+
+    private void ensureDisputedBilling() {
+        if (status != TicketStatus.RESOLVED || billingStatus != BillingStatus.DISPUTED) {
+            throw new IllegalStateException("Ticket does not have a disputed billing to resolve");
+        }
+    }
+
+    private void ensureMessagesWritable() {
+        if (status == TicketStatus.CLOSED || status == TicketStatus.CANCELLED) {
+            throw new IllegalStateException("Messages cannot be added to a closed ticket");
+        }
+    }
+
+    private void closeConversationsForCancelledTicket() {
+        conversations.stream()
+                .filter(TicketConversation::isWritable)
+                .forEach(conversation -> {
+                    conversation.closeTicketCancelled();
+                    conversation.addSystemMessage("Talep iptal edildigi icin gorusme kapatildi.");
+                });
+    }
+
+    private void closeConversationsForClosedTicket() {
+        conversations.stream()
+                .filter(TicketConversation::isWritable)
+                .forEach(conversation -> {
+                    conversation.closeTicketClosed();
+                    conversation.addSystemMessage("Talep tamamlandigi icin gorusme kapatildi.");
+                });
     }
 
     private void addSystemMessage(String body) {

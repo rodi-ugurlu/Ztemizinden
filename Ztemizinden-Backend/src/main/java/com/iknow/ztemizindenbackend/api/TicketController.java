@@ -23,6 +23,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -152,9 +154,10 @@ public class TicketController {
     @PostMapping("/{ticketId}/cancel")
     public TicketResponse cancel(@PathVariable String ticketId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        Ticket ticket = ticketService.cancel(ticketId);
-        publishTicketEvent("TICKET_CANCELLED", ticket, null);
-        return TicketResponse.fromForCustomer(ticket);
+        TicketMutationResult result = ticketService.cancel(ticketId);
+        publishConversationMessages(result.messages());
+        publishTicketEvent("TICKET_CANCELLED", result.ticket(), null);
+        return TicketResponse.fromForCustomer(result.ticket());
     }
 
     @PostMapping("/{ticketId}/billing")
@@ -173,9 +176,10 @@ public class TicketController {
     @PostMapping("/{ticketId}/billing/approve")
     public TicketResponse approveBilling(@PathVariable String ticketId) {
         currentUser.requireCustomerTicket(ticketService.get(ticketId));
-        Ticket ticket = ticketService.approveFinalBilling(ticketId);
-        publishTicketEvent("BILLING_APPROVED", ticket, null);
-        return TicketResponse.fromForCustomer(ticket);
+        TicketMutationResult result = ticketService.approveFinalBilling(ticketId);
+        publishConversationMessages(result.messages());
+        publishTicketEvent("BILLING_APPROVED", result.ticket(), null);
+        return TicketResponse.fromForCustomer(result.ticket());
     }
 
     @PostMapping("/{ticketId}/billing/dispute")
@@ -287,39 +291,42 @@ public class TicketController {
     }
 
     public record CreateTicketRequest(
-            @NotBlank String customerId,
-            @NotBlank String customerName,
-            @NotBlank String customerCompany,
-            @NotBlank String customerLocation,
-            String customerCity,
-            String customerDistrict,
-            String customerAddress,
-            @NotBlank String assetId,
-            @NotBlank String title,
-            @NotBlank String description,
-            @NotBlank String category,
-            @NotBlank String priority,
-            List<String> mediaUrls
+            @NotBlank @Size(max = 255) String customerId,
+            @NotBlank @Size(max = 255) String customerName,
+            @NotBlank @Size(max = 255) String customerCompany,
+            @NotBlank @Size(max = 255) String customerLocation,
+            @Size(max = 255) String customerCity,
+            @Size(max = 255) String customerDistrict,
+            @Size(max = 500) String customerAddress,
+            @NotBlank @Size(max = 255) String assetId,
+            @NotBlank @Size(max = 255) String title,
+            @NotBlank @Size(max = 4_000) String description,
+            @NotBlank @Size(max = 50) String category,
+            @NotBlank @Size(max = 50) String priority,
+            @Size(max = 10) List<@Size(max = 1_000) String> mediaUrls
     ) {
     }
 
     public record AddOfferRequest(
-            @NotBlank String providerId,
-            @NotBlank String providerName,
-            @NotBlank String type,
-            @NotNull @PositiveOrZero BigDecimal estimatedCost,
-            @NotBlank String eta,
-            @NotBlank String message
+            @NotBlank @Size(max = 255) String providerId,
+            @NotBlank @Size(max = 255) String providerName,
+            @NotBlank @Size(max = 50) String type,
+            @NotNull @PositiveOrZero @Digits(integer = 10, fraction = 2) BigDecimal estimatedCost,
+            @NotBlank @Size(max = 255) String eta,
+            @NotBlank @Size(max = 2_000) String message
     ) {
     }
 
-    public record SubmitBillingRequest(@NotNull @PositiveOrZero BigDecimal actualCost, @NotBlank String notes) {
+    public record SubmitBillingRequest(
+            @NotNull @PositiveOrZero @Digits(integer = 10, fraction = 2) BigDecimal actualCost,
+            @NotBlank @Size(max = 2_000) String notes
+    ) {
     }
 
-    public record DisputeBillingRequest(@NotBlank String reason) {
+    public record DisputeBillingRequest(@NotBlank @Size(max = 2_000) String reason) {
     }
 
-    public record AddMessageRequest(@NotBlank String body) {
+    public record AddMessageRequest(@NotBlank @Size(max = 2_000) String body) {
     }
 
     public record TicketEventPayload(String type, String conversationId, TicketResponse ticket) {
@@ -383,7 +390,10 @@ public class TicketController {
         }
 
         private static TicketResponse from(Ticket ticket, Viewer viewer, String providerId) {
-            List<TicketMessagePayload> messages = scopedMessages(ticket).stream()
+            boolean serviceCanSeeExecutionDetails = viewer != Viewer.SERVICE
+                    || (providerId != null && providerId.equals(ticket.getAssignedProviderId()));
+            List<TicketMessage> visibleTicketMessages = scopedTicketMessages(ticket, viewer, providerId);
+            List<TicketMessagePayload> messages = visibleTicketMessages.stream()
                     .map(TicketMessagePayload::from)
                     .toList();
             List<TicketConversation> conversations = scopedConversations(ticket, viewer, providerId);
@@ -410,13 +420,13 @@ public class TicketController {
                     new ArrayList<>(ticket.getMediaUrls()),
                     ticket.getStatus(),
                     ticket.getSlaTargetMinutes(),
-                    ticket.getAssignedProviderId(),
-                    ticket.getAssignedProviderName(),
-                    ticket.getServiceEta(),
-                    ticket.getFinalEstimatedCost(),
-                    ticket.getFinalActualCost(),
-                    ticket.getBillingStatus(),
-                    ticket.getFinalBillingNotes(),
+                    serviceCanSeeExecutionDetails ? ticket.getAssignedProviderId() : null,
+                    serviceCanSeeExecutionDetails ? ticket.getAssignedProviderName() : null,
+                    serviceCanSeeExecutionDetails ? ticket.getServiceEta() : null,
+                    serviceCanSeeExecutionDetails ? ticket.getFinalEstimatedCost() : null,
+                    serviceCanSeeExecutionDetails ? ticket.getFinalActualCost() : null,
+                    serviceCanSeeExecutionDetails ? ticket.getBillingStatus() : null,
+                    serviceCanSeeExecutionDetails ? ticket.getFinalBillingNotes() : null,
                     scopedOffers(ticket, viewer, providerId).stream()
                             .map(OfferResponse::from)
                             .toList(),
@@ -424,8 +434,8 @@ public class TicketController {
                             .map(conversation -> ConversationResponse.from(conversation, viewer))
                             .toList(),
                     messages,
-                    unreadMessageCount(ticket, conversations, viewer),
-                    latestVisibleMessage(ticket, conversations),
+                    unreadMessageCount(visibleTicketMessages, conversations, viewer),
+                    latestVisibleMessage(visibleTicketMessages, conversations),
                     ticket.getCreatedAt(),
                     ticket.getUpdatedAt()
             );
@@ -441,6 +451,14 @@ public class TicketController {
                             .thenComparing(TicketMessage::getSenderName, Comparator.nullsLast(String::compareTo))
                             .thenComparing(TicketMessage::getId, Comparator.nullsLast(String::compareTo)))
                     .toList();
+        }
+
+        private static List<TicketMessage> scopedTicketMessages(Ticket ticket, Viewer viewer, String providerId) {
+            if (viewer == Viewer.SERVICE
+                    && (providerId == null || !providerId.equals(ticket.getAssignedProviderId()))) {
+                return List.of();
+            }
+            return scopedMessages(ticket);
         }
 
         private static List<TicketOffer> scopedOffers(Ticket ticket, Viewer viewer, String providerId) {
@@ -466,8 +484,12 @@ public class TicketController {
                     .toList();
         }
 
-        private static int unreadMessageCount(Ticket ticket, List<TicketConversation> conversations, Viewer viewer) {
-            List<TicketMessage> visibleMessages = new ArrayList<>(scopedMessages(ticket));
+        private static int unreadMessageCount(
+                List<TicketMessage> ticketMessages,
+                List<TicketConversation> conversations,
+                Viewer viewer
+        ) {
+            List<TicketMessage> visibleMessages = new ArrayList<>(ticketMessages);
             conversations.forEach(conversation -> visibleMessages.addAll(TicketController.scopedMessages(conversation)));
             return (int) visibleMessages.stream()
                     .filter(message -> switch (viewer) {
@@ -478,8 +500,11 @@ public class TicketController {
                     .count();
         }
 
-        private static TicketMessagePayload latestVisibleMessage(Ticket ticket, List<TicketConversation> conversations) {
-            List<TicketMessage> visibleMessages = new ArrayList<>(scopedMessages(ticket));
+        private static TicketMessagePayload latestVisibleMessage(
+                List<TicketMessage> ticketMessages,
+                List<TicketConversation> conversations
+        ) {
+            List<TicketMessage> visibleMessages = new ArrayList<>(ticketMessages);
             conversations.forEach(conversation -> visibleMessages.addAll(TicketController.scopedMessages(conversation)));
             return visibleMessages.stream()
                     .filter(message -> !"system".equals(message.getSenderRole()))

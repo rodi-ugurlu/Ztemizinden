@@ -6,6 +6,7 @@ import com.iknow.ztemizindenbackend.domain.BadRequestException;
 import com.iknow.ztemizindenbackend.domain.Enums.AssetStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.AssetType;
 import com.iknow.ztemizindenbackend.domain.NotFoundException;
+import com.iknow.ztemizindenbackend.domain.TicketRepository;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AssetService {
     private final AssetRepository assetRepository;
+    private final TicketRepository ticketRepository;
 
     // ── Original flat list (backward compatibility) ───────────────────
 
@@ -170,6 +172,13 @@ public class AssetService {
         Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(() -> new NotFoundException("Asset not found: " + assetId));
 
+        List<String> subtreeIds = new ArrayList<>();
+        collectSubtreeIds(asset, subtreeIds);
+        if (ticketRepository.existsByAssetIdIn(subtreeIds)) {
+            throw new BadRequestException(
+                    "Asset cannot be deleted because it or one of its children has service tickets");
+        }
+
         if (asset.getParent() != null) {
             asset.getParent().removeChild(asset);
             assetRepository.save(asset.getParent());
@@ -230,4 +239,9 @@ public class AssetService {
     }
 
     // ── Private helpers ───────────────────────────────────────────────
+
+    private void collectSubtreeIds(Asset asset, List<String> ids) {
+        ids.add(asset.getId());
+        asset.getChildren().forEach(child -> collectSubtreeIds(child, ids));
+    }
 }

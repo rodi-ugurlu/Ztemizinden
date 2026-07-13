@@ -22,8 +22,8 @@ public class DispatchService {
 
     @Transactional(readOnly = true)
     public List<Ticket> openDispatchQueue() {
-        return ticketRepository.findByStatusInOrderByCreatedAtAsc(
-                List.of(TicketStatus.OPEN, TicketStatus.OFFERED, TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED));
+        return TicketDetailsLoader.loadAll(ticketRepository.findByStatusInOrderByCreatedAtAsc(
+                List.of(TicketStatus.OPEN, TicketStatus.OFFERED, TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED)));
     }
 
     @Transactional(readOnly = true)
@@ -41,7 +41,7 @@ public class DispatchService {
 
     @Transactional
     public Ticket assign(String ticketId, String providerId) {
-        Ticket ticket = ticketRepository.findById(ticketId)
+        Ticket ticket = ticketRepository.findByIdForUpdate(ticketId)
                 .orElseThrow(() -> new NotFoundException("Ticket not found"));
         ServiceProvider provider = serviceProviderRepository.findById(providerId)
                 .orElseThrow(() -> new NotFoundException("Provider not found"));
@@ -52,7 +52,7 @@ public class DispatchService {
             throw new IllegalStateException("Provider is not qualified for this ticket category");
         }
         ticket.assignProvider(provider.getId(), provider.getName());
-        return ticket;
+        return TicketDetailsLoader.load(ticket);
     }
 
     private boolean isQualifiedForTicket(ServiceProvider provider, Ticket ticket) {

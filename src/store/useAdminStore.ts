@@ -3,8 +3,10 @@ import { api } from '@/lib/api';
 import type { Ticket, TicketCategory } from '@/store/useCustomerStore';
 
 export type ProviderStatus = 'Pending Verification' | 'Verified' | 'Suspended';
+export type LandingVisibility = 'HIDDEN' | 'PENDING' | 'VISIBLE';
 export type SlaStatus = 'Healthy' | 'Watch' | 'Breach';
 export type AdminTicketStatus = 'Open' | 'Offered' | 'In Progress' | 'Resolved' | 'Closed' | 'Cancelled';
+export type BillingDisputeDecision = 'APPROVE' | 'REQUEST_REVISION';
 
 export interface ProviderDocument {
   id: string;
@@ -33,6 +35,8 @@ export interface ServiceProvider {
   isTrusted: boolean;
   rating: number;
   completedJobs: number;
+  landingVisibility: LandingVisibility;
+  landingApprovedAt?: string | null;
   specialties: TicketCategory[];
   expertiseTags: string[];
   coverageDistricts: string[];
@@ -103,7 +107,10 @@ interface AdminStoreState {
   verifyProvider: (providerId: string) => Promise<void>;
   rejectProvider: (providerId: string) => Promise<void>;
   toggleTrustedStatus: (providerId: string, isTrusted?: boolean) => Promise<void>;
+  approveLandingVisibility: (providerId: string) => Promise<void>;
+  rejectLandingVisibility: (providerId: string) => Promise<void>;
   assignTicket: (ticketId: string, providerId: string, providerName?: string, opsNote?: string) => Promise<void>;
+  resolveBillingDispute: (ticketId: string, decision: BillingDisputeDecision, note: string) => Promise<void>;
   verifyDocument: (providerId: string, documentId: string, notes?: string) => Promise<void>;
   rejectDocument: (providerId: string, documentId: string, notes?: string) => Promise<void>;
 
@@ -171,6 +178,16 @@ export const useAdminStore = create<AdminStoreState>()((set, get) => ({
     await get().fetchProviders();
   },
 
+  approveLandingVisibility: async (providerId) => {
+    await api.post(`/providers/${providerId}/landing/approve`);
+    await get().fetchProviders();
+  },
+
+  rejectLandingVisibility: async (providerId) => {
+    await api.post(`/providers/${providerId}/landing/reject`);
+    await get().fetchProviders();
+  },
+
   assignTicket: async (ticketId, providerId, providerName, opsNote) => {
     await api.post(`/admin/dispatch/tickets/${ticketId}/assign`, { providerId });
     set((state) => ({
@@ -186,6 +203,11 @@ export const useAdminStore = create<AdminStoreState>()((set, get) => ({
           : ticket
       ),
     }));
+    await get().fetchQueue();
+  },
+
+  resolveBillingDispute: async (ticketId, decision, note) => {
+    await api.post(`/admin/dispatch/tickets/${ticketId}/billing/resolve`, { decision, note });
     await get().fetchQueue();
   },
 
@@ -321,11 +343,16 @@ function normalizeProvider(provider: ServiceProvider): ServiceProvider {
     status: displayProviderStatus(provider.status),
     trusted: provider.trusted ?? provider.isTrusted ?? false,
     isTrusted: provider.isTrusted ?? provider.trusted ?? false,
+    landingVisibility: provider.landingVisibility ?? 'HIDDEN',
     specialties: provider.specialties ?? [],
     expertiseTags: provider.expertiseTags ?? [],
     coverageDistricts: provider.coverageDistricts ?? [],
-    documents: provider.documents ?? [],
+    documents: uniqueDocuments(provider.documents ?? []),
   };
+}
+
+function uniqueDocuments(documents: ProviderDocument[]) {
+  return Array.from(new Map(documents.map((document) => [document.id, document])).values());
 }
 
 function displayTicketStatus(status: Ticket['status'] | AdminTicketStatus): AdminTicketStatus {
@@ -375,6 +402,7 @@ function normalizeProviderMatch(match: BackendProviderMatch, providers: ServiceP
       isTrusted: match.trusted,
       rating: 0,
       completedJobs: 0,
+      landingVisibility: 'HIDDEN',
       specialties: [],
       expertiseTags: [],
       coverageDistricts: match.coverageDistricts ?? [],

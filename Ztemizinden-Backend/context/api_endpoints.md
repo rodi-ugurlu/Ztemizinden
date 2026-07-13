@@ -7,23 +7,13 @@ This document provides a comprehensive list of REST API endpoints and WebSocket 
 ## 1. Authentication
 
 ### Log In
-* **Path:** `POST /api/auth/login`
-* **Access:** Public (Unauthenticated)
-* **Request Body (`LoginRequest`):**
-  ```json
-  {
-    "email": "customer@demo.com",
-    "password": "demo123"
-  }
-  ```
-* **Success Response (`TokenResponse`):**
-  ```json
-  {
-    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "token_type": "Bearer",
-    "expires_in": 28800
-  }
-  ```
+There is no backend login/token endpoint. The browser redirects to Keycloak's OpenID Connect authorization endpoint and uses Authorization Code + PKCE S256. API requests carry the resulting access token as `Authorization: Bearer ...`.
+
+### Request Password Reset
+* **Path:** `POST /api/auth/forgot-password`
+* **Access:** Public (rate limited)
+* **Body:** `{ "email": "customer@example.com" }`
+* **Behavior:** Requests a Keycloak `UPDATE_PASSWORD` action e-mail and always returns the same generic message for registered and unregistered addresses.
 
 ---
 
@@ -41,7 +31,7 @@ This document provides a comprehensive list of REST API endpoints and WebSocket 
     "companyName": "Demir A.Ş.",
     "city": "İstanbul",
     "district": "Kadıköy",
-    "password": "securePassword123"
+    "password": "SecurePassword123"
   }
   ```
 
@@ -93,7 +83,7 @@ This document provides a comprehensive list of REST API endpoints and WebSocket 
     "specialties": ["MECHANIC", "HYDRAULIC"],
     "expertiseTags": ["pompa", "motor", "hidrofor"],
     "coverageDistricts": ["Ataşehir", "Kadıköy", "Maltepe", "Ümraniye", "Üsküdar"],
-    "password": "providerPassword123"
+    "password": "ProviderPassword123"
   }
   ```
 

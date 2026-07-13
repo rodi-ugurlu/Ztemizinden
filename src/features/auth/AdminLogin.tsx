@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,19 +12,14 @@ import { Activity, AlertCircle, Database, Lock, ShieldCheck } from 'lucide-react
  * Dark theme with indigo accents for system administrators.
  */
 
-const localDemoPassword = import.meta.env.DEV ? 'demo123' : '';
-
 export default function AdminLogin() {
   const [email, setEmail] = useState('admin@demo.com');
-  const [password, setPassword] = useState(localDemoPassword);
-  const { loginWithPassword, isLoading, error } = useAuthStore();
-  const navigate = useNavigate();
+  const { loginWithIdentityProvider, isLoading, error } = useAuthStore();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const signedInUser = await loginWithPassword('admin', email, password);
-      navigate(`/${signedInUser.role ?? 'admin'}/dashboard`);
+      await loginWithIdentityProvider('admin', email);
     } catch {
       // Store error is rendered below the form.
     }
@@ -124,21 +118,8 @@ export default function AdminLogin() {
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Şifre
-                  </label>
-                  <Input
-                    type="password"
-                    required
-                    autoComplete="current-password"
-                    className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 h-11"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
                 <Button type="submit" disabled={isLoading} className="w-full bg-red-600 hover:bg-red-700 text-white h-11 mt-4">
-                  {isLoading ? 'Giriş yapılıyor...' : 'Operasyon Merkezine Gir'}
+                  {isLoading ? 'Keycloak açılıyor...' : 'Keycloak ile Devam Et'}
                 </Button>
               </form>
               {error && (
@@ -150,7 +131,7 @@ export default function AdminLogin() {
             </CardContent>
             <CardFooter className="px-8 pb-8 pt-0 border-t border-slate-200/50 mt-4 flex justify-between items-center text-xs text-slate-500">
               <span>Yetkili Erişim Gerekli</span>
-              <span className="font-medium text-red-600">JWT güvenli oturum</span>
+              <span className="font-medium text-red-600">Keycloak PKCE oturumu</span>
             </CardFooter>
           </Card>
         </div>

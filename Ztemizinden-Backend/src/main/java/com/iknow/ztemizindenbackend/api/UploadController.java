@@ -8,6 +8,7 @@ import com.iknow.ztemizindenbackend.application.UploadService.StoredUpload;
 import com.iknow.ztemizindenbackend.domain.BadRequestException;
 import com.iknow.ztemizindenbackend.domain.ProviderDocument;
 import lombok.RequiredArgsConstructor;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +22,11 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 @RequestMapping("/api/uploads")
 public class UploadController {
+    private static final Set<String> SUPPORTED_PROVIDER_DOCUMENT_TYPES = Set.of(
+            "Vergi Levhası", "Sigorta Belgesi", "Teknik Lisans", "ISO Sertifikası",
+            "Ticaret Sicil", "Yetkinlik Belgesi"
+    );
+
     private final UploadService uploadService;
     private final ProviderService providerService;
     private final CurrentUser currentUser;
@@ -44,20 +50,35 @@ public class UploadController {
             @RequestParam String type,
             @RequestParam(required = false) String providerId
     ) {
-        if (!StringUtils.hasText(type)) {
-            throw new BadRequestException("Provider document type is required");
+        String normalizedType = type == null ? null : type.trim();
+        if (!SUPPORTED_PROVIDER_DOCUMENT_TYPES.contains(normalizedType)) {
+            throw new BadRequestException("Unsupported provider document type");
         }
-        StoredUpload upload = uploadService.storeProviderDocument(file);
-        String documentId = null;
         String resolvedProviderId = resolveProviderId(providerId);
-        if (StringUtils.hasText(resolvedProviderId)) {
+        if (!StringUtils.hasText(resolvedProviderId)) {
+            throw new BadRequestException("Provider id is required");
+        }
+
+        StoredUpload upload = uploadService.storeProviderDocument(file);
+        try {
             ProviderDocument document = providerService.addDocument(
                     resolvedProviderId,
-                    new AddDocumentCommand(type, upload.url(), upload.originalFileName())
+                    new AddDocumentCommand(
+                            normalizedType,
+                            upload.url(),
+                            upload.originalFileName(),
+                            upload.contentSha256()
+                    )
             );
-            documentId = document.getId();
+            if (!upload.url().equals(document.getUrl())) {
+                uploadService.delete(upload);
+                return UploadResponse.fromExisting(document, upload);
+            }
+            return UploadResponse.from(upload, document.getId());
+        } catch (RuntimeException exception) {
+            uploadService.delete(upload);
+            throw exception;
         }
-        return UploadResponse.from(upload, documentId);
     }
 
     public record UploadResponse(
@@ -76,6 +97,18 @@ public class UploadController {
                     upload.contentType(),
                     upload.size(),
                     providerDocumentId
+            );
+        }
+
+        static UploadResponse fromExisting(ProviderDocument document, StoredUpload attemptedUpload) {
+            String storedFileName = document.getUrl().substring(document.getUrl().lastIndexOf('/') + 1);
+            return new UploadResponse(
+                    document.getUrl(),
+                    document.getOriginalFileName(),
+                    storedFileName,
+                    attemptedUpload.contentType(),
+                    attemptedUpload.size(),
+                    document.getId()
             );
         }
     }

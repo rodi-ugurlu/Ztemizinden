@@ -49,10 +49,6 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-mail</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
         <dependency>
@@ -175,6 +171,7 @@
                                     <executable>npm</executable>
                                     <arguments>
                                         <argument>ci</argument>
+                                        <argument>--include=dev</argument>
                                     </arguments>
                                 </configuration>
                             </execution>

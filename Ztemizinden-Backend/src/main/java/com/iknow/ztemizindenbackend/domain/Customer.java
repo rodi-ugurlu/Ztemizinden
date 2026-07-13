@@ -16,6 +16,9 @@ import org.springframework.util.StringUtils;
 @Table(name = "customers")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Customer extends BaseEntity {
+    @Column(name = "identity_subject", unique = true)
+    private String identitySubject;
+
     @Column(nullable = false)
     private String name;
 
@@ -71,6 +74,10 @@ public class Customer extends BaseEntity {
 
     public void suspend() {
         status = CustomerStatus.SUSPENDED;
+    }
+
+    public void linkIdentity(String identitySubject) {
+        this.identitySubject = required(identitySubject, "Customer identity subject is required");
     }
 
     public void updateProfile(

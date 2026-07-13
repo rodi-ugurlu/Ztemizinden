@@ -211,19 +211,18 @@ Messages inside chats (negotiations or active jobs).
 * **Indices:**
   * `idx_ticket_messages_conversation` (conversation_id)
 
-### `auth_users`
-Internal authentication credentials table.
+### `keycloak_identity_migration_queue`
+One-time, non-secret rollout queue created by V22.
 * **Fields:**
-  * `id` VARCHAR(255) PRIMARY KEY
+  * `legacy_auth_user_id` VARCHAR(255) PRIMARY KEY
   * `email` VARCHAR(255) NOT NULL UNIQUE
-  * `password_hash` VARCHAR(255) NOT NULL (Spring Security delegating format: `{noop}demo123`)
   * `role` VARCHAR(50) NOT NULL (`CUSTOMER`, `SERVICE`, `ADMIN`)
-  * `enabled` BOOLEAN NOT NULL DEFAULT TRUE
-  * `customer_id` VARCHAR(255) (Optional link to customer details)
-  * `provider_id` VARCHAR(255) (Optional link to service provider details)
-  * `created_at` TIMESTAMPTZ NOT NULL, `updated_at` TIMESTAMPTZ NOT NULL
-* **Indices:**
-  * `ux_auth_users_email_lower` UNIQUE (lower(email))
+  * `enabled` BOOLEAN NOT NULL
+  * `customer_id`, `provider_id`, `identity_subject` VARCHAR(255)
+  * `completed_at` TIMESTAMPTZ, `attempt_count` INTEGER, `last_error` VARCHAR(2000)
+* **Security:** No legacy password hash is copied. Migrated identities must set a Keycloak password.
+
+`customers.identity_subject` and `service_providers.identity_subject` are nullable, unique references to the immutable Keycloak user `sub`.
 
 ---
 
@@ -244,7 +243,7 @@ The schema has been incrementally evolved using the following migration scripts 
 * **`V9__customers_and_registration_hardening.sql`**
   * Splits customer data out to a separate `customers` registry table. Adds unique lower-case e-mail indices to block duplicates.
 * **`V10__internal_auth_users.sql`**
-  * Introduces the `auth_users` table for internal security. Seeds demo login entities and creates logins for legacy customers/providers.
+  * Historical migration that introduced local auth; its runtime table is removed by V22.
 * **`V11__provider_expertise_tags.sql`**
   * Adds `service_provider_expertise_tags` mapping table and seeds expertise categories for matching tests.
 * **`V12__profile_kunye_fields.sql`**
@@ -257,3 +256,5 @@ The schema has been incrementally evolved using the following migration scripts 
   * Generates `ticket_conversations` to isolate pre-acceptance messages from main ticket dashboard. Adds unique constraints on ticket+provider conversations.
 * **`V16__relax_conversation_provider_uniqueness.sql`**
   * Relaxes unique limits to allow multiple sequential negotiation chats between a customer and provider on the same ticket. Creates partial unique index `uq_ticket_conversations_active_provider` targeting only `ACTIVE` and `ACCEPTED` status lines.
+* **`V22__replace_local_auth_with_keycloak.sql`**
+  * Adds unique `identity_subject` links, copies only non-secret legacy identity metadata into the migration queue, and removes `auth_users` plus local password reset tokens.

@@ -8,11 +8,21 @@ server:
   forward-headers-strategy: framework
 
 app:
+  security:
+    enabled: true
+  keycloak:
+    issuer-uri: ${KEYCLOAK_ISSUER_URI}
+    jwk-set-uri: ${KEYCLOAK_JWK_SET_URI}
+    audience: ${KEYCLOAK_AUDIENCE:ztemizinden-api}
+    realm: ${KEYCLOAK_REALM:ztemizinden}
+    web-client-id: ${KEYCLOAK_WEB_CLIENT_ID:ztemizinden-web}
+    admin-base-url: ${KEYCLOAK_ADMIN_BASE_URL}
+    admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:ztemizinden-backend-admin}
+    admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
+    password-reset-redirect-uri: ${KEYCLOAK_PASSWORD_RESET_REDIRECT_URI:https://maintly.app/customer/login}
+    migrate-legacy-users: ${KEYCLOAK_MIGRATE_LEGACY_USERS:false}
   upload:
     root-dir: ${APP_UPLOAD_DIR:/var/lib/ztemizinden/uploads}
-  password-reset:
-    frontend-base-url: ${APP_FRONTEND_BASE_URL:https://maintly.app}
-    log-reset-link: ${APP_PASSWORD_RESET_LOG_LINK:false}
   demo-data:
-    ensure-demo-accounts: ${APP_DEMO_ENSURE_ACCOUNTS:false}
-    reset-and-seed: ${APP_DEMO_RESET_AND_SEED:false}
+    ensure-demo-accounts: false
+    reset-and-seed: false

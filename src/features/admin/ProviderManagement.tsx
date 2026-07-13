@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { downloadProtectedFile } from '@/lib/api';
+import { downloadProtectedFile, resolvePublicFileUrl } from '@/lib/api';
 import { formatLocation } from '@/lib/locations';
 import { normalizeSearchText, serviceSpecialtyLabel } from '@/lib/serviceExpertise';
 import {
@@ -46,6 +46,9 @@ import {
   AlertCircle,
   Wrench,
   ExternalLink,
+  Eye,
+  EyeOff,
+  Sparkles,
 } from 'lucide-react';
 
 export default function ProviderManagement() {
@@ -57,6 +60,8 @@ export default function ProviderManagement() {
     verifyProvider,
     rejectProvider,
     toggleTrustedStatus,
+    approveLandingVisibility,
+    rejectLandingVisibility,
     verifyDocument,
     rejectDocument,
   } = useAdminStore();
@@ -99,6 +104,7 @@ export default function ProviderManagement() {
   const blockedApprovalCount = pendingProviders.filter((provider) =>
     ['missing-documents', 'blocked'].includes(getProviderReviewSummary(provider).state)
   ).length;
+  const pendingLandingCount = providers.filter((provider) => provider.landingVisibility === 'PENDING').length;
 
   const handleOpenDocumentReview = (provider: ServiceProvider, document: ProviderDocument) => {
     setSelectedProvider(provider);
@@ -161,7 +167,7 @@ export default function ProviderManagement() {
   return (
     <ProviderManagementShell>
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
         <StatCard
           title="Toplam"
           value={providers.length}
@@ -190,6 +196,12 @@ export default function ProviderManagement() {
           value={blockedApprovalCount}
           icon={AlertCircle}
           color={blockedApprovalCount > 0 ? 'text-red-600' : 'text-slate-500'}
+        />
+        <StatCard
+          title="Vitrin Talebi"
+          value={pendingLandingCount}
+          icon={Sparkles}
+          color={pendingLandingCount > 0 ? 'text-red-600' : 'text-slate-500'}
         />
       </div>
 
@@ -237,8 +249,16 @@ export default function ProviderManagement() {
                 <TableRow key={provider.id} className="border-slate-200">
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center">
-                        <Building2 className="w-5 h-5 text-slate-400" />
+                      <div className="w-10 h-10 overflow-hidden bg-slate-50 rounded-lg flex items-center justify-center border border-slate-200">
+                        {provider.logoUrl ? (
+                          <img
+                            src={resolvePublicFileUrl(provider.logoUrl)}
+                            alt=""
+                            className="h-full w-full bg-white object-contain p-1"
+                          />
+                        ) : (
+                          <Building2 className="w-5 h-5 text-slate-400" />
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
@@ -272,7 +292,10 @@ export default function ProviderManagement() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={provider.status} />
+                    <div className="flex flex-col items-start gap-2">
+                      <StatusBadge status={provider.status} />
+                      <LandingVisibilityBadge visibility={provider.landingVisibility} />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="space-y-2 min-w-48">
@@ -393,6 +416,38 @@ export default function ProviderManagement() {
                         </Button>
                       )}
                       </div>
+                      {provider.landingVisibility === 'PENDING' && (
+                        <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50/70 p-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => rejectLandingVisibility(provider.id)}
+                            className="h-7 border-red-200 bg-white text-red-600"
+                          >
+                            <EyeOff className="mr-1 h-3 w-3" />
+                            Gizle
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => approveLandingVisibility(provider.id)}
+                            className="h-7 bg-red-600 hover:bg-red-700"
+                          >
+                            <Eye className="mr-1 h-3 w-3" />
+                            Vitrine Al
+                          </Button>
+                        </div>
+                      )}
+                      {provider.landingVisibility === 'VISIBLE' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => rejectLandingVisibility(provider.id)}
+                          className="h-7 border-slate-200 bg-white text-slate-600"
+                        >
+                          <EyeOff className="mr-1 h-3 w-3" />
+                          Vitrinden Kaldır
+                        </Button>
+                      )}
                       {provider.status === 'Pending Verification' && approvalBlocker && (
                         <p className="text-xs font-medium text-amber-700">{approvalBlocker}</p>
                       )}
@@ -672,6 +727,22 @@ function StatusBadge({ status }: { status: ServiceProvider['status'] }) {
       variant="outline"
       className={`${variant.bg} ${variant.text} ${variant.border}`}
     >
+      {variant.label}
+    </Badge>
+  );
+}
+
+function LandingVisibilityBadge({ visibility }: { visibility: ServiceProvider['landingVisibility'] }) {
+  const variants = {
+    HIDDEN: { className: 'border-slate-200 bg-slate-50 text-slate-500', label: 'Vitrin Kapalı' },
+    PENDING: { className: 'border-amber-200 bg-amber-50 text-amber-700', label: 'Vitrin İncelemesi' },
+    VISIBLE: { className: 'border-red-200 bg-red-50 text-red-700', label: 'Vitrinde' },
+  };
+  const variant = variants[visibility];
+
+  return (
+    <Badge variant="outline" className={variant.className}>
+      <Sparkles className="mr-1 h-3 w-3" />
       {variant.label}
     </Badge>
   );

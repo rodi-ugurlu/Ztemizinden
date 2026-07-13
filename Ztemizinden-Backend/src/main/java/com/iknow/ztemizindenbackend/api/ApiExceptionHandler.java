@@ -1,10 +1,13 @@
 package com.iknow.ztemizindenbackend.api;
 
 import com.iknow.ztemizindenbackend.domain.BadRequestException;
+import com.iknow.ztemizindenbackend.domain.ExternalIdentityException;
 import com.iknow.ztemizindenbackend.domain.NotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.AccessDeniedException;
@@ -36,6 +39,21 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     ProblemDetail handleBusinessRule(IllegalStateException exception) {
         return problem(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    ProblemDetail handleConcurrencyConflict(ConcurrencyFailureException exception) {
+        return problem(HttpStatus.CONFLICT, "The record changed concurrently. Refresh and try again.");
+    }
+
+    @ExceptionHandler(ExternalIdentityException.class)
+    ProblemDetail handleExternalIdentity(ExternalIdentityException exception) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ProblemDetail handleDataIntegrityConflict(DataIntegrityViolationException exception) {
+        return problem(HttpStatus.CONFLICT, "The request conflicts with existing or linked data.");
     }
 
     @ExceptionHandler(AccessDeniedException.class)

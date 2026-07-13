@@ -4,6 +4,7 @@ import com.iknow.ztemizindenbackend.domain.Asset;
 import com.iknow.ztemizindenbackend.domain.AssetRepository;
 import com.iknow.ztemizindenbackend.domain.BadRequestException;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferType;
+import com.iknow.ztemizindenbackend.domain.Enums.BillingDisputeDecision;
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketCategory;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketPriority;
@@ -26,13 +27,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class TicketService {
+    private static final List<TicketStatus> ASSET_MAINTENANCE_STATUSES =
+            List.of(TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED);
+
     private final TicketRepository ticketRepository;
     private final AssetRepository assetRepository;
     private final ServiceProviderRepository serviceProviderRepository;
+    private final ProviderTicketAccessPolicy providerTicketAccessPolicy;
 
     @Transactional(readOnly = true)
     public List<Ticket> listForCustomer(String customerId) {
-        return ticketRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
+        return TicketDetailsLoader.loadAll(ticketRepository.findByCustomerIdOrderByCreatedAtDesc(customerId));
     }
 
     @Transactional(readOnly = true)
@@ -40,6 +45,7 @@ public class TicketService {
         ServiceProvider provider = requireVerifiedProvider(providerId);
         List<Ticket> tickets = ticketRepository.findByStatusInOrderByCreatedAtAsc(
                 List.of(TicketStatus.OPEN, TicketStatus.OFFERED));
+        TicketDetailsLoader.loadAll(tickets);
         return tickets.stream()
                 .filter(ticket -> isQualifiedForTicket(provider, ticket))
                 .filter(ticket -> ticket.getOffers().stream()
@@ -50,19 +56,24 @@ public class TicketService {
     @Transactional(readOnly = true)
     public List<Ticket> listForProvider(String providerId) {
         requireVerifiedProvider(providerId);
-        return ticketRepository.findVisibleForProvider(providerId);
+        return TicketDetailsLoader.loadAll(ticketRepository.findVisibleForProvider(
+                providerId,
+                List.of(TicketStatus.OPEN, TicketStatus.OFFERED)
+        ));
     }
 
     @Transactional(readOnly = true)
     public Ticket get(String id) {
-        return ticketRepository.findById(id).orElseThrow(() -> new NotFoundException("Ticket not found"));
+        Ticket ticket = ticketRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Ticket not found"));
+        return TicketDetailsLoader.load(ticket);
     }
 
     @Transactional(readOnly = true)
     public Ticket getForProvider(String ticketId, String providerId) {
         Ticket ticket = get(ticketId);
         ServiceProvider provider = requireVerifiedProvider(providerId);
-        if (isVisibleForProvider(ticket, provider)) {
+        if (providerTicketAccessPolicy.canView(ticket, provider)) {
             return ticket;
         }
         throw new AccessDeniedException("Ticket is not visible to current provider");
@@ -97,7 +108,7 @@ public class TicketService {
 
     @Transactional
     public TicketOffer addOffer(String ticketId, AddOfferCommand command) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         ServiceProvider provider = serviceProviderRepository.findById(command.providerId())
                 .orElseThrow(() -> new NotFoundException("Provider not found"));
         if (provider.getStatus() != ProviderStatus.VERIFIED) {
@@ -117,7 +128,7 @@ public class TicketService {
 
     @Transactional
     public TicketMutationResult inviteOffer(String ticketId, String offerId) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         List<TicketMessage> previousConversationMessages = conversationMessages(ticket);
         ticket.inviteOffer(offerId);
         return new TicketMutationResult(ticket, newConversationSystemMessages(ticket, previousConversationMessages));
@@ -125,7 +136,7 @@ public class TicketService {
 
     @Transactional
     public TicketMutationResult acceptOffer(String ticketId, String offerId) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         List<TicketMessage> previousConversationMessages = conversationMessages(ticket);
         ticket.acceptOffer(offerId);
         return new TicketMutationResult(ticket, newConversationSystemMessages(ticket, previousConversationMessages));
@@ -140,20 +151,6 @@ public class TicketService {
         return provider;
     }
 
-    private boolean isVisibleForProvider(Ticket ticket, ServiceProvider provider) {
-        if (provider.getId().equals(ticket.getAssignedProviderId())) {
-            return true;
-        }
-        if (ticket.getOffers().stream().anyMatch(offer -> offer.getProviderId().equals(provider.getId()))) {
-            return true;
-        }
-        return isOpenOpportunity(ticket) && isQualifiedForTicket(provider, ticket);
-    }
-
-    private boolean isOpenOpportunity(Ticket ticket) {
-        return ticket.getStatus() == TicketStatus.OPEN || ticket.getStatus() == TicketStatus.OFFERED;
-    }
-
     private void requireQualifiedForTicket(ServiceProvider provider, Ticket ticket) {
         if (!isQualifiedForTicket(provider, ticket)) {
             throw new AccessDeniedException("Provider is not qualified for this ticket category");
@@ -166,43 +163,45 @@ public class TicketService {
 
     @Transactional
     public TicketMutationResult rejectOffer(String ticketId, String offerId) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         List<TicketMessage> previousConversationMessages = conversationMessages(ticket);
         ticket.rejectOffer(offerId);
         return new TicketMutationResult(ticket, newConversationSystemMessages(ticket, previousConversationMessages));
     }
 
     @Transactional
-    public Ticket cancel(String ticketId) {
-        Ticket ticket = get(ticketId);
+    public TicketMutationResult cancel(String ticketId) {
+        Ticket ticket = getForUpdate(ticketId);
+        List<TicketMessage> previousConversationMessages = conversationMessages(ticket);
         ticket.cancel();
-        return ticket;
+        synchronizeAssetStatus(ticket);
+        return new TicketMutationResult(ticket, newConversationSystemMessages(ticket, previousConversationMessages));
     }
 
     @Transactional
     public Ticket submitFinalBilling(String ticketId, SubmitBillingCommand command) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         ticket.submitFinalBilling(command.actualCost(), command.notes());
         return ticket;
     }
 
     @Transactional
     public Ticket disputeFinalBilling(String ticketId, DisputeBillingCommand command) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         ticket.disputeFinalBilling(command.reason());
         return ticket;
     }
 
     @Transactional
     public MessageResult addCustomerMessage(String ticketId, String senderName, String body) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         TicketMessage message = ticket.addCustomerMessage(senderName, body);
         return new MessageResult(ticket, message);
     }
 
     @Transactional
     public MessageResult addServiceMessage(String ticketId, String senderName, String body) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         TicketMessage message = ticket.addServiceMessage(senderName, body);
         return new MessageResult(ticket, message);
     }
@@ -214,7 +213,7 @@ public class TicketService {
             String senderName,
             String body
     ) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         TicketMessage message = ticket.addCustomerConversationMessage(conversationId, senderName, body);
         return new MessageResult(ticket, message);
     }
@@ -227,7 +226,7 @@ public class TicketService {
             String senderName,
             String body
     ) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         TicketConversation conversation = ticket.conversation(conversationId);
         if (providerId != null && !conversation.isForProvider(providerId)) {
             throw new AccessDeniedException("Conversation is not visible to current provider");
@@ -238,37 +237,73 @@ public class TicketService {
 
     @Transactional
     public Ticket markMessagesReadByCustomer(String ticketId) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         ticket.markMessagesReadByCustomer();
         return ticket;
     }
 
     @Transactional
     public Ticket markMessagesReadByService(String ticketId) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         ticket.markMessagesReadByService();
         return ticket;
     }
 
     @Transactional
     public Ticket markConversationMessagesReadByCustomer(String ticketId, String conversationId) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         ticket.markConversationMessagesReadByCustomer(conversationId);
         return ticket;
     }
 
     @Transactional
     public Ticket markConversationMessagesReadByService(String ticketId, String conversationId, String providerId) {
-        Ticket ticket = get(ticketId);
+        Ticket ticket = getForUpdate(ticketId);
         ticket.markConversationMessagesReadByService(conversationId, providerId);
         return ticket;
     }
 
     @Transactional
-    public Ticket approveFinalBilling(String ticketId) {
-        Ticket ticket = get(ticketId);
+    public TicketMutationResult approveFinalBilling(String ticketId) {
+        Ticket ticket = getForUpdate(ticketId);
+        List<TicketMessage> previousConversationMessages = conversationMessages(ticket);
         ticket.approveFinalBilling();
-        return ticket;
+        synchronizeAssetStatus(ticket);
+        return new TicketMutationResult(ticket, newConversationSystemMessages(ticket, previousConversationMessages));
+    }
+
+    @Transactional
+    public TicketMutationResult resolveBillingDispute(String ticketId, ResolveBillingDisputeCommand command) {
+        Ticket ticket = getForUpdate(ticketId);
+        List<TicketMessage> previousConversationMessages = conversationMessages(ticket);
+        if (command.decision() == BillingDisputeDecision.APPROVE) {
+            ticket.approveDisputedBilling(command.note());
+            synchronizeAssetStatus(ticket);
+        } else {
+            ticket.requestBillingRevision(command.note());
+        }
+        return new TicketMutationResult(ticket, newConversationSystemMessages(ticket, previousConversationMessages));
+    }
+
+    private void synchronizeAssetStatus(Ticket ticket) {
+        assetRepository.findByIdForUpdate(ticket.getAsset().getId())
+                .orElseThrow(() -> new NotFoundException("Asset not found"));
+        boolean anotherTicketRequiresMaintenance = ticketRepository.existsByAssetIdAndIdNotAndStatusIn(
+                ticket.getAsset().getId(),
+                ticket.getId(),
+                ASSET_MAINTENANCE_STATUSES
+        );
+        if (anotherTicketRequiresMaintenance) {
+            ticket.getAsset().markUnderMaintenance();
+        } else {
+            ticket.getAsset().markActive();
+        }
+    }
+
+    private Ticket getForUpdate(String ticketId) {
+        Ticket ticket = ticketRepository.findByIdForUpdate(ticketId)
+                .orElseThrow(() -> new NotFoundException("Ticket not found"));
+        return TicketDetailsLoader.load(ticket);
     }
 
     private List<TicketMessage> conversationMessages(Ticket ticket) {
@@ -320,6 +355,9 @@ public class TicketService {
     }
 
     public record DisputeBillingCommand(String reason) {
+    }
+
+    public record ResolveBillingDisputeCommand(BillingDisputeDecision decision, String note) {
     }
 
     public record MessageResult(Ticket ticket, TicketMessage message) {

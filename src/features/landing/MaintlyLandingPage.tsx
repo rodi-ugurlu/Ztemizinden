@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api, resolvePublicFileUrl } from '@/lib/api';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -20,12 +21,14 @@ import {
 import NetworkScene from './NetworkScene';
 import logoImg from '@/assets/logo.png';
 import {
-  stats,
   proofPoints,
   howItWorks,
   forFactories,
   forServices,
   footerLinks,
+  type LandingProvider,
+  type LandingSnapshot,
+  type RibbonEntry,
 } from './data';
 
 /* ============================================
@@ -63,19 +66,51 @@ function useScrolledNav(threshold = 60) {
   return scrolled;
 }
 
+function useLandingSnapshot() {
+  const [snapshot, setSnapshot] = useState<LandingSnapshot | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api.get<LandingSnapshot>('/public/landing')
+      .then((response) => {
+        if (!active) return;
+        setSnapshot(response);
+        setHasError(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setHasError(true);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  return { snapshot, isLoading, hasError };
+}
+
 /* ============================================
    MaintlyLandingPage — Fully Responsive
    ============================================ */
 
 export default function MaintlyLandingPage() {
   useScrollReveal();
+  const landing = useLandingSnapshot();
 
   return (
     <main
       className="min-h-screen overflow-x-hidden bg-white text-gray-900 antialiased"
       style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
     >
-      <HeroSection />
+      <HeroSection {...landing} />
+      <ProviderRibbonSection
+        ribbon={landing.snapshot?.ribbon ?? []}
+        total={landing.snapshot?.stats.verifiedProviderCount ?? 0}
+        isLoading={landing.isLoading}
+      />
       <HowItWorksSection />
       <ForWhomSection />
       <CTASection />
@@ -88,14 +123,45 @@ export default function MaintlyLandingPage() {
    Hero
    ============================================ */
 
-function HeroSection() {
+function HeroSection({
+  snapshot,
+  isLoading,
+  hasError,
+}: ReturnType<typeof useLandingSnapshot>) {
   const scrolled = useScrolledNav();
+  const liveStats = [
+    {
+      label: 'Doğrulanmış Servis',
+      value: snapshot ? formatStat(snapshot.stats.verifiedProviderCount) : '—',
+    },
+    {
+      label: 'Hizmet Verilen İl',
+      value: snapshot ? formatStat(snapshot.stats.servedCityCount) : '—',
+    },
+    {
+      label: 'Tamamlanan İş',
+      value: snapshot ? formatStat(snapshot.stats.completedWorkOrderCount) : '—',
+    },
+  ];
 
   return (
     <section className="maintly-hero-scene relative min-h-[100svh] overflow-hidden">
       <div className="maintly-hero-photo" aria-hidden="true" />
       <div className="maintly-hero-noise" aria-hidden="true" />
-      <NetworkScene />
+      <NetworkScene
+        providers={snapshot?.providers ?? []}
+        verifiedProviderCount={snapshot?.stats.verifiedProviderCount ?? 0}
+        isLoading={isLoading}
+      />
+      {snapshot && snapshot.providers.length > 0 && (
+        <ul className="sr-only" aria-label="Bugünün Maintly servis vitrini">
+          {snapshot.providers.map((provider) => (
+            <li key={`${provider.name}-${provider.city}`}>
+              {provider.name}, {provider.city}, {provider.primarySpecialty}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="relative z-10 flex min-h-[100svh] flex-col">
         {/* ---- Sticky Nav ---- */}
@@ -144,7 +210,7 @@ function HeroSection() {
               className="maintly-badge-glow mb-4 inline-flex max-w-full items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-red-700 sm:mb-5 sm:gap-2.5 sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.18em]"
             >
               <Sparkles className="h-3 w-3 shrink-0 text-red-500 sm:h-3.5 sm:w-3.5" />
-              <span className="min-w-0 truncate">Türkiye'nin bakım ağı</span>
+              <span className="min-w-0 truncate">Türkiye'nin canlı bakım ağı</span>
             </div>
 
             {/* Headline */}
@@ -178,7 +244,7 @@ function HeroSection() {
                 to="/customer/register"
                 className="group inline-flex min-h-[2.75rem] w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-5 py-3 text-xs font-black text-white shadow-lg shadow-red-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-red-600 hover:shadow-xl hover:shadow-red-500/30 sm:min-h-[3.25rem] sm:w-auto sm:gap-2.5 sm:px-6 sm:py-3.5 sm:text-sm"
               >
-                Fabrikanızı Ekleyin
+                İşletme Olarak Katılın
                 <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1 sm:h-4 sm:w-4" />
               </Link>
               <Link
@@ -192,10 +258,16 @@ function HeroSection() {
 
             {/* Stats */}
             <div className="mt-8 grid max-w-xl grid-cols-3 gap-1.5 sm:mt-10 sm:gap-3 md:gap-4">
-              {stats.map((item, i) => (
-                <AnimatedStat key={item.label} value={item.value} label={item.label} delay={i * 250} />
+              {liveStats.map((item) => (
+                <AnimatedStat key={item.label} value={item.value} label={item.label} />
               ))}
             </div>
+
+            <MobileProviderStrip
+              providers={snapshot?.providers ?? []}
+              total={snapshot?.stats.verifiedProviderCount ?? 0}
+              isLoading={isLoading}
+            />
           </div>
         </div>
 
@@ -211,7 +283,9 @@ function HeroSection() {
                   Maintly Ağı
                 </p>
                 <p className="mt-0.5 text-xs font-medium leading-4 text-gray-500 sm:text-sm sm:leading-5">
-                  İşletmeler ile uzman servis ekipleri aynı ağda buluşuyor.
+                  {hasError
+                    ? 'Canlı ağ verisi yenilenirken platform kesintisiz çalışmaya devam ediyor.'
+                    : 'Doğrulanmış servis ekipleri gerçek profilleriyle aynı ağda buluşuyor.'}
                 </p>
               </div>
             </div>
@@ -231,6 +305,141 @@ function HeroSection() {
         </div>
       </div>
     </section>
+  );
+}
+
+/* ============================================
+   Provider Ribbon (Servis Ağı Bandı)
+   ============================================ */
+
+function ProviderRibbonSection({
+  ribbon,
+  total,
+  isLoading,
+}: {
+  ribbon: RibbonEntry[];
+  total: number;
+  isLoading: boolean;
+}) {
+  if (!isLoading && ribbon.length === 0) return null;
+
+  const skeletonItems = Array.from({ length: 8 }, (_, i) => i);
+
+  return (
+    <section className="maintly-ribbon-section relative overflow-hidden">
+      {/* Animated background layers */}
+      <div className="maintly-ribbon-bg" aria-hidden="true" />
+      <div className="maintly-ribbon-shimmer" aria-hidden="true" />
+      <div className="maintly-ribbon-grid-overlay" aria-hidden="true" />
+
+      <div className="relative z-10 py-10 sm:py-14 md:py-16">
+        {/* Section Header */}
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div data-reveal className="mb-7 flex flex-col items-center text-center sm:mb-9">
+            {/* Glowing badge */}
+            <div className="maintly-ribbon-badge mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 sm:mb-5">
+              <span className="maintly-ribbon-dot" />
+              <span className="text-[10px] font-black uppercase tracking-[0.22em] text-white/90 sm:text-xs">
+                Canlı Servis Ağı
+              </span>
+            </div>
+
+            <h2 className="text-balance text-xl font-black tracking-tight text-white sm:text-2xl md:text-3xl">
+              Ağımızdaki Doğrulanmış Ekipler
+            </h2>
+            <p className="mt-2 max-w-lg text-xs font-medium leading-5 text-white/50 sm:mt-3 sm:text-sm sm:leading-6">
+              Platformumuza katılan, doğrulanmış uzman servis ekipleri. Her biri
+              alanında uzman, güvenilir ve aktif.
+            </p>
+
+            {total > 0 && (
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 backdrop-blur-sm sm:mt-5">
+                <span className="maintly-ribbon-count-dot" />
+                <span className="text-[11px] font-bold text-white/70 sm:text-xs">
+                  <strong className="text-white">{total.toLocaleString('tr-TR')}</strong> doğrulanmış servis
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Marquee Container */}
+        <div className="maintly-ribbon-mask relative">
+          {isLoading ? (
+            <div className="flex gap-3 px-4 sm:gap-4 sm:px-6">
+              {skeletonItems.map((i) => (
+                <div
+                  key={`ribbon-skeleton-${i}`}
+                  className="maintly-ribbon-skeleton h-16 w-48 shrink-0 rounded-2xl sm:h-[4.5rem] sm:w-56"
+                />
+              ))}
+            </div>
+          ) : ribbon.length <= 5 ? (
+            <div className="mx-auto flex max-w-7xl flex-wrap justify-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
+              {ribbon.map((entry, index) => (
+                <RibbonCard key={`${entry.name}-${index}`} entry={entry} index={index} />
+              ))}
+            </div>
+          ) : (
+            <div className="maintly-ribbon-track">
+              <div className="maintly-ribbon-scroll" aria-hidden="false">
+                {ribbon.map((entry, index) => (
+                  <RibbonCard key={`a-${entry.name}-${index}`} entry={entry} index={index} />
+                ))}
+              </div>
+              <div className="maintly-ribbon-scroll" aria-hidden="true">
+                {ribbon.map((entry, index) => (
+                  <RibbonCard key={`b-${entry.name}-${index}`} entry={entry} index={index} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RibbonCard({ entry, index }: { entry: RibbonEntry; index: number }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const initials = entry.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toLocaleUpperCase('tr-TR'))
+    .join('');
+
+  return (
+    <div
+      className="maintly-ribbon-card group"
+      style={{ animationDelay: `${index * -2.4}s` }}
+    >
+      <div className="maintly-ribbon-card-border" aria-hidden="true" />
+      <div className="maintly-ribbon-card-inner">
+        <span className="maintly-ribbon-logo">
+          {!imageFailed && entry.logoUrl ? (
+            <img
+              src={resolvePublicFileUrl(entry.logoUrl)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <span>{initials || 'MS'}</span>
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-bold text-white/90 transition-colors group-hover:text-white sm:text-sm">
+            {entry.name}
+          </span>
+          <span className="mt-0.5 flex items-center gap-1">
+            <BadgeCheck className="h-3 w-3 shrink-0 text-emerald-400" />
+            <span className="text-[9px] font-bold text-white/40 sm:text-[10px]">Doğrulanmış</span>
+          </span>
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -329,7 +538,7 @@ function ForWhomSection() {
               to="/customer/register"
               className="group/link relative mt-6 inline-flex items-center gap-2 text-xs font-black text-red-500 transition-all duration-300 hover:gap-3 hover:text-red-600 sm:mt-8 sm:text-sm"
             >
-              Fabrikanızı Ekleyin
+              İşletme Olarak Katılın
               <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5 sm:h-4 sm:w-4" />
             </Link>
           </div>
@@ -420,7 +629,7 @@ function CTASection() {
             to="/customer/register"
             className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3.5 text-xs font-black text-red-600 shadow-xl shadow-black/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl sm:w-auto sm:gap-2.5 sm:px-7 sm:py-4 sm:text-sm"
           >
-            Tesisinizi Ekleyin
+            İşletme Olarak Katılın
             <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1 sm:h-4 sm:w-4" />
           </Link>
           <Link
@@ -512,54 +721,77 @@ function FooterSection() {
    Sub-components
    ============================================ */
 
-function AnimatedStat({ value, label, delay = 0 }: { value: string; label: string; delay?: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [displayed, setDisplayed] = useState('0');
-  const started = useRef(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let tid: ReturnType<typeof setTimeout>;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true;
-          observer.disconnect();
-          const numStr = value.replace(/\./g, '').replace(/[^0-9]/g, '');
-          const target = parseInt(numStr, 10);
-          const suffix = value.includes('+') ? '+' : '';
-          const useLocale = target >= 1000;
-          if (isNaN(target) || target === 0) { setDisplayed(value); return; }
-
-          tid = setTimeout(() => {
-            const duration = 2000;
-            const startTime = performance.now();
-            const tick = (now: number) => {
-              const progress = Math.min((now - startTime) / duration, 1);
-              const eased = 1 - Math.pow(1 - progress, 4);
-              const current = Math.round(eased * target);
-              const formatted = useLocale ? current.toLocaleString('tr-TR') : current.toString();
-              setDisplayed(formatted + suffix);
-              if (progress < 1) requestAnimationFrame(tick);
-            };
-            requestAnimationFrame(tick);
-          }, delay);
-        }
-      },
-      { threshold: 0.3 },
-    );
-    observer.observe(el);
-    return () => { observer.disconnect(); clearTimeout(tid); };
-  }, [value, delay]);
-
+function AnimatedStat({ value, label }: { value: string; label: string }) {
   return (
-    <div ref={ref} className="border-l border-gray-200 pl-2.5 sm:pl-4 md:pl-5">
-      <p className="text-2xl font-black leading-none text-gray-900 sm:text-3xl md:text-4xl lg:text-5xl">{displayed}</p>
+    <div className="border-l border-gray-200 pl-2.5 sm:pl-4 md:pl-5">
+      <p className="text-2xl font-black leading-none text-gray-900 sm:text-3xl md:text-4xl lg:text-5xl">{value}</p>
       <p className="mt-1.5 text-[8px] font-bold uppercase leading-3 tracking-[0.14em] text-gray-400 sm:mt-2.5 sm:text-[10px] sm:leading-4 sm:tracking-[0.16em] md:text-xs">{label}</p>
     </div>
   );
+}
+
+function MobileProviderStrip({
+  providers,
+  total,
+  isLoading,
+}: {
+  providers: LandingProvider[];
+  total: number;
+  isLoading: boolean;
+}) {
+  if (!isLoading && providers.length === 0) return null;
+  const visibleProviders: Array<LandingProvider | null> = isLoading
+    ? [null, null, null]
+    : providers.slice(0, 3);
+
+  return (
+    <div className="mt-6 lg:hidden">
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Bugünün servis vitrini</p>
+        {total > 0 && <span className="text-[10px] font-bold text-red-600">Ağda {total.toLocaleString('tr-TR')} servis</span>}
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {visibleProviders.map((provider, index) =>
+          provider === null ? (
+            <div key={`mobile-skeleton-${index}`} className="h-20 animate-pulse rounded-xl border border-slate-200 bg-white/70" />
+          ) : (
+            <MobileProviderCard key={`${provider.name}-${index}`} provider={provider} />
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MobileProviderCard({ provider }: { provider: LandingProvider }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const initials = provider.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toLocaleUpperCase('tr-TR'))
+    .join('');
+
+  return (
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-2 shadow-sm backdrop-blur">
+      <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-white text-[10px] font-black text-red-600">
+        {!imageFailed && provider.logoUrl ? (
+          <img
+            src={resolvePublicFileUrl(provider.logoUrl)}
+            alt=""
+            className="h-full w-full object-contain p-0.5"
+            onError={() => setImageFailed(true)}
+          />
+        ) : initials}
+      </div>
+      <p className="mt-2 truncate text-[10px] font-black text-slate-900">{provider.name}</p>
+      <p className="mt-0.5 truncate text-[8px] font-bold text-slate-400">{provider.city}</p>
+    </div>
+  );
+}
+
+function formatStat(value: number) {
+  return Number.isFinite(value) ? value.toLocaleString('tr-TR') : '—';
 }
 
 function SignalPill({ icon: Icon, label }: { icon: React.ComponentType<{ className?: string }>; label: string }) {

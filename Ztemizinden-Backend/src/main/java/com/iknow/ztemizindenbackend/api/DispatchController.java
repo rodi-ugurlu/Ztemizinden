@@ -2,10 +2,15 @@ package com.iknow.ztemizindenbackend.api;
 
 import com.iknow.ztemizindenbackend.application.DispatchService;
 import com.iknow.ztemizindenbackend.application.DispatchService.ProviderMatch;
+import com.iknow.ztemizindenbackend.application.TicketMessageBroadcaster;
+import com.iknow.ztemizindenbackend.application.TicketService;
+import com.iknow.ztemizindenbackend.application.TicketService.ResolveBillingDisputeCommand;
+import com.iknow.ztemizindenbackend.application.TicketService.TicketMutationResult;
 import com.iknow.ztemizindenbackend.api.TicketController.TicketResponse;
 import com.iknow.ztemizindenbackend.domain.Ticket;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/dispatch")
 public class DispatchController {
     private final DispatchService dispatchService;
+    private final TicketService ticketService;
+    private final TicketMessageBroadcaster ticketMessageBroadcaster;
     private final TicketEventPublisher ticketEventPublisher;
 
     @GetMapping("/queue")
@@ -39,6 +46,29 @@ public class DispatchController {
         return TicketResponse.from(ticket);
     }
 
-    public record AssignRequest(@NotBlank String providerId) {
+    @PostMapping("/tickets/{ticketId}/billing/resolve")
+    public TicketResponse resolveBillingDispute(
+            @PathVariable String ticketId,
+            @Valid @RequestBody ResolveBillingDisputeRequest request
+    ) {
+        TicketMutationResult result = ticketService.resolveBillingDispute(
+                ticketId,
+                new ResolveBillingDisputeCommand(
+                        ApiEnums.billingDisputeDecision(request.decision()),
+                        request.note()
+                )
+        );
+        result.messages().forEach(ticketMessageBroadcaster::publishConversation);
+        ticketEventPublisher.publish("BILLING_DISPUTE_RESOLVED", result.ticket());
+        return TicketResponse.from(result.ticket());
+    }
+
+    public record AssignRequest(@NotBlank @Size(max = 255) String providerId) {
+    }
+
+    public record ResolveBillingDisputeRequest(
+            @NotBlank @Size(max = 50) String decision,
+            @NotBlank @Size(max = 2_000) String note
+    ) {
     }
 }

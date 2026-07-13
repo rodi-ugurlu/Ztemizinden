@@ -45,6 +45,7 @@ interface ServiceStoreState {
   fetchMyJobs: (options?: FetchOptions) => Promise<void>;
   fetchProviderProfile: () => Promise<void>;
   updateProviderProfile: (profile: UpdateProviderProfileInput) => Promise<ServiceProvider>;
+  setLandingVisibility: (visible: boolean) => Promise<ServiceProvider>;
   
   submitProposal: (
     ticketId: string,
@@ -207,6 +208,13 @@ export const useServiceStore = create<ServiceStoreState>()((set, get) => ({
       currentProviderId: normalizedProvider.id,
       currentProviderName: normalizedProvider.name,
     });
+    return normalizedProvider;
+  },
+
+  setLandingVisibility: async (visible) => {
+    const provider = await api.put<ServiceProvider>('/providers/me/landing-visibility', { visible });
+    const normalizedProvider = normalizeServiceProvider(provider);
+    set({ providerProfile: normalizedProvider });
     return normalizedProvider;
   },
 
@@ -467,6 +475,7 @@ function normalizeServiceProvider(provider: ServiceProvider): ServiceProvider {
     status: displayProviderStatus(provider.status),
     trusted: provider.trusted ?? provider.isTrusted ?? false,
     isTrusted: provider.isTrusted ?? provider.trusted ?? false,
+    landingVisibility: provider.landingVisibility ?? 'HIDDEN',
     specialties: provider.specialties ?? [],
     expertiseTags: provider.expertiseTags ?? [],
     coverageDistricts: provider.coverageDistricts ?? [],

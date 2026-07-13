@@ -118,41 +118,37 @@
    ============================================ */
 
 @layer components {
-  /* Hero — light gradient with subtle color accents */
   .maintly-hero-scene {
     isolation: isolate;
     background:
-      radial-gradient(ellipse at 80% 20%, rgba(239, 68, 68, 0.06) 0%, transparent 50%),
-      radial-gradient(ellipse at 15% 80%, rgba(20, 184, 166, 0.04) 0%, transparent 40%),
+      radial-gradient(ellipse at 80% 20%, rgba(239, 68, 68, 0.07) 0%, transparent 48%),
+      radial-gradient(ellipse at 15% 82%, rgba(20, 184, 166, 0.045) 0%, transparent 42%),
       linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   }
 
-  /* Subtle color blobs instead of hero photo */
   .maintly-hero-photo {
     position: absolute;
     inset: 0;
     z-index: 0;
     pointer-events: none;
     background:
-      radial-gradient(ellipse at 70% 30%, rgba(239, 68, 68, 0.05) 0%, transparent 45%),
-      radial-gradient(ellipse at 25% 70%, rgba(20, 184, 166, 0.03) 0%, transparent 35%);
+      radial-gradient(ellipse at 72% 28%, rgba(239, 68, 68, 0.055) 0%, transparent 46%),
+      radial-gradient(ellipse at 24% 72%, rgba(20, 184, 166, 0.032) 0%, transparent 38%);
   }
 
-  /* Light grid overlay */
   .maintly-hero-noise {
     position: absolute;
     inset: 0;
     z-index: 1;
     pointer-events: none;
     background-image:
-      linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px);
+      linear-gradient(rgba(15, 23, 42, 0.026) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 23, 42, 0.026) 1px, transparent 1px);
     background-position: center;
     background-size: 48px 48px;
-    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.3) 30%, rgba(0,0,0,0.5) 100%);
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.32) 30%, rgba(0,0,0,0.56) 100%);
   }
 
-  /* ---- Network Scene ---- */
   .maintly-scene {
     position: absolute;
     inset: 0;
@@ -161,6 +157,44 @@
     perspective: 1000px;
     contain: paint layout;
     transition: transform 0.08s linear;
+  }
+
+  .maintly-scene-glow {
+    position: absolute;
+    inset: 8% -10% 3% 43%;
+    z-index: 0;
+    border: 1px solid rgba(239, 68, 68, 0.045);
+    border-radius: 42% 0 0 34%;
+    background:
+      radial-gradient(circle at 58% 28%, rgba(239, 68, 68, 0.105), transparent 30%),
+      radial-gradient(circle at 28% 74%, rgba(20, 184, 166, 0.07), transparent 28%),
+      linear-gradient(140deg, rgba(255, 255, 255, 0.16), rgba(248, 250, 252, 0.68));
+    transform: rotate(-4deg);
+    mask-image: linear-gradient(90deg, transparent 0%, #000 22%);
+  }
+
+  .maintly-scene-glow::before,
+  .maintly-scene-glow::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .maintly-scene-glow::before {
+    width: 26rem;
+    height: 26rem;
+    right: 20%;
+    top: 8%;
+    border: 1px solid rgba(239, 68, 68, 0.08);
+  }
+
+  .maintly-scene-glow::after {
+    width: 18rem;
+    height: 18rem;
+    left: 18%;
+    bottom: 5%;
+    border: 1px solid rgba(20, 184, 166, 0.075);
   }
 
   .maintly-svg-overlay {
@@ -173,54 +207,128 @@
     overflow: visible;
   }
 
-  /* Light 3D grid floor */
   .maintly-scene-grid::before {
     content: "";
     position: absolute;
     inset: 9% -12% 8% 40%;
-    border: 1px solid rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(15, 23, 42, 0.04);
     background:
-      linear-gradient(115deg, transparent 0%, rgba(0, 0, 0, 0.03) 50%, transparent 100%),
-      repeating-linear-gradient(90deg, transparent 0 72px, rgba(0, 0, 0, 0.025) 72px 73px);
+      linear-gradient(115deg, transparent 0%, rgba(15, 23, 42, 0.026) 50%, transparent 100%),
+      repeating-linear-gradient(90deg, transparent 0 72px, rgba(15, 23, 42, 0.024) 72px 73px);
     transform: rotateX(58deg) rotateZ(-10deg);
     transform-origin: center;
   }
 
-  /* Light noise texture */
   .maintly-scene-noise {
     position: absolute;
     inset: 0;
     z-index: 0;
     pointer-events: none;
     background-image:
-      linear-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
+      linear-gradient(rgba(15, 23, 42, 0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 23, 42, 0.018) 1px, transparent 1px);
     background-position: center;
     background-size: 48px 48px;
+    mask-image: linear-gradient(90deg, transparent 30%, #000 58%);
   }
 
-  /* ---- Network Nodes ---- */
   .maintly-network-node {
     position: absolute;
-    z-index: 2;
+    z-index: 3;
     will-change: transform;
     animation: maintly-float linear infinite;
   }
 
-  /* Light cards — white bg, subtle shadow */
   .maintly-node-card {
     display: flex;
-    width: 16rem;
+    width: 15.5rem;
+    min-height: 4.35rem;
     flex-shrink: 0;
     align-items: center;
-    gap: 0.75rem;
-    border-radius: 0.75rem;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    background: white;
-    padding: 0.75rem;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    gap: 0.72rem;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(15, 23, 42, 0.075);
+    background: rgba(255, 255, 255, 0.94);
+    padding: 0.7rem;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.075), 0 2px 8px rgba(15, 23, 42, 0.035);
+    backdrop-filter: blur(12px);
     transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
     cursor: default;
+  }
+
+  .maintly-provider-logo {
+    display: flex;
+    width: 2.95rem;
+    height: 2.95rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 0.75rem;
+    background: linear-gradient(145deg, #fff, #f8fafc);
+    color: #dc2626;
+    font-size: 0.7rem;
+    font-weight: 900;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.065);
+  }
+
+  .maintly-provider-logo img {
+    width: 100%;
+    height: 100%;
+    padding: 0.25rem;
+    object-fit: contain;
+  }
+
+  .maintly-network-label {
+    position: absolute;
+    top: 7.5%;
+    right: 4.5%;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    border: 1px solid rgba(239, 68, 68, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    padding: 0.45rem 0.75rem 0.45rem 0.5rem;
+    color: #0f172a;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.055);
+    backdrop-filter: blur(14px);
+  }
+
+  .maintly-network-label__icon {
+    display: flex;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #fef2f2;
+    color: #ef4444;
+  }
+
+  .maintly-network-label__icon svg {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+
+  .maintly-network-label strong,
+  .maintly-network-label small {
+    display: block;
+  }
+
+  .maintly-network-label strong {
+    font-size: 0.66rem;
+    font-weight: 900;
+  }
+
+  .maintly-network-label small {
+    margin-top: 0.08rem;
+    color: #64748b;
+    font-size: 0.56rem;
+    font-weight: 700;
   }
 
   .maintly-network-node:hover {
@@ -228,11 +336,256 @@
   }
 
   .maintly-network-node:hover .maintly-node-card {
-    transform: scale(1.06) translateZ(20px);
-    border-color: rgba(239, 68, 68, 0.2);
+    transform: scale(1.05) translateZ(20px);
+    border-color: rgba(239, 68, 68, 0.18);
     box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.1),
-      0 0 24px rgba(239, 68, 68, 0.06);
+      0 14px 38px rgba(15, 23, 42, 0.115),
+      0 0 24px rgba(239, 68, 68, 0.07);
+  }
+
+  .maintly-node-skeleton {
+    display: block;
+    border-radius: 0.5rem;
+    background: linear-gradient(100deg, #e2e8f0 18%, #f8fafc 36%, #e2e8f0 54%);
+    background-size: 240% 100%;
+    animation: maintly-skeleton 1.4s ease-in-out infinite;
+  }
+
+  .maintly-node-skeleton--logo {
+    width: 2.95rem;
+    height: 2.95rem;
+    flex: 0 0 auto;
+    border-radius: 0.75rem;
+  }
+
+  .maintly-node-skeleton--title {
+    width: 78%;
+    height: 0.7rem;
+  }
+
+  .maintly-node-skeleton--meta {
+    width: 58%;
+    height: 0.5rem;
+    margin-top: 0.55rem;
+  }
+
+  /* ============================================
+     Provider Ribbon — Premium Dark Iridescent
+     ============================================ */
+
+  .maintly-ribbon-section {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .maintly-ribbon-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 40%, rgba(239, 68, 68, 0.15) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 60% at 80% 60%, rgba(20, 184, 166, 0.1) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 40% at 50% 0%, rgba(168, 85, 247, 0.08) 0%, transparent 50%),
+      linear-gradient(180deg, #0c0a12 0%, #0f0d17 40%, #110e18 100%);
+  }
+
+  .maintly-ribbon-shimmer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      105deg,
+      transparent 20%,
+      rgba(239, 68, 68, 0.04) 35%,
+      rgba(168, 85, 247, 0.06) 50%,
+      rgba(20, 184, 166, 0.04) 65%,
+      transparent 80%
+    );
+    background-size: 250% 100%;
+    animation: maintly-shimmer-sweep 8s ease-in-out infinite;
+  }
+
+  .maintly-ribbon-grid-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse at center, #000 30%, transparent 70%);
+  }
+
+  /* Section badge */
+  .maintly-ribbon-badge {
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: rgba(239, 68, 68, 0.1);
+    box-shadow:
+      0 0 20px rgba(239, 68, 68, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+  }
+
+  .maintly-ribbon-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 8px #ef4444, 0 0 16px rgba(239, 68, 68, 0.4);
+    animation: maintly-dot-pulse 2s ease-in-out infinite;
+  }
+
+  .maintly-ribbon-count-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 6px #34d399, 0 0 12px rgba(52, 211, 153, 0.3);
+    animation: maintly-dot-pulse 2.5s ease-in-out infinite;
+  }
+
+  /* Marquee */
+  .maintly-ribbon-mask {
+    overflow: hidden;
+    mask-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      #000 8%,
+      #000 92%,
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      #000 8%,
+      #000 92%,
+      transparent 100%
+    );
+  }
+
+  .maintly-ribbon-track {
+    display: flex;
+    width: max-content;
+    gap: 0;
+  }
+
+  .maintly-ribbon-track:hover .maintly-ribbon-scroll {
+    animation-play-state: paused;
+  }
+
+  .maintly-ribbon-scroll {
+    display: flex;
+    gap: 0.85rem;
+    padding-right: 0.85rem;
+    animation: maintly-marquee 45s linear infinite;
+    will-change: transform;
+  }
+
+  /* Card — Glass with animated border */
+  .maintly-ribbon-card {
+    position: relative;
+    flex-shrink: 0;
+    border-radius: 1rem;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      rgba(239, 68, 68, 0.3),
+      rgba(168, 85, 247, 0.2),
+      rgba(20, 184, 166, 0.3),
+      rgba(239, 68, 68, 0.3)
+    );
+    background-size: 300% 300%;
+    animation: maintly-border-shift 6s ease infinite;
+    transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    cursor: default;
+  }
+
+  .maintly-ribbon-card:hover {
+    transform: translateY(-3px) scale(1.03);
+    box-shadow:
+      0 8px 32px rgba(239, 68, 68, 0.15),
+      0 0 24px rgba(168, 85, 247, 0.08),
+      0 0 48px rgba(239, 68, 68, 0.06);
+  }
+
+  .maintly-ribbon-card:hover .maintly-ribbon-card-border {
+    opacity: 1;
+  }
+
+  .maintly-ribbon-card-border {
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(
+      135deg,
+      rgba(239, 68, 68, 0.6),
+      rgba(168, 85, 247, 0.4),
+      rgba(20, 184, 166, 0.5),
+      rgba(239, 68, 68, 0.6)
+    );
+    background-size: 300% 300%;
+    animation: maintly-border-shift 6s ease infinite;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    z-index: -1;
+    filter: blur(4px);
+  }
+
+  .maintly-ribbon-card-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    border-radius: calc(1rem - 1px);
+    background: rgba(15, 13, 23, 0.85);
+    padding: 0.6rem 0.9rem;
+    backdrop-filter: blur(16px);
+    min-width: 11rem;
+    max-width: 16rem;
+  }
+
+  /* Logo */
+  .maintly-ribbon-logo {
+    display: flex;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.65rem;
+    background: rgba(255, 255, 255, 0.06);
+    color: #ef4444;
+    font-size: 0.65rem;
+    font-weight: 900;
+    transition: border-color 0.3s ease;
+  }
+
+  .maintly-ribbon-card:hover .maintly-ribbon-logo {
+    border-color: rgba(239, 68, 68, 0.25);
+  }
+
+  .maintly-ribbon-logo img {
+    width: 100%;
+    height: 100%;
+    padding: 0.2rem;
+    object-fit: contain;
+    filter: brightness(1.1);
+  }
+
+  /* Skeleton */
+  .maintly-ribbon-skeleton {
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: linear-gradient(
+      100deg,
+      rgba(255, 255, 255, 0.03) 18%,
+      rgba(255, 255, 255, 0.06) 36%,
+      rgba(255, 255, 255, 0.03) 54%
+    );
+    background-size: 240% 100%;
+    animation: maintly-skeleton 1.4s ease-in-out infinite;
   }
 }
 
@@ -255,6 +608,54 @@
   }
 }
 
+@keyframes maintly-skeleton {
+  to { background-position-x: -240%; }
+}
+
+@keyframes maintly-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes maintly-shimmer-sweep {
+  0%, 100% {
+    background-position: 200% 50%;
+  }
+  50% {
+    background-position: -50% 50%;
+  }
+}
+
+@keyframes maintly-border-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  25% {
+    background-position: 100% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  75% {
+    background-position: 0% 100%;
+  }
+}
+
+@keyframes maintly-dot-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.75);
+  }
+}
+
 /* ============================================
    Reduced Motion
    ============================================ */
@@ -271,12 +672,23 @@
   .maintly-network-node {
     animation: none;
   }
+  .maintly-node-skeleton {
+    animation: none;
+  }
   .maintly-svg-overlay line animate,
   .maintly-svg-overlay circle animateMotion {
     display: none;
   }
   .maintly-scene {
     transition: none;
+  }
+  .maintly-ribbon-scroll,
+  .maintly-ribbon-shimmer,
+  .maintly-ribbon-card,
+  .maintly-ribbon-card-border,
+  .maintly-ribbon-dot,
+  .maintly-ribbon-count-dot {
+    animation: none;
   }
   html {
     scroll-behavior: auto;
@@ -289,85 +701,6 @@
 
 @media (max-width: 1023px) {
   .maintly-scene {
-    opacity: 0.5;
-    mask-image: linear-gradient(180deg, transparent 0%, black 18%, black 78%, transparent 100%);
-  }
-
-  .maintly-scene-grid::before {
-    inset: 12% -10% 10% 35%;
-  }
-
-  .maintly-node-card {
-    width: 14rem;
-    padding: 0.6rem;
-  }
-}
-
-/* ============================================
-   Responsive — Tablet Portrait (768px)
-   ============================================ */
-
-@media (max-width: 767px) {
-  .maintly-scene {
-    opacity: 0.35;
-    mask-image: linear-gradient(180deg, transparent 5%, black 25%, black 70%, transparent 100%);
-  }
-
-  .maintly-node-card {
-    width: 12rem;
-    padding: 0.5rem;
-    gap: 0.5rem;
-  }
-
-  .maintly-scene-grid::before {
-    opacity: 0.6;
-  }
-}
-
-/* ============================================
-   Responsive — Mobile (640px)
-   ============================================ */
-
-@media (max-width: 640px) {
-  .maintly-scene {
-    opacity: 0.15;
-    mask-image: linear-gradient(180deg, transparent 0%, black 25%, black 70%, transparent 100%);
-  }
-
-  .maintly-scene-grid::before {
-    inset: 14% -8% 10% 30%;
-    opacity: 0.4;
-  }
-
-  .maintly-node-card {
-    width: 11rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  }
-
-  .maintly-svg-overlay {
-    opacity: 0.2;
-  }
-}
-
-/* ============================================
-   Responsive — Extra Small (480px)
-   ============================================ */
-
-@media (max-width: 480px) {
-  .maintly-scene {
-    opacity: 0.08;
-  }
-
-  .maintly-svg-overlay {
-    opacity: 0.1;
-  }
-
-  .maintly-scene-grid::before {
     display: none;
-  }
-
-  .maintly-node-card {
-    width: 10rem;
-    font-size: 0.7rem;
   }
 }

@@ -10,15 +10,19 @@ import com.iknow.ztemizindenbackend.application.UploadService.StoredUpload;
 import com.iknow.ztemizindenbackend.domain.BadRequestException;
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderDocumentStatus;
+import com.iknow.ztemizindenbackend.domain.Enums.LandingVisibility;
 import com.iknow.ztemizindenbackend.domain.ProviderDocument;
 import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +38,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequiredArgsConstructor
@@ -54,7 +59,7 @@ public class ProviderController {
         if (email == null) {
             throw new BadRequestException("Provider email is missing from token");
         }
-        return ProviderResponse.from(providerService.getByEmail(email));
+        return ProviderResponse.from(providerService.getCurrent(currentUser.subject(), email));
     }
 
     @PutMapping("/me")
@@ -79,6 +84,19 @@ public class ProviderController {
         return ProviderResponse.from(provider);
     }
 
+    @PutMapping("/me/landing-visibility")
+    public ProviderResponse updateMyLandingVisibility(@Valid @RequestBody LandingVisibilityRequest request) {
+        String email = currentUser.email();
+        if (email == null) {
+            throw new BadRequestException("Provider email is missing from token");
+        }
+        return ProviderResponse.from(providerService.updateLandingRequest(
+                currentUser.subject(),
+                email,
+                request.visible()
+        ));
+    }
+
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public ProviderResponse create(@Valid @RequestBody CreateProviderRequest request) {
@@ -87,6 +105,7 @@ public class ProviderController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
+    @Transactional
     public ProviderResponse createWithDocuments(
             @Valid @RequestPart("request") CreateProviderRequest request,
             @RequestPart(required = false) MultipartFile taxCertificate,
@@ -97,12 +116,20 @@ public class ProviderController {
         if (!hasAnyRegistrationDocument(taxCertificate, insurance, technicalLicense, isoCertificate)) {
             throw new BadRequestException("Servis başvurusu için en az bir belge yüklenmelidir.");
         }
-        ServiceProvider provider = createProvider(request);
-        addRegistrationDocument(provider.getId(), "Vergi Levhası", taxCertificate);
-        addRegistrationDocument(provider.getId(), "Sigorta Belgesi", insurance);
-        addRegistrationDocument(provider.getId(), "Teknik Lisans", technicalLicense);
-        addRegistrationDocument(provider.getId(), "ISO Sertifikası", isoCertificate);
-        return ProviderResponse.from(providerService.getByEmail(provider.getEmail()));
+        validateRegistrationDocuments(taxCertificate, insurance, technicalLicense, isoCertificate);
+
+        List<StoredUpload> storedUploads = new ArrayList<>();
+        try {
+            ServiceProvider provider = createProvider(request);
+            addRegistrationDocument(provider.getId(), "Vergi Levhası", taxCertificate, storedUploads);
+            addRegistrationDocument(provider.getId(), "Sigorta Belgesi", insurance, storedUploads);
+            addRegistrationDocument(provider.getId(), "Teknik Lisans", technicalLicense, storedUploads);
+            addRegistrationDocument(provider.getId(), "ISO Sertifikası", isoCertificate, storedUploads);
+            return ProviderResponse.from(providerService.getByEmail(provider.getEmail()));
+        } catch (RuntimeException exception) {
+            storedUploads.forEach(uploadService::delete);
+            throw exception;
+        }
     }
 
     private ServiceProvider createProvider(CreateProviderRequest request) {
@@ -120,12 +147,31 @@ public class ProviderController {
         ));
     }
 
-    private void addRegistrationDocument(String providerId, String type, MultipartFile file) {
+    private void addRegistrationDocument(
+            String providerId,
+            String type,
+            MultipartFile file,
+            List<StoredUpload> storedUploads
+    ) {
         if (file == null || file.isEmpty()) {
             return;
         }
         StoredUpload upload = uploadService.storeProviderDocument(file);
-        providerService.addDocument(providerId, new AddDocumentCommand(type, upload.url(), upload.originalFileName()));
+        storedUploads.add(upload);
+        providerService.addDocument(providerId, new AddDocumentCommand(
+                type,
+                upload.url(),
+                upload.originalFileName(),
+                upload.contentSha256()
+        ));
+    }
+
+    private void validateRegistrationDocuments(MultipartFile... files) {
+        for (MultipartFile file : files) {
+            if (file != null && !file.isEmpty()) {
+                uploadService.validateProviderDocument(file);
+            }
+        }
     }
 
     private boolean hasAnyRegistrationDocument(MultipartFile... files) {
@@ -157,6 +203,16 @@ public class ProviderController {
         return ProviderResponse.from(providerService.setTrusted(providerId, request.trusted()));
     }
 
+    @PostMapping("/{providerId}/landing/approve")
+    public ProviderResponse approveLandingVisibility(@PathVariable String providerId) {
+        return ProviderResponse.from(providerService.approveLandingVisibility(providerId));
+    }
+
+    @PostMapping("/{providerId}/landing/reject")
+    public ProviderResponse rejectLandingVisibility(@PathVariable String providerId) {
+        return ProviderResponse.from(providerService.rejectLandingVisibility(providerId));
+    }
+
     @PostMapping("/{providerId}/documents/{documentId}/verify")
     public ProviderDocumentResponse verifyDocument(
             @PathVariable String providerId,
@@ -178,38 +234,41 @@ public class ProviderController {
     }
 
     public record CreateProviderRequest(
-            @NotBlank String name,
-            @NotBlank String contactName,
-            @Email @NotBlank String email,
-            @NotBlank String phone,
-            @NotBlank String city,
-            @NotBlank String district,
-            @NotEmpty Set<String> specialties,
-            Set<String> expertiseTags,
-            Set<String> coverageDistricts,
-            @NotBlank String password
+            @NotBlank @Size(max = 255) String name,
+            @NotBlank @Size(max = 255) String contactName,
+            @Email @NotBlank @Size(max = 255) String email,
+            @NotBlank @Size(max = 255) String phone,
+            @NotBlank @Size(max = 255) String city,
+            @NotBlank @Size(max = 255) String district,
+            @NotEmpty @Size(max = 6) Set<@Size(max = 50) String> specialties,
+            @Size(max = 50) Set<@Size(max = 120) String> expertiseTags,
+            @Size(max = 100) Set<@Size(max = 120) String> coverageDistricts,
+            @NotBlank @Size(min = 8, max = 128) String password
     ) {
     }
 
     public record UpdateProviderProfileRequest(
-            @NotBlank String name,
-            @NotBlank String contactName,
-            @NotBlank String phone,
-            @NotBlank String city,
-            @NotBlank String district,
-            String address,
-            String taxNumber,
-            String logoUrl,
-            @NotEmpty Set<String> specialties,
-            Set<String> expertiseTags,
-            Set<String> coverageDistricts
+            @NotBlank @Size(max = 255) String name,
+            @NotBlank @Size(max = 255) String contactName,
+            @NotBlank @Size(max = 255) String phone,
+            @NotBlank @Size(max = 255) String city,
+            @NotBlank @Size(max = 255) String district,
+            @Size(max = 500) String address,
+            @Size(max = 100) String taxNumber,
+            @Size(max = 1_000) String logoUrl,
+            @NotEmpty @Size(max = 6) Set<@Size(max = 50) String> specialties,
+            @Size(max = 50) Set<@Size(max = 120) String> expertiseTags,
+            @Size(max = 100) Set<@Size(max = 120) String> coverageDistricts
     ) {
     }
 
     public record TrustedRequest(boolean trusted) {
     }
 
-    public record DocumentReviewRequest(String notes) {
+    public record LandingVisibilityRequest(boolean visible) {
+    }
+
+    public record DocumentReviewRequest(@Size(max = 2_000) String notes) {
     }
 
     public record ProviderResponse(
@@ -228,6 +287,8 @@ public class ProviderController {
             boolean isTrusted,
             BigDecimal rating,
             int completedJobs,
+            LandingVisibility landingVisibility,
+            Instant landingApprovedAt,
             Set<String> specialties,
             Set<String> expertiseTags,
             Set<String> coverageDistricts,
@@ -252,13 +313,23 @@ public class ProviderController {
                     provider.isTrusted(),
                     provider.getRating(),
                     provider.getCompletedJobs(),
+                    provider.getLandingVisibility(),
+                    provider.getLandingApprovedAt(),
                     provider.getSpecialties().stream().map(ApiEnums::display).collect(Collectors.toSet()),
                     provider.getExpertiseTags() == null ? Set.of() : provider.getExpertiseTags(),
                     provider.getCoverageDistricts() == null ? Set.of() : provider.getCoverageDistricts(),
-                    provider.getDocuments().stream().map(ProviderDocumentResponse::from).toList(),
+                    documentResponses(provider),
                     provider.getCreatedAt(),
                     provider.getUpdatedAt()
             );
+        }
+
+        private static List<ProviderDocumentResponse> documentResponses(ServiceProvider provider) {
+            Set<String> seenIds = new HashSet<>();
+            return provider.getDocuments().stream()
+                    .filter(document -> seenIds.add(document.getId()))
+                    .map(ProviderDocumentResponse::from)
+                    .toList();
         }
     }
 

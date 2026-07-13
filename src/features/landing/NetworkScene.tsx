@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { factoryNodes, serviceNodes, connections } from './data';
-import { Building2, ShieldCheck } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { MapPin, RadioTower, ShieldCheck } from 'lucide-react';
+import { resolvePublicFileUrl } from '@/lib/api';
+import { showcaseSlots, type LandingProvider } from './data';
+
+interface NetworkSceneProps {
+  providers: LandingProvider[];
+  verifiedProviderCount: number;
+  isLoading: boolean;
+}
 
 interface Line {
   x1: number;
@@ -10,47 +17,45 @@ interface Line {
   key: string;
 }
 
-export default function NetworkScene() {
+export default function NetworkScene({ providers, verifiedProviderCount, isLoading }: NetworkSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const rafRef = useRef<number>(0);
   const pendingRef = useRef(false);
+  const visibleProviders = providers.slice(0, showcaseSlots.length);
+  const providerCount = visibleProviders.length;
 
   const computeLines = useCallback(() => {
     const scene = sceneRef.current;
     if (!scene) return;
+
     const sceneRect = scene.getBoundingClientRect();
-    const nodes = scene.querySelectorAll<HTMLElement>('[data-network-node]');
-    const positions = new Map<string, { cx: number; cy: number }>();
-
-    nodes.forEach((node) => {
-      const id = node.dataset.networkNode;
-      if (!id) return;
+    const nodes = Array.from(scene.querySelectorAll<HTMLElement>('[data-network-node]'));
+    const points = nodes.map((node) => {
       const rect = node.getBoundingClientRect();
-      positions.set(id, {
-        cx: rect.left + rect.width / 2 - sceneRect.left,
-        cy: rect.top + rect.height / 2 - sceneRect.top,
-      });
+      return {
+        x: rect.left + rect.width / 2 - sceneRect.left,
+        y: rect.top + rect.height / 2 - sceneRect.top,
+      };
     });
 
-    const newLines: Line[] = [];
-    connections.forEach((c, i) => {
-      const p1 = positions.get(c.from);
-      const p2 = positions.get(c.to);
-      if (!p1 || !p2) return;
-      newLines.push({
-        x1: p1.cx,
-        y1: p1.cy,
-        x2: p2.cx,
-        y2: p2.cy,
-        key: `${c.from}-${c.to}-${i}`,
-      });
-    });
+    const pairs: Array<[number, number]> = [];
+    for (let index = 0; index < points.length - 1; index += 1) {
+      pairs.push([index, index + 1]);
+    }
+    for (let index = 0; index < points.length - 2; index += 2) {
+      pairs.push([index, index + 2]);
+    }
 
-    setLines(newLines);
+    setLines(pairs.map(([from, to]) => ({
+      x1: points[from].x,
+      y1: points[from].y,
+      x2: points[to].x,
+      y2: points[to].y,
+      key: `${from}-${to}`,
+    })));
   }, []);
 
-  // ResizeObserver + rAF batching
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -64,32 +69,31 @@ export default function NetworkScene() {
       });
     };
 
-    const ro = new ResizeObserver(schedule);
-    ro.observe(scene);
-
-    // Delayed initial measurement after fonts/layout settle
-    const t1 = setTimeout(schedule, 80);
-    const t2 = setTimeout(schedule, 400);
+    const observer = new ResizeObserver(schedule);
+    observer.observe(scene);
+    const firstMeasurement = window.setTimeout(schedule, 80);
+    const settledMeasurement = window.setTimeout(schedule, 450);
 
     return () => {
-      ro.disconnect();
+      observer.disconnect();
       cancelAnimationFrame(rafRef.current);
-      clearTimeout(t1);
-      clearTimeout(t2);
+      window.clearTimeout(firstMeasurement);
+      window.clearTimeout(settledMeasurement);
     };
-  }, [computeLines]);
+  }, [computeLines, providerCount]);
 
-  // Mouse parallax
   useEffect(() => {
     const scene = sceneRef.current;
-    if (!scene) return;
-    let raf = 0;
+    const finePointer = window.matchMedia('(pointer: fine)').matches;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!scene || !finePointer || reducedMotion) return;
 
-    const handleMove = (e: MouseEvent) => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const x = (e.clientX / window.innerWidth - 0.5) * -22;
-        const y = (e.clientY / window.innerHeight - 0.5) * -14;
+    let frame = 0;
+    const handleMove = (event: MouseEvent) => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const x = (event.clientX / window.innerWidth - 0.5) * -12;
+        const y = (event.clientY / window.innerHeight - 0.5) * -7;
         scene.style.setProperty('--px', `${x}px`);
         scene.style.setProperty('--py', `${y}px`);
       });
@@ -98,112 +102,142 @@ export default function NetworkScene() {
     window.addEventListener('mousemove', handleMove, { passive: true });
     return () => {
       window.removeEventListener('mousemove', handleMove);
-      cancelAnimationFrame(raf);
+      cancelAnimationFrame(frame);
     };
   }, []);
-
-  const allNodes = [...factoryNodes, ...serviceNodes];
 
   return (
     <div
       ref={sceneRef}
       className="maintly-scene"
       aria-hidden="true"
-      style={{ transform: 'translate(var(--px, 0), var(--py, 0))' }}
+      style={{ transform: 'translate3d(var(--px, 0), var(--py, 0), 0)' }}
     >
-      {/* SVG connection graph */}
+      <div className="maintly-scene-glow" />
+      <div className="maintly-scene-grid" />
+      <div className="maintly-scene-noise" />
+
       <svg className="maintly-svg-overlay">
         <defs>
-          <linearGradient id="conn-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="rgba(239,68,68,0.30)" />
-            <stop offset="55%" stopColor="rgba(20,184,166,0.20)" />
-            <stop offset="100%" stopColor="rgba(20,184,166,0.08)" />
+          <linearGradient id="live-connection" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgba(239,68,68,0.14)" />
+            <stop offset="52%" stopColor="rgba(239,68,68,0.48)" />
+            <stop offset="100%" stopColor="rgba(20,184,166,0.18)" />
           </linearGradient>
-          <filter id="conn-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="2" result="blur" />
+          <filter id="live-glow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="2.2" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
-        {lines.map((l, index) => (
-          <g key={l.key}>
+        {lines.map((line, index) => (
+          <g key={line.key}>
             <line
-              x1={l.x1}
-              y1={l.y1}
-              x2={l.x2}
-              y2={l.y2}
-              stroke="url(#conn-grad)"
-              strokeWidth="1.5"
-              strokeDasharray="5 5"
+              x1={line.x1}
+              y1={line.y1}
+              x2={line.x2}
+              y2={line.y2}
+              stroke="url(#live-connection)"
+              strokeWidth="1.35"
+              strokeDasharray="5 7"
               strokeLinecap="round"
-              filter="url(#conn-glow)"
-              opacity="0.8"
+              opacity="0.72"
             >
-              <animate
-                attributeName="stroke-dashoffset"
-                from="0"
-                to="-10"
-                dur="1.2s"
-                repeatCount="indefinite"
-              />
+              <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="3s" repeatCount="indefinite" />
             </line>
-            {/* Pulse dot at midpoint */}
-            <circle r="2.5" fill="rgba(239,68,68,0.7)" filter="url(#conn-glow)">
+            <circle r="2.6" fill="rgba(239,68,68,0.8)" filter="url(#live-glow)">
               <animateMotion
-                dur={`${2.5 + (index % 4) * 0.28}s`}
+                dur={`${3.4 + (index % 4) * 0.45}s`}
                 repeatCount="indefinite"
-                path={`M${l.x1},${l.y1} L${l.x2},${l.y2}`}
+                path={`M${line.x1},${line.y1} L${line.x2},${line.y2}`}
               />
             </circle>
           </g>
         ))}
       </svg>
 
-      {/* 3D isometric grid floor */}
-      <div className="maintly-scene-grid" />
 
-      {/* Subtle noise / texture */}
-      <div className="maintly-scene-noise" />
 
-      {/* Network nodes */}
-      {allNodes.map((node) => (
-        <div
-          key={node.id}
-          data-network-node={node.id}
-          className="maintly-network-node"
-          style={{
-            top: node.position.top,
-            left: node.position.left,
-            animationDuration: `${node.float.dur}s`,
-            animationDelay: `${node.float.delay}s`,
-            ['--fy' as string]: `${node.float.ampY}px`,
-            ['--fx' as string]: `${node.float.ampX}px`,
-          }}
-        >
-          <div className="maintly-node-card">
-            <span
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-sm font-black ${node.tone}`}
+      {isLoading
+        ? showcaseSlots.slice(0, 5).map((slot, index) => (
+            <div
+              key={`skeleton-${index}`}
+              className="maintly-network-node maintly-network-node--skeleton"
+              data-slot-index={index}
+              style={{ top: slot.top, left: slot.left }}
             >
-              {node.initials}
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-black text-gray-900">
-                {node.name}
-              </span>
-              <span className="mt-1 flex items-center gap-1 text-[11px] font-bold text-gray-400">
-                {node.type === 'Servis' ? (
-                  <ShieldCheck className="h-3 w-3" />
-                ) : (
-                  <Building2 className="h-3 w-3" />
-                )}
-                {node.type} · {node.city}
-              </span>
-            </span>
-          </div>
-        </div>
-      ))}
+              <div className="maintly-node-card">
+                <span className="maintly-node-skeleton maintly-node-skeleton--logo" />
+                <span className="min-w-0 flex-1">
+                  <span className="maintly-node-skeleton maintly-node-skeleton--title" />
+                  <span className="maintly-node-skeleton maintly-node-skeleton--meta" />
+                </span>
+              </div>
+            </div>
+          ))
+        : visibleProviders.map((provider, index) => {
+            const slot = showcaseSlots[index];
+            return (
+              <div
+                key={`${provider.name}-${provider.logoUrl ?? index}`}
+                data-network-node={`${index}-${provider.name}`}
+                data-slot-index={index}
+                className="maintly-network-node"
+                style={{
+                  top: slot.top,
+                  left: slot.left,
+                  animationDuration: `${slot.float.dur}s`,
+                  animationDelay: `${slot.float.delay}s`,
+                  ['--fy' as string]: `${slot.float.ampY}px`,
+                  ['--fx' as string]: `${slot.float.ampX}px`,
+                }}
+              >
+                <div className="maintly-node-card">
+                  <ProviderLogo provider={provider} eager={index < 4} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-black tracking-[-0.01em] text-slate-950">
+                      {provider.name}
+                    </span>
+                    <span className="mt-1.5 flex min-w-0 items-center gap-1 text-[10px] font-bold text-slate-500">
+                      <MapPin className="h-3 w-3 shrink-0 text-red-500" />
+                      <span className="truncate">{provider.city}</span>
+                      <span className="text-slate-300">·</span>
+                      <span className="truncate">{provider.primarySpecialty}</span>
+                    </span>
+                  </span>
+                  <ShieldCheck className={`h-4 w-4 shrink-0 ${provider.trusted ? 'text-amber-500' : 'text-emerald-500'}`} />
+                </div>
+              </div>
+            );
+          })}
     </div>
+  );
+}
+
+function ProviderLogo({ provider, eager }: { provider: LandingProvider; eager: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const initials = provider.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toLocaleUpperCase('tr-TR'))
+    .join('');
+
+  return (
+    <span className="maintly-provider-logo">
+      {!failed && provider.logoUrl ? (
+        <img
+          src={resolvePublicFileUrl(provider.logoUrl)}
+          alt=""
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span>{initials || 'MS'}</span>
+      )}
+    </span>
   );
 }

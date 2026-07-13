@@ -6,20 +6,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.security")
 public record SecurityProperties(
         boolean enabled,
-        List<String> allowedOriginPatterns,
-        String jwtSecret,
-        String jwtIssuer,
-        long jwtExpirationMinutes
+        List<String> allowedOriginPatterns
 ) {
-    public SecurityProperties {
-        if (jwtSecret == null || jwtSecret.isBlank()) {
-            jwtSecret = "ZtemizindenLocalJwtSecretMustBeAtLeast32Chars!";
-        }
-        if (jwtIssuer == null || jwtIssuer.isBlank()) {
-            jwtIssuer = "ztemizinden";
-        }
-        if (jwtExpirationMinutes <= 0) {
-            jwtExpirationMinutes = 480;
-        }
-    }
 }

@@ -36,7 +36,7 @@ graph TD
    * Contains security checking classes like `CurrentUser` to extract user state from Spring Security Context.
    * Broadcasts real-time events via `TicketMessageBroadcaster`.
 3. **Domain Layer (`com.iknow.ztemizindenbackend.domain`):**
-   * Holds JPA `@Entity` annotations representing database tables (e.g., `Ticket`, `Asset`, `AuthUser`).
+   * Holds JPA `@Entity` annotations representing database tables (e.g., `Ticket`, `Asset`, `Customer`, `ServiceProvider`).
    * Enforces business rules and state changes inside domain model classes directly (e.g., `Asset.moveTo(...)`, `Ticket.acceptOffer(...)`).
    * Declares `@Repository` interfaces inheriting `JpaRepository` for DB access.
 4. **Configuration Layer (`com.iknow.ztemizindenbackend.config`):**
@@ -46,14 +46,14 @@ graph TD
 
 ## 2. Authentication & Authorization Model
 
-Ztemizinden supports a robust hybrid security structure that handles both a **lightweight internal JWT engine** for local development/MVP and **Keycloak OAuth2 Resource Server integration** for enterprise environments.
+Ztemizinden uses **Keycloak as its only identity, password and token authority**. The browser uses Authorization Code + PKCE; the backend is a resource server and provisioning client.
 
 ### Route Security Configuration
 Defined in `SecurityConfig.java`:
 * Uses standard Spring OAuth2 Resource Server filters to validate incoming tokens.
 * Can be globally bypassed by setting `APP_SECURITY_ENABLED=false` for local debugging.
 * Routes are partitioned strictly by authority role limits:
-  * **Public routes:** `POST /api/auth/login`, `POST /api/customers` (registration), `POST /api/providers` (registration), `/ws` (WebSockets).
+  * **Public routes:** `POST /api/auth/forgot-password`, `POST /api/customers` (registration), `POST /api/providers` (registration), `/ws` handshake.
   * **Admin role (`ROLE_ADMIN`):** `/api/admin/**`, customer/provider admin management, verification of uploads.
   * **Customer role (`ROLE_CUSTOMER`):** `/api/assets/**`, `/api/tickets` CRUD, billing approval/disputes.
   * **Service role (`ROLE_SERVICE`):** `GET /api/providers/me`, provider profile changes, upload provider verification documents.
@@ -72,10 +72,10 @@ Role mapping operates dynamically:
    ```
 3. Roles are normalized to uppercase, prefixed with `ROLE_`, and injected as `GrantedAuthority` records in the Spring Security context (e.g., `ROLE_CUSTOMER`).
 
-### Dynamic Keycloak Sync (Optional)
-When `app.keycloak.provisioning.enabled=true`, the `IdentityProvisioningService` activates:
-* Connects via Java HTTP Client to the Keycloak instance on startup.
-* Automates provisioning customer/provider logins during API register flows directly into the Keycloak directory using the Keycloak Admin API.
+### Authentication Source of Truth
+Keycloak stores credentials, sessions and roles. `SecurityConfig` downloads signing keys from the configured JWK endpoint and requires the exact issuer plus the `ztemizinden-api` audience. `KeycloakIdentityService` uses a least-privilege service account to create users, assign realm roles, enable/disable provider identities and trigger password actions. Domain rows store only the immutable Keycloak `sub` in `identity_subject`; no password or refresh token is persisted by this application.
+
+Frontend tokens remain inside the Keycloak JavaScript adapter's memory. API calls call `updateToken(30)` before sending the bearer token; logout terminates the Keycloak SSO session. WebSocket CONNECT uses the current in-memory bearer token and the backend performs the same JWT validation.
 
 ---
 

@@ -8,6 +8,8 @@ import com.iknow.ztemizindenbackend.application.CurrentUser;
 import com.iknow.ztemizindenbackend.domain.Asset;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -104,7 +106,7 @@ public class AssetController {
     // ── Move ──────────────────────────────────────────────────────────
 
     @PutMapping("/{id}/move")
-    public AssetResponse move(@PathVariable String id, @RequestBody MoveAssetRequest request) {
+    public AssetResponse move(@PathVariable String id, @Valid @RequestBody MoveAssetRequest request) {
         currentUser.requireCustomerAsset(assetService.get(id));
         Asset asset = assetService.move(id, request.newParentId());
         return toResponse(asset);
@@ -114,7 +116,7 @@ public class AssetController {
 
     @PutMapping("/{id}/reorder")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void reorder(@PathVariable String id, @RequestBody ReorderRequest request) {
+    public void reorder(@PathVariable String id, @Valid @RequestBody ReorderRequest request) {
         currentUser.requireCustomerAsset(assetService.get(id));
         assetService.reorder(id, request.orderedChildIds());
     }
@@ -271,42 +273,44 @@ public class AssetController {
     // ── Request / Response records ────────────────────────────────────
 
     public record CreateAssetRequest(
-            @NotBlank String ownerId,
-            @NotBlank String name,
-            @NotBlank String tagNo,
-            @NotBlank String type,
-            @NotBlank String brand,
-            @NotBlank String model,
-            @NotBlank String serialNumber,
+            @NotBlank @Size(max = 255) String ownerId,
+            @NotBlank @Size(max = 255) String name,
+            @NotBlank @Size(max = 255) String tagNo,
+            @NotBlank @Size(max = 50) String type,
+            @NotBlank @Size(max = 255) String brand,
+            @NotBlank @Size(max = 255) String model,
+            @NotBlank @Size(max = 255) String serialNumber,
             LocalDate purchaseDate,
             LocalDate warrantyEndDate,
-            String location,
-            String department,
-            String description,
-            String parentId
+            @Size(max = 255) String location,
+            @Size(max = 255) String department,
+            @Size(max = 2_000) String description,
+            @Size(max = 255) String parentId
     ) {
     }
 
-    public record MoveAssetRequest(String newParentId) {
+    public record MoveAssetRequest(@Size(max = 255) String newParentId) {
     }
 
     public record UpdateAssetRequest(
-            @NotBlank String name,
-            @NotBlank String tagNo,
-            @NotBlank String type,
-            @NotBlank String brand,
-            @NotBlank String model,
-            @NotBlank String serialNumber,
+            @NotBlank @Size(max = 255) String name,
+            @NotBlank @Size(max = 255) String tagNo,
+            @NotBlank @Size(max = 50) String type,
+            @NotBlank @Size(max = 255) String brand,
+            @NotBlank @Size(max = 255) String model,
+            @NotBlank @Size(max = 255) String serialNumber,
             LocalDate purchaseDate,
             LocalDate warrantyEndDate,
-            @NotBlank String status,
-            String location,
-            String department,
-            String description
+            @NotBlank @Size(max = 50) String status,
+            @Size(max = 255) String location,
+            @Size(max = 255) String department,
+            @Size(max = 2_000) String description
     ) {
     }
 
-    public record ReorderRequest(List<String> orderedChildIds) {
+    public record ReorderRequest(
+            @NotEmpty @Size(max = 1_000) List<@NotBlank @Size(max = 255) String> orderedChildIds
+    ) {
     }
 
     public record AssetBreadcrumbItem(String id, String name, int depth) {

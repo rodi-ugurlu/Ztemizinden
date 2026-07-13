@@ -13,7 +13,7 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class CustomerService {
     private final CustomerRepository customerRepository;
-    private final AuthService authService;
+    private final KeycloakIdentityService keycloakIdentityService;
 
     @Transactional(readOnly = true)
     public List<Customer> list() {
@@ -24,6 +24,15 @@ public class CustomerService {
     public Customer getByEmail(String email) {
         return customerRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new NotFoundException("Customer not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public Customer getCurrent(String identitySubject, String email) {
+        if (identitySubject != null && !identitySubject.isBlank()) {
+            return customerRepository.findByIdentitySubject(identitySubject)
+                    .orElseGet(() -> getByEmail(email));
+        }
+        return getByEmail(email);
     }
 
     @Transactional
@@ -57,8 +66,14 @@ public class CustomerService {
                 defaultValue(command.district(), "Belirtilmedi")
         );
 
-        Customer savedCustomer = customerRepository.save(customer);
-        authService.createCustomerUser(savedCustomer, command.password());
+        Customer savedCustomer = customerRepository.saveAndFlush(customer);
+        String identitySubject = keycloakIdentityService.provisionCustomer(
+                savedCustomer.getId(),
+                savedCustomer.getEmail(),
+                savedCustomer.getName(),
+                command.password()
+        );
+        savedCustomer.linkIdentity(identitySubject);
         return savedCustomer;
     }
 

@@ -97,7 +97,7 @@ function ensureConnected() {
   if (!hasSubscribers()) return;
 
   const token = getStoredAccessToken();
-  if (!token && !canConnectWithoutToken()) {
+  if (!token) {
     scheduleReconnect();
     return;
   }
@@ -476,10 +476,6 @@ function parseTicketEvent(body: string) {
   } catch {
     return null;
   }
-}
-
-function canConnectWithoutToken() {
-  return import.meta.env.VITE_AUTH_MODE === 'demo';
 }
 
 function frame(command: string, headers: Record<string, string>, body = '') {

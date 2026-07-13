@@ -1,7 +1,7 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
-import { Building2, Wrench, LogOut, TicketCheck, Users } from 'lucide-react';
+import { Building2, LogOut, TicketCheck, Users } from 'lucide-react';
 import logoImg from '@/assets/logo.png';
 
 /**
@@ -11,15 +11,13 @@ import logoImg from '@/assets/logo.png';
  */
 export default function ServiceLayout() {
   const { isAuthenticated, logout, user } = useAuthStore();
-  const navigate = useNavigate();
 
   if (!isAuthenticated) {
     return <Outlet />;
   }
 
   const handleLogout = () => {
-    logout();
-    navigate('/service/login');
+    void logout();
   };
 
   return (

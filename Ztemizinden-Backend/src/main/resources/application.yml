@@ -1,21 +1,14 @@
 spring:
   application:
     name: ztemizinden-backend
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:55432/ztemizinden}
     username: ${DB_USERNAME:ztemizinden}
     password: ${DB_PASSWORD:ztemizinden}
-  mail:
-    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
-    port: ${SPRING_MAIL_PORT:587}
-    username: ${SPRING_MAIL_USERNAME:}
-    password: ${SPRING_MAIL_PASSWORD:}
-    properties:
-      mail:
-        smtp:
-          auth: ${SPRING_MAIL_SMTP_AUTH:true}
-          starttls:
-            enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:true}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -29,29 +22,24 @@ app:
   security:
     enabled: ${APP_SECURITY_ENABLED:true}
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,https://*.vercel.app,https://*.ngrok-free.app,https://*.ngrok.app,https://*.ngrok.io}
-    jwt-secret: ${APP_JWT_SECRET:ZtemizindenLocalJwtSecretMustBeAtLeast32Chars!}
-    jwt-issuer: ${APP_JWT_ISSUER:ztemizinden}
-    jwt-expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:480}
+  keycloak:
+    issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/ztemizinden}
+    jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8081/realms/ztemizinden/protocol/openid-connect/certs}
+    audience: ${KEYCLOAK_AUDIENCE:ztemizinden-api}
+    realm: ${KEYCLOAK_REALM:ztemizinden}
+    web-client-id: ${KEYCLOAK_WEB_CLIENT_ID:ztemizinden-web}
+    admin-base-url: ${KEYCLOAK_ADMIN_BASE_URL:http://localhost:8081}
+    admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:ztemizinden-backend-admin}
+    admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:ztemizinden-local-admin-secret-change-me}
+    password-reset-redirect-uri: ${KEYCLOAK_PASSWORD_RESET_REDIRECT_URI:http://localhost:5173/customer/login}
+    password-reset-lifespan-seconds: ${KEYCLOAK_PASSWORD_RESET_LIFESPAN_SECONDS:900}
+    migrate-legacy-users: ${KEYCLOAK_MIGRATE_LEGACY_USERS:false}
   upload:
     root-dir: ${APP_UPLOAD_DIR:uploads}
-  password-reset:
-    frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:5173}
-    mail-from: ${APP_MAIL_FROM:${SPRING_MAIL_USERNAME:no-reply@maintly.app}}
-    token-expiration-minutes: ${APP_PASSWORD_RESET_EXPIRATION_MINUTES:30}
-    log-reset-link: ${APP_PASSWORD_RESET_LOG_LINK:true}
+    orphan-grace-period: ${APP_UPLOAD_ORPHAN_GRACE_PERIOD:24h}
+    orphan-cleanup-cron: "${APP_UPLOAD_ORPHAN_CLEANUP_CRON:0 15 3 * * *}"
   demo-data:
-    ensure-demo-accounts: ${APP_DEMO_ENSURE_ACCOUNTS:true}
-    reset-and-seed: ${APP_DEMO_RESET_AND_SEED:true}
-  keycloak:
-    provisioning:
-      enabled: ${APP_KEYCLOAK_PROVISIONING_ENABLED:false}
-      base-url: ${KEYCLOAK_BASE_URL:http://localhost:8081}
-      realm: ${KEYCLOAK_REALM:ztemizinden}
-      admin-realm: ${KEYCLOAK_ADMIN_REALM:master}
-      admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
-      admin-username: ${KEYCLOAK_ADMIN_USERNAME:admin}
-      admin-password: ${KEYCLOAK_ADMIN_PASSWORD:admin}
-      default-password: ${APP_REGISTRATION_DEFAULT_PASSWORD:demo123}
-
+    ensure-demo-accounts: ${APP_DEMO_ENSURE_ACCOUNTS:false}
+    reset-and-seed: ${APP_DEMO_RESET_AND_SEED:false}
 server:
   port: ${SERVER_PORT:8080}

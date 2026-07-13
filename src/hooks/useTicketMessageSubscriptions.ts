@@ -32,7 +32,7 @@ export function useTicketMessageSubscriptions(
 
       return subscriptions.join('|');
     },
-    [activeTarget?.conversationId, activeTarget?.ticketId, tickets]
+    [activeTarget, tickets]
   );
 
   useEffect(() => {

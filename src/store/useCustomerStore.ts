@@ -101,7 +101,11 @@ export type TicketStatus = 'OPEN' | 'OFFERED' | 'IN_PROGRESS' | 'RESOLVED' | 'CL
 export type OfferType = 'DISCOVERY' | 'FIXED_PRICE';
 export type OfferStatus = 'PENDING' | 'INVITED' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN';
 export type ConversationStatus = 'ACTIVE' | 'ACCEPTED' | 'CLOSED';
-export type ConversationClosedReason = 'REJECTED' | 'NOT_SELECTED';
+export type ConversationClosedReason =
+  | 'REJECTED'
+  | 'NOT_SELECTED'
+  | 'TICKET_CANCELLED'
+  | 'TICKET_CLOSED';
 export type BillingStatus = 'AWAITING_CUSTOMER_APPROVAL' | 'APPROVED' | 'DISPUTED';
 
 export interface TicketOffer {

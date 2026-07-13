@@ -2,11 +2,17 @@ package com.iknow.ztemizindenbackend.domain;
 
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface AssetRepository extends JpaRepository<Asset, String> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select asset from Asset asset where asset.id = :id")
+    Optional<Asset> findByIdForUpdate(@Param("id") String id);
 
     /** Original flat list — still used by the legacy Assets page. */
     List<Asset> findByOwnerIdOrderByCreatedAtDesc(String ownerId);

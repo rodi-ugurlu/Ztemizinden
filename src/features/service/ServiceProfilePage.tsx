@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { api, type UploadResponse } from '@/lib/api';
+import { api, resolvePublicFileUrl, type UploadResponse } from '@/lib/api';
 import { cities, districtsForCity, firstDistrictForCity, formatLocation, normalizeDistrictList } from '@/lib/locations';
 import {
   AlertCircle,
@@ -14,6 +14,8 @@ import {
   Building2,
   CheckCircle2,
   Edit3,
+  Eye,
+  EyeOff,
   FileCheck2,
   FileText,
   Loader2,
@@ -23,6 +25,7 @@ import {
   Save,
   ShieldCheck,
   Star,
+  Sparkles,
   Tags,
   Upload,
   UserRound,
@@ -58,6 +61,7 @@ export default function ServiceProfilePage() {
     resolveProviderSession,
     fetchProviderProfile,
     updateProviderProfile,
+    setLandingVisibility,
     currentProviderId,
     isLoading,
     error,
@@ -67,6 +71,7 @@ export default function ServiceProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLandingUpdating, setIsLandingUpdating] = useState(false);
   const [notice, setNotice] = useState('');
   const [localError, setLocalError] = useState('');
 
@@ -96,6 +101,10 @@ export default function ServiceProfilePage() {
     }
     if (form.coverageDistricts.length === 0) {
       setLocalError('Hizmet verilen en az bir ilçe seçilmelidir.');
+      return;
+    }
+    if (logoFile && logoFile.size > 1024 * 1024) {
+      setLocalError('Firma logosu en fazla 1 MB olabilir.');
       return;
     }
 
@@ -138,6 +147,30 @@ export default function ServiceProfilePage() {
     setIsEditing(false);
     setNotice('');
     setLocalError('');
+  };
+
+  const handleLandingVisibility = async (visible: boolean) => {
+    setNotice('');
+    setLocalError('');
+    setIsLandingUpdating(true);
+    try {
+      const provider = await setLandingVisibility(visible);
+      setNotice(
+        provider.landingVisibility === 'PENDING'
+          ? 'Ana sayfa vitrin talebiniz incelemeye gönderildi.'
+          : provider.landingVisibility === 'VISIBLE'
+            ? 'Servisiniz Maintly vitrininde yayında.'
+            : 'Ana sayfa vitrin görünürlüğü kapatıldı.'
+      );
+    } catch (visibilityError) {
+      setLocalError(
+        visibilityError instanceof Error
+          ? visibilityError.message
+          : 'Vitrin görünürlüğü güncellenemedi'
+      );
+    } finally {
+      setIsLandingUpdating(false);
+    }
   };
 
   const startEditing = () => {
@@ -277,6 +310,55 @@ export default function ServiceProfilePage() {
                 </div>
               </div>
 
+              <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-5 text-white shadow-xl shadow-slate-950/10">
+                <div className="pointer-events-none absolute -right-10 -top-14 h-32 w-32 rounded-full bg-red-500/25 blur-3xl" />
+                <div className="relative">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-red-300">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Maintly vitrini
+                      </p>
+                      <h3 className="mt-2 text-base font-black">Ana sayfada markanızı gösterin</h3>
+                    </div>
+                    <LandingVisibilityBadge visibility={providerProfile?.landingVisibility ?? 'HIDDEN'} />
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-400">
+                    Operasyon onayı tamamlanan servisler günlük dönen Maintly ağında otomatik olarak yer alır.
+                  </p>
+                  {providerProfile?.status !== 'Verified' && (
+                    <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200">
+                      Vitrin talebi için önce operasyon onayının tamamlanması gerekir.
+                    </p>
+                  )}
+                  {providerProfile?.status === 'Verified' && !providerProfile.logoUrl && (
+                    <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200">
+                      Logo yüklerseniz vitrinde kendi logonuz görünür; logo yoksa firma adınızdan temiz bir monogram kullanılır.
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    variant={providerProfile?.landingVisibility === 'HIDDEN' ? 'default' : 'outline'}
+                    disabled={
+                      isLandingUpdating ||
+                      providerProfile?.status !== 'Verified'
+                    }
+                    onClick={() => void handleLandingVisibility(providerProfile?.landingVisibility === 'HIDDEN')}
+                    className={
+                      providerProfile?.landingVisibility === 'HIDDEN'
+                        ? 'mt-4 w-full bg-red-500 text-white hover:bg-red-600'
+                        : 'mt-4 w-full border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white'
+                    }
+                  >
+                    {providerProfile?.landingVisibility === 'HIDDEN' ? (
+                      <><Eye className="h-4 w-4" /> Vitrin Talebi Gönder</>
+                    ) : (
+                      <><EyeOff className="h-4 w-4" /> Vitrinden Çık</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <Label htmlFor="service-logo" className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                   Logo
@@ -290,7 +372,7 @@ export default function ServiceProfilePage() {
                     onChange={(event) => setLogoFile(event.currentTarget.files?.[0] ?? null)}
                   />
                   <p className="text-xs leading-5 text-slate-500">
-                    PNG, JPG veya WEBP. En fazla 5 MB. {logoFile ? `Seçilen: ${logoFile.name}` : ''}
+                    PNG, JPG veya WEBP. En fazla 1 MB. {logoFile ? `Seçilen: ${logoFile.name}` : ''}
                   </p>
                 </div>
               </div>
@@ -547,11 +629,30 @@ function LogoPreview({ logoUrl, companyName }: { logoUrl?: string | null; compan
   return (
     <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-950 text-2xl font-black text-white shadow-sm">
       {logoUrl ? (
-        <img src={logoUrl} alt={`${companyName ?? 'Servis'} logosu`} className="h-full w-full object-cover" />
+        <img
+          src={resolvePublicFileUrl(logoUrl)}
+          alt={`${companyName ?? 'Servis'} logosu`}
+          className="h-full w-full bg-white object-contain p-1.5"
+        />
       ) : (
         <span>{(companyName || 'S').trim().charAt(0).toLocaleUpperCase('tr-TR')}</span>
       )}
     </div>
+  );
+}
+
+function LandingVisibilityBadge({ visibility }: { visibility: ServiceProvider['landingVisibility'] }) {
+  const variants = {
+    HIDDEN: 'border-white/10 bg-white/5 text-slate-400',
+    PENDING: 'border-amber-300/20 bg-amber-300/10 text-amber-200',
+    VISIBLE: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200',
+  };
+  const labels = { HIDDEN: 'Kapalı', PENDING: 'İncelemede', VISIBLE: 'Yayında' };
+
+  return (
+    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${variants[visibility]}`}>
+      {labels[visibility]}
+    </span>
   );
 }
 

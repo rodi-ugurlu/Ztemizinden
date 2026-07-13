@@ -2,12 +2,9 @@ package com.iknow.ztemizindenbackend.application;
 
 import com.iknow.ztemizindenbackend.domain.Asset;
 import com.iknow.ztemizindenbackend.domain.AssetRepository;
-import com.iknow.ztemizindenbackend.domain.AuthUser;
-import com.iknow.ztemizindenbackend.domain.AuthUserRepository;
 import com.iknow.ztemizindenbackend.domain.Customer;
 import com.iknow.ztemizindenbackend.domain.CustomerRepository;
 import com.iknow.ztemizindenbackend.domain.Enums.AssetType;
-import com.iknow.ztemizindenbackend.domain.Enums.AuthRole;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferType;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketCategory;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketPriority;
@@ -32,23 +29,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @RequiredArgsConstructor
 public class DemoAccountProvisioner implements ApplicationRunner {
-    private static final String DEMO_PASSWORD_HASH = "{noop}demo123";
-
     private static final String CUSTOMER_ID = "cust-001";
     private static final String CUSTOMER_EMAIL = "customer@demo.com";
 
     private static final String PROVIDER_ID = "sp-001";
     private static final String PROVIDER_EMAIL = "service@demo.com";
 
-    private static final String ADMIN_EMAIL = "admin@demo.com";
-
-    private final AuthUserRepository authUserRepository;
     private final CustomerRepository customerRepository;
     private final ServiceProviderRepository serviceProviderRepository;
     private final AssetRepository assetRepository;
     private final TicketRepository ticketRepository;
 
-    @Value("${app.demo-data.ensure-demo-accounts:true}")
+    @Value("${app.demo-data.ensure-demo-accounts:false}")
     private boolean ensureDemoAccounts;
 
     @Value("${app.demo-data.reset-and-seed:false}")
@@ -253,27 +245,16 @@ public class DemoAccountProvisioner implements ApplicationRunner {
                 true
         );
 
-        restoreAuthUser(alfa.getEmail(), AuthRole.CUSTOMER, alfa.getId(), null);
-        restoreAuthUser(beta.getEmail(), AuthRole.CUSTOMER, beta.getId(), null);
-        restoreAuthUser(gamma.getEmail(), AuthRole.CUSTOMER, gamma.getId(), null);
-        restoreAuthUser(hidro.getEmail(), AuthRole.SERVICE, null, hidro.getId());
-        restoreAuthUser(elektrik.getEmail(), AuthRole.SERVICE, null, elektrik.getId());
-        restoreAuthUser(mekanik.getEmail(), AuthRole.SERVICE, null, mekanik.getId());
-        restoreAuthUser(pnomatik.getEmail(), AuthRole.SERVICE, null, pnomatik.getId());
-        restoreAuthUser(tesis.getEmail(), AuthRole.SERVICE, null, tesis.getId());
-        restoreAuthUser(ADMIN_EMAIL, AuthRole.ADMIN, null, null);
     }
 
     private void clearOperationalData() {
         ticketRepository.deleteAll();
         assetRepository.deleteAll();
-        authUserRepository.deleteAll();
         customerRepository.deleteAll();
         serviceProviderRepository.deleteAll();
 
         ticketRepository.flush();
         assetRepository.flush();
-        authUserRepository.flush();
         customerRepository.flush();
         serviceProviderRepository.flush();
     }
@@ -282,9 +263,6 @@ public class DemoAccountProvisioner implements ApplicationRunner {
         Customer customer = ensureDemoCustomer();
         ServiceProvider provider = ensureDemoProvider();
 
-        restoreAuthUser(CUSTOMER_EMAIL, AuthRole.CUSTOMER, customer.getId(), null);
-        restoreAuthUser(PROVIDER_EMAIL, AuthRole.SERVICE, null, provider.getId());
-        restoreAuthUser(ADMIN_EMAIL, AuthRole.ADMIN, null, null);
     }
 
     private Customer ensureDemoCustomer() {
@@ -559,23 +537,6 @@ public class DemoAccountProvisioner implements ApplicationRunner {
 
     private MessageSeed service(String body) {
         return new MessageSeed("service", body);
-    }
-
-    private void restoreAuthUser(String email, AuthRole role, String customerId, String providerId) {
-        authUserRepository.findByEmailIgnoreCase(email)
-                .ifPresentOrElse(
-                        user -> {
-                            user.restore(email, DEMO_PASSWORD_HASH, role, customerId, providerId);
-                            authUserRepository.save(user);
-                        },
-                        () -> authUserRepository.save(new AuthUser(
-                                email,
-                                DEMO_PASSWORD_HASH,
-                                role,
-                                customerId,
-                                providerId
-                        ))
-                );
     }
 
     private record OfferSeed(ServiceProvider provider, OfferType type, int estimatedCost, String eta, String message) {

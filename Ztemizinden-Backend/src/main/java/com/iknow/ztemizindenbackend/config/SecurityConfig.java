@@ -1,14 +1,10 @@
 package com.iknow.ztemizindenbackend.config;
 
-import com.nimbusds.jose.jwk.source.ImmutableSecret;
-import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,15 +13,14 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
@@ -33,7 +28,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
-@EnableConfigurationProperties({SecurityProperties.class, KeycloakProvisioningProperties.class, PasswordResetProperties.class})
+@EnableConfigurationProperties({SecurityProperties.class, KeycloakProperties.class})
 public class SecurityConfig {
     private static final List<String> DEFAULT_ALLOWED_ORIGIN_PATTERNS = List.of(
             "http://localhost:*",
@@ -59,11 +54,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/favicon.svg", "/icons.svg", "/assets/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/reset-password").permitAll()
                 .requestMatchers(HttpMethod.GET, "/customer/**", "/service/**", "/admin/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/auth/reset-password").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/customers").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/providers").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/public/landing").permitAll()
                 .requestMatchers("/ws", "/ws/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/uploads/provider-documents/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/uploads/ticket-media/**").permitAll()
@@ -75,6 +69,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/customers/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/providers/me").hasAnyRole("SERVICE", "ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/providers/me").hasAnyRole("SERVICE", "ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/providers/me/landing-visibility").hasAnyRole("SERVICE", "ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/providers").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/uploads/ticket-media").hasAnyRole("CUSTOMER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/uploads/provider-documents").hasAnyRole("SERVICE", "ADMIN")
@@ -92,23 +87,18 @@ public class SecurityConfig {
     }
 
     @Bean
-    PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-    }
-
-    @Bean
-    JwtEncoder jwtEncoder(SecurityProperties securityProperties) {
-        byte[] secret = securityProperties.jwtSecret().getBytes(StandardCharsets.UTF_8);
-        return new NimbusJwtEncoder(new ImmutableSecret<>(secret));
-    }
-
-    @Bean
-    JwtDecoder jwtDecoder(SecurityProperties securityProperties) {
-        SecretKey key = jwtSecretKey(securityProperties);
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key)
-                .macAlgorithm(MacAlgorithm.HS256)
-                .build();
-        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(securityProperties.jwtIssuer()));
+    JwtDecoder jwtDecoder(KeycloakProperties keycloakProperties) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(keycloakProperties.jwkSetUri()).build();
+        OAuth2TokenValidator<Jwt> issuerValidator =
+                JwtValidators.createDefaultWithIssuer(keycloakProperties.issuerUri());
+        OAuth2TokenValidator<Jwt> audienceValidator = token -> token.getAudience().contains(keycloakProperties.audience())
+                ? OAuth2TokenValidatorResult.success()
+                : OAuth2TokenValidatorResult.failure(new OAuth2Error(
+                        "invalid_token",
+                        "Required Keycloak audience is missing",
+                        null
+                ));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(issuerValidator, audienceValidator));
         return decoder;
     }
 
@@ -131,11 +121,6 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
-    }
-
-    private SecretKey jwtSecretKey(SecurityProperties securityProperties) {
-        byte[] secret = securityProperties.jwtSecret().getBytes(StandardCharsets.UTF_8);
-        return new SecretKeySpec(secret, "HmacSHA256");
     }
 
     private JwtAuthenticationConverter jwtAuthenticationConverter() {

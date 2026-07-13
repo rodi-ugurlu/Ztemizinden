@@ -2,9 +2,7 @@ package com.iknow.ztemizindenbackend.application;
 
 import com.iknow.ztemizindenbackend.config.SecurityProperties;
 import com.iknow.ztemizindenbackend.domain.CustomerRepository;
-import com.iknow.ztemizindenbackend.domain.Enums.TicketStatus;
 import com.iknow.ztemizindenbackend.domain.NotFoundException;
-import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
 import com.iknow.ztemizindenbackend.domain.Ticket;
 import com.iknow.ztemizindenbackend.domain.TicketConversation;
@@ -54,9 +52,7 @@ public class TicketRealtimeAccess {
 
         if (hasRole(authentication, "SERVICE")) {
             String providerId = providerId(authentication);
-            ServiceProvider provider = serviceProviderRepository.findById(providerId)
-                    .orElseThrow(() -> new NotFoundException("Provider not found"));
-            if (isVisibleForProvider(ticket, provider)) {
+            if (providerId.equals(ticket.getAssignedProviderId())) {
                 return;
             }
         }
@@ -139,22 +135,6 @@ public class TicketRealtimeAccess {
         }
 
         throw new AccessDeniedException("Provider ticket topic is not visible to current user");
-    }
-
-    private boolean isVisibleForProvider(Ticket ticket, ServiceProvider provider) {
-        if (provider.getId().equals(ticket.getAssignedProviderId())) {
-            return true;
-        }
-        if (ticket.getOffers().stream().anyMatch(offer -> offer.getProviderId().equals(provider.getId()))) {
-            return true;
-        }
-        return isOpenOpportunity(ticket)
-                && provider.getSpecialties() != null
-                && provider.getSpecialties().contains(ticket.getCategory());
-    }
-
-    private boolean isOpenOpportunity(Ticket ticket) {
-        return ticket.getStatus() == TicketStatus.OPEN || ticket.getStatus() == TicketStatus.OFFERED;
     }
 
     private String customerId(Authentication authentication) {

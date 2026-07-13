@@ -4,12 +4,10 @@ import com.iknow.ztemizindenbackend.api.TicketController.TicketEventPayload;
 import com.iknow.ztemizindenbackend.api.TicketController.TicketResponse;
 import com.iknow.ztemizindenbackend.application.TicketMessageBroadcaster;
 import com.iknow.ztemizindenbackend.domain.Enums.ProviderStatus;
-import com.iknow.ztemizindenbackend.domain.Enums.TicketStatus;
 import com.iknow.ztemizindenbackend.domain.ServiceProvider;
 import com.iknow.ztemizindenbackend.domain.ServiceProviderRepository;
 import com.iknow.ztemizindenbackend.domain.Ticket;
 import com.iknow.ztemizindenbackend.domain.TicketConversation;
-import com.iknow.ztemizindenbackend.domain.TicketOffer;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -42,19 +40,20 @@ class TicketEventPublisher {
     }
 
     private List<String> providerIds(String type, Ticket ticket, String conversationId) {
+        if (conversationId != null && !conversationId.isBlank()) {
+            return ticket.getConversations().stream()
+                    .filter(conversation -> conversationId.equals(conversation.getId()))
+                    .map(TicketConversation::getProviderId)
+                    .filter(providerId -> providerId != null && !providerId.isBlank())
+                    .distinct()
+                    .toList();
+        }
+
         List<String> providerIds = new ArrayList<>();
-        ticket.getOffers().stream()
-                .map(TicketOffer::getProviderId)
-                .filter(providerId -> providerId != null && !providerId.isBlank())
-                .forEach(providerIds::add);
-        ticket.getConversations().stream()
-                .map(TicketConversation::getProviderId)
-                .filter(providerId -> providerId != null && !providerId.isBlank())
-                .forEach(providerIds::add);
         if (ticket.getAssignedProviderId() != null && !ticket.getAssignedProviderId().isBlank()) {
             providerIds.add(ticket.getAssignedProviderId());
         }
-        if (shouldBroadcastToMatchingProviders(type, ticket, conversationId)) {
+        if (shouldBroadcastToMatchingProviders(type, conversationId)) {
             serviceProviderRepository.findAll().stream()
                     .filter(provider -> provider.getStatus() == ProviderStatus.VERIFIED)
                     .filter(provider -> provider.getSpecialties() != null && provider.getSpecialties().contains(ticket.getCategory()))
@@ -65,16 +64,14 @@ class TicketEventPublisher {
         return providerIds.stream().distinct().toList();
     }
 
-    private static boolean shouldBroadcastToMatchingProviders(String type, Ticket ticket, String conversationId) {
+    private static boolean shouldBroadcastToMatchingProviders(String type, String conversationId) {
+        if (conversationId != null && !conversationId.isBlank()) {
+            return false;
+        }
         return switch (type) {
             case "TICKET_CREATED", "OFFER_SUBMITTED", "OFFER_ACCEPTED", "TICKET_CANCELLED", "TICKET_ASSIGNED" -> true;
-            case "MESSAGE" -> conversationId == null && isOpenOpportunity(ticket);
             default -> false;
         };
-    }
-
-    private static boolean isOpenOpportunity(Ticket ticket) {
-        return ticket.getStatus() == TicketStatus.OPEN || ticket.getStatus() == TicketStatus.OFFERED;
     }
 
     private static String conversationIdForProvider(Ticket ticket, String providerId) {

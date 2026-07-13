@@ -2,6 +2,7 @@ package com.iknow.ztemizindenbackend.api;
 
 import com.iknow.ztemizindenbackend.domain.Enums.AssetStatus;
 import com.iknow.ztemizindenbackend.domain.Enums.AssetType;
+import com.iknow.ztemizindenbackend.domain.Enums.BillingDisputeDecision;
 import com.iknow.ztemizindenbackend.domain.Enums.OfferType;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketCategory;
 import com.iknow.ztemizindenbackend.domain.Enums.TicketPriority;
@@ -29,6 +30,10 @@ final class ApiEnums {
 
     static OfferType offerType(String value) {
         return parse(OfferType.class, value);
+    }
+
+    static BillingDisputeDecision billingDisputeDecision(String value) {
+        return parse(BillingDisputeDecision.class, value);
     }
 
     static String display(AssetType value) {

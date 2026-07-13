@@ -16,10 +16,6 @@ public final class Enums {
         ACTIVE, SUSPENDED
     }
 
-    public enum AuthRole {
-        CUSTOMER, SERVICE, ADMIN
-    }
-
     public enum TicketCategory {
         ELECTRIC, MECHANIC, PNEUMATIC, HYDRAULIC, GENERAL, SOFTWARE
     }
@@ -45,15 +41,23 @@ public final class Enums {
     }
 
     public enum ConversationClosedReason {
-        REJECTED, NOT_SELECTED
+        REJECTED, NOT_SELECTED, TICKET_CANCELLED, TICKET_CLOSED
     }
 
     public enum BillingStatus {
         AWAITING_CUSTOMER_APPROVAL, APPROVED, DISPUTED
     }
 
+    public enum BillingDisputeDecision {
+        APPROVE, REQUEST_REVISION
+    }
+
     public enum ProviderStatus {
         PENDING_VERIFICATION, VERIFIED, SUSPENDED
+    }
+
+    public enum LandingVisibility {
+        HIDDEN, PENDING, VISIBLE
     }
 
     public enum ProviderDocumentStatus {

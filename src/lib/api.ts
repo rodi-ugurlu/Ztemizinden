@@ -1,4 +1,4 @@
-import { clearAuthSession, getAuthLoginPath, getStoredAccessToken, useAuthStore } from '@/store/useAuthStore';
+import { clearAuthSession, getAuthLoginPath, getFreshAccessToken, useAuthStore } from '@/store/useAuthStore';
 import { getApiBaseUrl, getApiRootUrl } from '@/lib/backendUrl';
 
 const BASE_URL = getApiBaseUrl();
@@ -34,7 +34,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   // Ngrok uyarı sayfasını atlamak için gerekli header
   headers.set('ngrok-skip-browser-warning', 'true');
 
-  const token = getStoredAccessToken();
+  const token = await getFreshAccessToken();
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
@@ -82,7 +82,7 @@ export async function downloadProtectedFile(path: string): Promise<Blob> {
   const headers = new Headers();
   headers.set('ngrok-skip-browser-warning', 'true');
 
-  const token = getStoredAccessToken();
+  const token = await getFreshAccessToken();
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
@@ -115,6 +115,12 @@ function resolveUrl(endpoint: string) {
   return `${BASE_URL}${endpoint}`;
 }
 
+export function resolvePublicFileUrl(path?: string | null) {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  return path.startsWith('/uploads/') ? `${API_ROOT_URL}${path}` : path;
+}
+
 function errorMessage(status: number, rawBody: string) {
   try {
     const parsed = JSON.parse(rawBody) as { detail?: string; title?: string; reason?: string };
@@ -136,6 +142,12 @@ function friendlyErrorMessage(message: string, status: number) {
       'Servis sağlayıcı onaylanmadan önce tüm belgeler doğrulanmalıdır.',
     'Provider email is already registered':
       'Bu e-posta ile kayıtlı bir servis sağlayıcı zaten var.',
+    'Only verified providers can request landing visibility':
+      'Ana sayfa vitrini için servis hesabınızın operasyon onayı tamamlanmalıdır.',
+    'A managed profile logo is required for landing visibility':
+      'Ana sayfa vitrinine katılmak için firma logonuzu profilinizden yüklemelisiniz.',
+    'Provider landing request is not pending':
+      'Bu servis için bekleyen bir vitrin talebi bulunmuyor.',
     'Asset tag number is already registered':
       'Bu tag numarası başka bir varlıkta kullanılıyor.',
     'E-posta veya şifre hatalı':
