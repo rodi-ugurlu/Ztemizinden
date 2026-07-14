@@ -5,6 +5,7 @@ const adminRealm = process.env.KEYCLOAK_ADMIN_REALM || 'master';
 const adminUsername = process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
 const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || (isLocal(baseUrl) ? 'admin' : '');
 const importDemoUsers = process.env.KEYCLOAK_IMPORT_DEMO_USERS === 'true';
+const localBackendClientSecret = 'ztemizinden-local-admin-secret-change-me';
 const webBaseUrl = (
   process.env.KEYCLOAK_WEB_URL || (isLocal(baseUrl) ? 'http://localhost:5173' : '')
 ).trim().replace(/\/+$/, '');
@@ -16,9 +17,16 @@ if (!adminPassword) {
 const realmPath = new URL('../Ztemizinden-Backend/docker/keycloak/realm-export.json', import.meta.url);
 const realmDefinition = JSON.parse(await readFile(realmPath, 'utf8'));
 const realm = process.env.KEYCLOAK_REALM || realmDefinition.realm;
+const realmBackendClientSecret = realmDefinition.clients.find(
+  (client) => client.clientId === 'ztemizinden-backend-admin'
+)?.secret;
 const backendClientSecret =
-  process.env.KEYCLOAK_ADMIN_CLIENT_SECRET ||
-  realmDefinition.clients.find((client) => client.clientId === 'ztemizinden-backend-admin')?.secret;
+  process.env.KEYCLOAK_ADMIN_CLIENT_SECRET?.trim() ||
+  (isLocal(baseUrl) ? localBackendClientSecret : realmBackendClientSecret);
+
+if (!backendClientSecret || /^\$\{.+\}$/.test(backendClientSecret)) {
+  throw new Error('KEYCLOAK_ADMIN_CLIENT_SECRET must be provided with a concrete value.');
+}
 
 const tokenResponse = await fetch(
   `${baseUrl}/realms/${encodeURIComponent(adminRealm)}/protocol/openid-connect/token`,

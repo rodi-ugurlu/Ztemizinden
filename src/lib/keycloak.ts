@@ -5,8 +5,10 @@ const keycloakRealm = import.meta.env.VITE_KEYCLOAK_REALM?.trim() || 'ztemizinde
 const keycloakClientId =
   import.meta.env.VITE_KEYCLOAK_CLIENT_ID?.trim() || 'ztemizinden-web';
 
-export const keycloak = new Keycloak({
-  url: keycloakUrl.replace(/\/+$/, ''),
-  realm: keycloakRealm,
-  clientId: keycloakClientId,
-});
+export function createKeycloakClient() {
+  return new Keycloak({
+    url: keycloakUrl.replace(/\/+$/, ''),
+    realm: keycloakRealm,
+    clientId: keycloakClientId,
+  });
+}

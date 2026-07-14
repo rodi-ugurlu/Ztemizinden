@@ -25,6 +25,11 @@ interface AuthState {
     role: Exclude<UserRole, null>,
     email?: string
   ) => Promise<void>;
+  loginWithCredentials: (
+    role: Exclude<UserRole, null>,
+    email: string,
+    password: string
+  ) => Promise<void>;
   logout: () => Promise<void>;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -90,6 +95,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
     } catch (error) {
       set({ isLoading: false, error: friendlyIdentityError(error) });
+      throw error;
+    }
+  },
+
+  loginWithCredentials: async (role, email, password) => {
+    set({ isLoading: true, error: null });
+    try {
+      const tokenResponse = await directGrant(email, password);
+      const keycloak = await getIdentityClient();
+      identityClient = keycloak;
+
+      const authenticated = await keycloak.init({
+        onLoad: 'check-sso',
+        pkceMethod: 'S256',
+        checkLoginIframe: false,
+        token: tokenResponse.access_token,
+        refreshToken: tokenResponse.refresh_token,
+        idToken: tokenResponse.id_token,
+        silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
+        silentCheckSsoFallback: false,
+        messageReceiveTimeout: 3000,
+      });
+
+      if (authenticated) {
+        keycloak.onAuthSuccess = applyKeycloakSession;
+        keycloak.onAuthRefreshSuccess = applyKeycloakSession;
+        keycloak.onAuthLogout = clearLocalSession;
+        keycloak.onTokenExpired = () => {
+          void keycloak
+            .updateToken(30)
+            .then(applyKeycloakSession)
+            .catch(() => useAuthStore.getState().logout());
+        };
+        useAuthStore.setState({
+          authInitialized: true,
+          identityAvailable: true,
+          isLoading: false,
+        });
+        applyKeycloakSession();
+        window.location.assign(`/${role}/dashboard`);
+      } else {
+        throw new Error('Kimlik doğrulama başarısız.');
+      }
+    } catch (error) {
+      set({ isLoading: false, error: friendlyCredentialError(error) });
       throw error;
     }
   },
@@ -174,6 +224,8 @@ async function initializeIdentityProvider(
     });
   } catch (error) {
     console.warn('Güvenli oturum başlatılamadı.', error);
+    identityClient = null;
+    initializationPromise = null;
     useAuthStore.setState({
       ...emptySession,
       authInitialized: true,
@@ -324,7 +376,7 @@ function friendlyIdentityError(error: unknown) {
 async function getIdentityClient(): Promise<Keycloak> {
   if (identityClient) return identityClient;
   const module = await import('@/lib/keycloak');
-  identityClient = module.keycloak;
+  identityClient = module.createKeycloakClient();
   return identityClient;
 }
 
@@ -346,3 +398,58 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     );
   });
 }
+
+interface DirectGrantResponse {
+  access_token: string;
+  refresh_token: string;
+  id_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+async function directGrant(email: string, password: string): Promise<DirectGrantResponse> {
+  const keycloakUrl = (import.meta.env.VITE_KEYCLOAK_URL?.trim() || 'http://localhost:8081').replace(/\/+$/, '');
+  const realm = import.meta.env.VITE_KEYCLOAK_REALM?.trim() || 'ztemizinden';
+  const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID?.trim() || 'ztemizinden-web';
+
+  const body = new URLSearchParams({
+    grant_type: 'password',
+    client_id: clientId,
+    username: email.trim(),
+    password,
+    scope: 'openid',
+  });
+
+  const response = await fetch(`${keycloakUrl}/realms/${realm}/protocol/openid-connect/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  }).catch(() => {
+    throw new Error('network');
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error_description?: string; error?: string };
+    if (response.status === 401 || payload.error === 'invalid_grant') {
+      throw new Error('invalid_credentials');
+    }
+    throw new Error(payload.error_description || payload.error || 'unknown');
+  }
+
+  return response.json() as Promise<DirectGrantResponse>;
+}
+
+function friendlyCredentialError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (message.includes('invalid_credentials') || message.includes('invalid_grant')) {
+    return 'E-posta adresi veya şifre hatalı. Lütfen tekrar deneyin.';
+  }
+  if (message.includes('network') || message.includes('failed to fetch')) {
+    return 'Giriş servisine şu anda ulaşılamıyor. Lütfen kısa bir süre sonra tekrar deneyin.';
+  }
+  if (message.includes('account') && message.includes('disabled')) {
+    return 'Hesabınız devre dışı bırakılmış. Yönetici ile iletişime geçin.';
+  }
+  return 'Giriş yapılamadı. Lütfen tekrar deneyin.';
+}
+

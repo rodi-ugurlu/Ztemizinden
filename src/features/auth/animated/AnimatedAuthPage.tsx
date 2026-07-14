@@ -152,8 +152,8 @@ function DocumentPicker({
 
 export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedAuthPageProps) {
   const navigate = useNavigate();
-  const { loginWithIdentityProvider, isLoading, error, setError } = useAuthStore();
-  const activeRole = initialRole;
+  const { loginWithCredentials, isLoading, error, setError } = useAuthStore();
+  const [activeRole, setActiveRole] = useState<AuthRole>(initialRole);
   const [customerView, setCustomerView] = useState<AuthView>(
     initialRole === 'customer' ? initialView : 'login'
   );
@@ -162,6 +162,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   );
   const [customerLogin, setCustomerLogin] = useState({
     email: '',
+    password: '',
   });
   const [customerRegister, setCustomerRegister] = useState({
     firstName: '',
@@ -174,6 +175,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
   });
   const [serviceLogin, setServiceLogin] = useState({
     identifier: '',
+    password: '',
   });
   const [serviceRegister, setServiceRegister] = useState({
     companyName: '',
@@ -289,7 +291,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     event.preventDefault();
     clearFeedback();
     try {
-      await loginWithIdentityProvider('customer', customerLogin.email);
+      await loginWithCredentials('customer', customerLogin.email, customerLogin.password);
     } catch {
       // Store error is rendered below the form.
     }
@@ -299,7 +301,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
     event.preventDefault();
     clearFeedback();
     try {
-      await loginWithIdentityProvider('service', serviceLogin.identifier);
+      await loginWithCredentials('service', serviceLogin.identifier, serviceLogin.password);
     } catch {
       // Store error is rendered below the form.
     }
@@ -362,7 +364,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       });
       accountCreated = true;
       setLocalNotice('Hesabınız oluşturuldu. Güvenli giriş ekranına yönlendiriliyorsunuz...');
-      await loginWithIdentityProvider('customer', customerRegister.email);
+      await loginWithCredentials('customer', customerRegister.email, customerRegister.password);
     } catch (submitError) {
       if (accountCreated) {
         setCustomerView('login');
@@ -517,6 +519,20 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                     value={customerLogin.email}
                     onChange={(event) =>
                       setCustomerLogin((prev) => ({ ...prev, email: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="animated-auth__input-field">
+                  <FieldIcon name="lock" />
+                  <input
+                    name="password"
+                    type="password"
+                    placeholder="Şifre"
+                    autoComplete="current-password"
+                    required
+                    value={customerLogin.password}
+                    onChange={(event) =>
+                      setCustomerLogin((prev) => ({ ...prev, password: event.target.value }))
                     }
                   />
                 </div>
@@ -708,6 +724,23 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                       setServiceLogin((prev) => ({
                         ...prev,
                         identifier: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="animated-auth__input-field">
+                  <FieldIcon name="lock" />
+                  <input
+                    name="password"
+                    type="password"
+                    placeholder="Şifre"
+                    autoComplete="current-password"
+                    required
+                    value={serviceLogin.password}
+                    onChange={(event) =>
+                      setServiceLogin((prev) => ({
+                        ...prev,
+                        password: event.target.value,
                       }))
                     }
                   />
@@ -1029,7 +1062,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
               type="button"
               onClick={() => {
                 clearFeedback();
-                navigate('/service/login');
+                setActiveRole('service');
+                window.history.replaceState(null, '', '/service/login');
               }}
             >
               Servis Girişi
@@ -1046,7 +1080,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
               type="button"
               onClick={() => {
                 clearFeedback();
-                navigate('/customer/login');
+                setActiveRole('customer');
+                window.history.replaceState(null, '', '/customer/login');
               }}
             >
               Fabrika/İşletme Girişi
