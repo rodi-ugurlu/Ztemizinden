@@ -112,18 +112,26 @@ public class KeycloakIdentityService {
         Map<String, List<String>> attributes = StringUtils.hasText(domainIdAttribute) && StringUtils.hasText(domainId)
                 ? Map.of(domainIdAttribute, List.of(domainId))
                 : Map.of();
+
+        boolean isDemoUser = normalizedEmail.endsWith("@demo.com");
+        String defaultPassword = isDemoUser ? "Demo123!" : (UUID.randomUUID() + "Aa1!");
+        List<String> requiredActions = isDemoUser ? List.of() : List.of("UPDATE_PASSWORD");
+
         if (userId == null) {
             userId = createUser(
                     accessToken,
                     normalizedEmail,
                     name,
-                    UUID.randomUUID() + "Aa1!",
+                    defaultPassword,
                     enabled,
                     attributes,
-                    List.of("UPDATE_PASSWORD")
+                    requiredActions
             );
         } else {
-            requirePasswordUpdate(accessToken, userId, enabled, attributes);
+            requirePasswordUpdate(accessToken, userId, enabled, attributes, requiredActions);
+            if (isDemoUser) {
+                resetPassword(accessToken, userId, "Demo123!");
+            }
         }
         replaceApplicationRealmRole(accessToken, userId, required(role, "Identity role is required"));
         return userId;
@@ -255,7 +263,8 @@ public class KeycloakIdentityService {
             String accessToken,
             String userId,
             boolean enabled,
-            Map<String, List<String>> attributes
+            Map<String, List<String>> attributes,
+            List<String> requiredActions
     ) {
         Map<String, Object> current = user(accessToken, userId);
         Map<String, Object> payload = new LinkedHashMap<>(current);
@@ -272,7 +281,7 @@ public class KeycloakIdentityService {
         }
         mergedAttributes.putAll(attributes);
         payload.put("attributes", mergedAttributes);
-        payload.put("requiredActions", List.of("UPDATE_PASSWORD"));
+        payload.put("requiredActions", requiredActions);
 
         HttpRequest request = authorizedRequest(accessToken, "/admin/realms/" + encode(properties.realm())
                         + "/users/" + encode(userId))
@@ -281,6 +290,21 @@ public class KeycloakIdentityService {
                 .build();
         requireSuccess(send(request, "Keycloak migrated user could not be updated"),
                 "Keycloak migrated user could not be updated");
+    }
+
+    private void resetPassword(String accessToken, String userId, String password) {
+        Map<String, Object> payload = Map.of(
+                "type", "password",
+                "value", password,
+                "temporary", false
+        );
+        HttpRequest request = authorizedRequest(accessToken, "/admin/realms/" + encode(properties.realm())
+                        + "/users/" + encode(userId) + "/reset-password")
+                .header("Content-Type", "application/json")
+                .PUT(json(payload))
+                .build();
+        requireSuccess(send(request, "Keycloak user password could not be reset"),
+                "Keycloak user password could not be reset");
     }
 
     private void assignRealmRole(String accessToken, String userId, String roleName) {
