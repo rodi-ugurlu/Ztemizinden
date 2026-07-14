@@ -189,18 +189,21 @@ async function initializeIdentityProvider(
 ): Promise<void> {
   try {
     const keycloak = await getIdentityClient();
-    const authenticated = await keycloak.init({
-      onLoad: loginOptions?.onLoad ?? 'check-sso',
-      pkceMethod: 'S256',
-      checkLoginIframe: false,
-      ...(loginOptions
-        ? { redirectUri: loginOptions.redirectUri }
-        : {
-            silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
-            silentCheckSsoFallback: false,
-          }),
-      messageReceiveTimeout: 3000,
-    });
+    const authenticated = await withTimeout(
+      keycloak.init({
+        onLoad: loginOptions?.onLoad ?? 'check-sso',
+        pkceMethod: 'S256',
+        checkLoginIframe: false,
+        ...(loginOptions
+          ? { redirectUri: loginOptions.redirectUri }
+          : {
+              silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
+              silentCheckSsoFallback: false,
+            }),
+        messageReceiveTimeout: 3000,
+      }),
+      IDENTITY_INITIALIZATION_TIMEOUT_MS
+    );
 
     if (authenticated) {
       applyKeycloakSession();
@@ -452,4 +455,3 @@ function friendlyCredentialError(error: unknown) {
   }
   return 'Giriş yapılamadı. Lütfen tekrar deneyin.';
 }
-

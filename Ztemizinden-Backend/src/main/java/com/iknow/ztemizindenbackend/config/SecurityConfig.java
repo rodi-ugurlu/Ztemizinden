@@ -43,6 +43,9 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityProperties securityProperties) throws Exception {
         http.csrf(csrf -> csrf.disable());
         http.cors(cors -> cors.configurationSource(corsConfigurationSource(securityProperties)));
+        // Keycloak's silent SSO callback is loaded in a hidden same-origin iframe.
+        // DENY prevents its postMessage callback from running and leaves auth initialization pending forever.
+        http.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()));
 
         if (!securityProperties.enabled()) {
             http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());

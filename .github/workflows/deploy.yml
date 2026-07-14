@@ -310,5 +310,14 @@ jobs:
             systemctl is-active --quiet ztemizinden
             curl -fsS https://maintly.net/api/public/landing >/dev/null
             curl -fsS https://maintly.net/auth/realms/ztemizinden/.well-known/openid-configuration >/dev/null
+            curl -fsS -D /tmp/maintly-silent-sso.headers \
+              -o /dev/null \
+              https://maintly.net/silent-check-sso.html
+            grep -Fiqx $'x-frame-options: SAMEORIGIN\r' /tmp/maintly-silent-sso.headers || {
+              echo "Silent SSO callback does not allow same-origin framing"
+              cat /tmp/maintly-silent-sso.headers
+              exit 1
+            }
+            rm -f /tmp/maintly-silent-sso.headers
             rm -rf "$RELEASE_DIR"
             echo "Maintly deployment completed and all health checks passed."
