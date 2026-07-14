@@ -370,6 +370,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
         setCustomerView('login');
         setCustomerLogin({
           email: customerRegister.email,
+          password: '',
         });
         setLocalNotice('Hesabınız başarıyla oluşturuldu.');
         setLocalError('Güvenli giriş ekranı açılamadı. Lütfen yeniden giriş yapmayı deneyin.');
@@ -464,7 +465,10 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       await api.upload<{ id: string }>('/providers', formData);
       providerCreated = true;
       setServiceView('login');
-      setServiceLogin({ identifier: serviceRegister.email });
+      setServiceLogin({
+        identifier: serviceRegister.email,
+        password: '',
+      });
       setLocalNotice('Başvurunuz alındı. Hesabınız operasyon onayından sonra girişe açılacak.');
     } catch (submitError) {
       if (providerCreated) {
