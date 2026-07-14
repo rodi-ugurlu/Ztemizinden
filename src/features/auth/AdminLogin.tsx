@@ -13,7 +13,7 @@ import { Activity, AlertCircle, Database, Lock, ShieldCheck } from 'lucide-react
  */
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState('admin@demo.com');
+  const [email, setEmail] = useState('');
   const { loginWithIdentityProvider, isLoading, error } = useAuthStore();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -113,13 +113,13 @@ export default function AdminLogin() {
                     required
                     autoComplete="email"
                     className="bg-slate-50 border-slate-200 text-slate-900 focus-visible:ring-red-600 h-11"
-                    placeholder="admin@demo.com"
+                    placeholder="yonetici@firma.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
                 <Button type="submit" disabled={isLoading} className="w-full bg-red-600 hover:bg-red-700 text-white h-11 mt-4">
-                  {isLoading ? 'Keycloak açılıyor...' : 'Keycloak ile Devam Et'}
+                  {isLoading ? 'Giriş hazırlanıyor...' : 'Operasyon Merkezine Gir'}
                 </Button>
               </form>
               {error && (
@@ -131,7 +131,7 @@ export default function AdminLogin() {
             </CardContent>
             <CardFooter className="px-8 pb-8 pt-0 border-t border-slate-200/50 mt-4 flex justify-between items-center text-xs text-slate-500">
               <span>Yetkili Erişim Gerekli</span>
-              <span className="font-medium text-red-600">Keycloak PKCE oturumu</span>
+              <span className="font-medium text-red-600">Güvenli oturum</span>
             </CardFooter>
           </Card>
         </div>

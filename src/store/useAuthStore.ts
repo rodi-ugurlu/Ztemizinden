@@ -1,7 +1,7 @@
 import { create } from 'zustand';
+import type Keycloak from 'keycloak-js';
 import type { KeycloakTokenParsed } from 'keycloak-js';
 import { getApiBaseUrl } from '@/lib/backendUrl';
-import { keycloak } from '@/lib/keycloak';
 
 export type UserRole = 'customer' | 'service' | 'admin' | null;
 
@@ -17,6 +17,8 @@ interface AuthState {
   user: User | null;
   role: UserRole;
   isAuthenticated: boolean;
+  authInitialized: boolean;
+  identityAvailable: boolean;
   isLoading: boolean;
   error: string | null;
   loginWithIdentityProvider: (
@@ -47,21 +49,28 @@ const emptySession = {
   isAuthenticated: false,
 } as const;
 
+let identityClient: Keycloak | null = null;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   ...emptySession,
-  isLoading: true,
+  authInitialized: false,
+  identityAvailable: false,
+  isLoading: false,
   error: null,
 
   loginWithIdentityProvider: async (role, email) => {
     set({ isLoading: true, error: null });
     try {
-      await keycloak.login({
+      await initializeAuth();
+      if (!useAuthStore.getState().identityAvailable || !identityClient) {
+        throw new Error('Kimlik doğrulama servisine şu anda ulaşılamıyor.');
+      }
+      await identityClient.login({
         loginHint: email?.trim() || undefined,
         redirectUri: `${window.location.origin}/${role}/dashboard`,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Keycloak giriş ekranı açılamadı.';
-      set({ isLoading: false, error: message });
+      set({ isLoading: false, error: friendlyIdentityError(error) });
       throw error;
     }
   },
@@ -69,12 +78,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     const role = get().role ?? 'customer';
     set({ ...emptySession, isLoading: false, error: null });
-    if (!keycloak.authenticated) {
+    if (!identityClient?.authenticated) {
       window.location.assign(`/${role}/login`);
       return;
     }
     try {
-      await keycloak.logout({
+      await identityClient.logout({
         redirectUri: `${window.location.origin}/${role}/login`,
       });
     } catch {
@@ -88,20 +97,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isSessionValid: () =>
     Boolean(
       get().isAuthenticated &&
-        keycloak.authenticated &&
-        keycloak.token &&
-        !keycloak.isTokenExpired(0)
+        identityClient?.authenticated &&
+        identityClient.token &&
+        !identityClient.isTokenExpired(0)
     ),
 }));
 
+let initializationPromise: Promise<void> | null = null;
+
 export async function initializeAuth(): Promise<void> {
-  useAuthStore.setState({ isLoading: true, error: null });
+  if (initializationPromise) return initializationPromise;
+
+  initializationPromise = initializeIdentityProvider();
+  return initializationPromise;
+}
+
+async function initializeIdentityProvider(): Promise<void> {
   try {
+    const keycloak = await getIdentityClient();
     const authenticated = await keycloak.init({
       onLoad: 'check-sso',
       pkceMethod: 'S256',
-      checkLoginIframe: true,
+      checkLoginIframe: false,
       silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
+      silentCheckSsoFallback: false,
+      messageReceiveTimeout: 3000,
     });
 
     if (authenticated) {
@@ -119,16 +139,26 @@ export async function initializeAuth(): Promise<void> {
         .then(applyKeycloakSession)
         .catch(() => useAuthStore.getState().logout());
     };
+    useAuthStore.setState({
+      authInitialized: true,
+      identityAvailable: true,
+      isLoading: false,
+    });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Kimlik doğrulama servisine bağlanılamadı.';
-    useAuthStore.setState({ ...emptySession, isLoading: false, error: message });
+    console.warn('Güvenli oturum başlatılamadı.', error);
+    useAuthStore.setState({
+      ...emptySession,
+      authInitialized: true,
+      identityAvailable: false,
+      isLoading: false,
+      error: null,
+    });
   }
 }
 
 export async function getFreshAccessToken(): Promise<string | null> {
+  const keycloak = identityClient;
+  if (!keycloak) return null;
   if (!keycloak.authenticated || !keycloak.token) return null;
   try {
     await keycloak.updateToken(30);
@@ -140,6 +170,8 @@ export async function getFreshAccessToken(): Promise<string | null> {
 }
 
 export function getStoredAccessToken(): string | null {
+  const keycloak = identityClient;
+  if (!keycloak) return null;
   if (!keycloak.authenticated || !keycloak.token || keycloak.isTokenExpired(0)) return null;
   return keycloak.token;
 }
@@ -182,6 +214,11 @@ export function useCurrentUser() {
 }
 
 function applyKeycloakSession() {
+  const keycloak = identityClient;
+  if (!keycloak) {
+    clearLocalSession();
+    return;
+  }
   const claims = keycloak.tokenParsed as MaintlyTokenClaims | undefined;
   const role = resolveRoleFromClaims(claims);
   if (!claims || !role || !keycloak.authenticated) {
@@ -200,13 +237,21 @@ function applyKeycloakSession() {
     user,
     role,
     isAuthenticated: true,
+    authInitialized: true,
+    identityAvailable: true,
     isLoading: false,
     error: null,
   });
 }
 
 function clearLocalSession() {
-  useAuthStore.setState({ ...emptySession, isLoading: false, error: null });
+  useAuthStore.setState({
+    ...emptySession,
+    authInitialized: true,
+    identityAvailable: true,
+    isLoading: false,
+    error: null,
+  });
 }
 
 function resolveRoleFromClaims(
@@ -232,4 +277,25 @@ async function authErrorMessage(response: Response) {
   } catch {
     return 'İşlem başarısız';
   }
+}
+
+function friendlyIdentityError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (
+    message.includes('timeout') ||
+    message.includes('iframe') ||
+    message.includes('network') ||
+    message.includes('failed to fetch') ||
+    message.includes('ulaşılamıyor')
+  ) {
+    return 'Giriş servisine şu anda ulaşılamıyor. Lütfen kısa bir süre sonra tekrar deneyin.';
+  }
+  return 'Güvenli giriş başlatılamadı. Lütfen tekrar deneyin.';
+}
+
+async function getIdentityClient(): Promise<Keycloak> {
+  if (identityClient) return identityClient;
+  const module = await import('@/lib/keycloak');
+  identityClient = module.keycloak;
+  return identityClient;
 }

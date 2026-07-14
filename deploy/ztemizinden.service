@@ -1,7 +1,9 @@
 [Unit]
 Description=Ztemizinden Spring Boot application
-After=network-online.target
-Wants=network-online.target
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 User=ztemizinden
@@ -9,7 +11,7 @@ Group=ztemizinden
 WorkingDirectory=/opt/ztemizinden
 EnvironmentFile=/etc/ztemizinden/ztemizinden.env
 ExecStart=/usr/bin/java -Xms256m -Xmx768m -jar /opt/ztemizinden/ztemizinden.jar
-Restart=always
+Restart=on-failure
 RestartSec=10
 SuccessExitStatus=143
 NoNewPrivileges=true

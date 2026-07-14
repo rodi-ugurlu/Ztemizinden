@@ -41,10 +41,12 @@ function withPageLoader(element: ReactNode) {
 
 function RouteLoading() {
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-      <div className="text-center">
-        <div className="mx-auto mb-4 h-10 w-10 rounded-full border-2 border-slate-700 border-t-indigo-400 animate-spin" />
-        <p className="text-sm text-slate-400">Ekran hazırlanıyor...</p>
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="text-center" role="status" aria-live="polite">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-600 text-lg font-black text-white shadow-lg shadow-red-200 animate-pulse">
+          M
+        </div>
+        <p className="text-sm font-medium text-slate-500">Ekran hazırlanıyor...</p>
       </div>
     </div>
   );

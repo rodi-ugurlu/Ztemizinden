@@ -100,3 +100,52 @@ CREATE DATABASE ztemizinden;
 CREATE USER ztemizinden WITH ENCRYPTED PASSWORD 'change-me';
 GRANT ALL PRIVILEGES ON DATABASE ztemizinden TO ztemizinden;
 ```
+
+## Maintly Production Keycloak
+
+Production kimlik servisi ayni sunucuda Docker Compose ile calisir, fakat
+yalnizca loopback portlarina acilir:
+
+- Keycloak uygulamasi: `127.0.0.1:8081`
+- Keycloak yonetim/health: `127.0.0.1:9000`
+- Dis adres: `https://maintly.net/auth`
+
+Ilk kurulumda asagidaki dosyalar sunucuya yerlestirilir:
+
+```text
+/opt/ztemizinden/keycloak/docker-compose.yml
+/opt/ztemizinden/keycloak/realm/realm-production.json
+/opt/ztemizinden/keycloak/themes/maintly
+/etc/ztemizinden/keycloak.env
+/etc/nginx/snippets/maintly-keycloak.conf
+```
+
+`keycloak.env` sadece root tarafindan okunabilmeli (`0600`). Ayni
+`KEYCLOAK_ADMIN_CLIENT_SECRET` degeri backend env dosyasinda da bulunmalidir.
+Production realm dosyasi bilinen parolali demo kullanicilari icermez.
+
+Health kontrolleri:
+
+```bash
+curl -fsS http://127.0.0.1:9000/health/ready
+curl -fsS https://maintly.net/auth/realms/ztemizinden/.well-known/openid-configuration
+```
+
+Frontend JAR build'i production kimlik adresiyle alinmalidir:
+
+```bash
+VITE_API_URL=/api \
+VITE_KEYCLOAK_URL=https://maintly.net/auth \
+VITE_KEYCLOAK_REALM=ztemizinden \
+VITE_KEYCLOAK_CLIENT_ID=ztemizinden-web \
+npm run build:jar
+```
+
+Deploy workflow'u localhost Keycloak adresi iceren bir frontend bundle'ini
+reddeder. Canli deploy oncesinde `/etc/ztemizinden/ztemizinden.env` ve
+`/etc/ztemizinden/keycloak.env` dosyalari hazir olmalidir.
+
+Workflow ayrica Maintly login temasini Keycloak container'ina baglar, realm'in
+`loginTheme` ayarini `maintly` yapar ve aktif Nginx sitesini yedekleyerek HTTP/2,
+gzip ve immutable asset cache ayarlariyla gunceller. Nginx yedegi
+`/var/backups/maintly/nginx-ztemizinden.before-deploy.conf` altinda tutulur.

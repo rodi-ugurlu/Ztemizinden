@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MapPin, RadioTower, ShieldCheck } from 'lucide-react';
+import { MapPin, ShieldCheck } from 'lucide-react';
 import { resolvePublicFileUrl } from '@/lib/api';
 import { showcaseSlots, type LandingProvider } from './data';
 
 interface NetworkSceneProps {
   providers: LandingProvider[];
-  verifiedProviderCount: number;
   isLoading: boolean;
 }
 
@@ -17,7 +16,7 @@ interface Line {
   key: string;
 }
 
-export default function NetworkScene({ providers, verifiedProviderCount, isLoading }: NetworkSceneProps) {
+export default function NetworkScene({ providers, isLoading }: NetworkSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const rafRef = useRef<number>(0);

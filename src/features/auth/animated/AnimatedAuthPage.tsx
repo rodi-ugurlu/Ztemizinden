@@ -1,4 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import {
   normalizeExpertiseTag,
@@ -150,8 +151,9 @@ function DocumentPicker({
 }
 
 export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedAuthPageProps) {
+  const navigate = useNavigate();
   const { loginWithIdentityProvider, isLoading, error, setError } = useAuthStore();
-  const [activeRole, setActiveRole] = useState<AuthRole>(initialRole);
+  const activeRole = initialRole;
   const [customerView, setCustomerView] = useState<AuthView>(
     initialRole === 'customer' ? initialView : 'login'
   );
@@ -359,7 +361,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
         password: customerRegister.password,
       });
       accountCreated = true;
-      setLocalNotice('Hesabınız Keycloak üzerinde oluşturuldu. Güvenli giriş ekranına yönlendiriliyorsunuz...');
+      setLocalNotice('Hesabınız oluşturuldu. Güvenli giriş ekranına yönlendiriliyorsunuz...');
       await loginWithIdentityProvider('customer', customerRegister.email);
     } catch (submitError) {
       if (accountCreated) {
@@ -367,12 +369,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
         setCustomerLogin({
           email: customerRegister.email,
         });
-        setLocalNotice('Hesap oluşturuldu. Keycloak giriş ekranından devam edebilirsiniz.');
-        setLocalError(
-          submitError instanceof Error
-            ? `Otomatik giriş yapılamadı: ${submitError.message}`
-            : 'Otomatik giriş yapılamadı'
-        );
+        setLocalNotice('Hesabınız başarıyla oluşturuldu.');
+        setLocalError('Güvenli giriş ekranı açılamadı. Lütfen yeniden giriş yapmayı deneyin.');
       } else {
         setLocalError(
           submitError instanceof Error ? submitError.message : 'Fabrika/İşletme kaydı oluşturulamadı'
@@ -465,7 +463,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
       providerCreated = true;
       setServiceView('login');
       setServiceLogin({ identifier: serviceRegister.email });
-      setLocalNotice('Başvurunuz alındı. Hesabınız operasyon onayından sonra Keycloak girişine açılacak.');
+      setLocalNotice('Başvurunuz alındı. Hesabınız operasyon onayından sonra girişe açılacak.');
     } catch (submitError) {
       if (providerCreated) {
         setServiceView('login');
@@ -473,12 +471,8 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
           ...prev,
           identifier: serviceRegister.email,
         }));
-        setLocalNotice('Başvurunuz alındı. Operasyon onayından sonra Keycloak ile giriş yapabilirsiniz.');
-        setLocalError(
-          submitError instanceof Error
-            ? `Otomatik giriş yapılamadı: ${submitError.message}`
-            : 'Otomatik giriş yapılamadı'
-        );
+        setLocalNotice('Başvurunuz alındı. Operasyon onayından sonra giriş yapabilirsiniz.');
+        setLocalError('Başvuru tamamlandı ancak ekran yenilenemedi. Lütfen daha sonra tekrar giriş yapın.');
       } else {
         setLocalError(submitError instanceof Error ? submitError.message : 'Başvuru gönderilemedi');
       }
@@ -535,14 +529,14 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                   {isResetRequesting ? 'Bağlantı gönderiliyor...' : 'Şifremi unuttum'}
                 </button>
                 <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isLoading}>
-                  {isLoading ? 'Keycloak açılıyor...' : 'Keycloak ile Giriş Yap'}
+                  {isLoading ? 'Giriş hazırlanıyor...' : 'Giriş Yap'}
                 </button>
                 <button
                   className="animated-auth__form-switch"
                   type="button"
                   onClick={() => {
                     clearFeedback();
-                    setCustomerView('register');
+                    navigate('/customer/register');
                   }}
                 >
                   Hesabınız yok mu? Kaydolun
@@ -674,7 +668,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                   type="button"
                   onClick={() => {
                     clearFeedback();
-                    setCustomerView('login');
+                    navigate('/customer/login');
                   }}
                 >
                   Zaten hesabınız var mı? Giriş yapın
@@ -727,7 +721,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                   {isResetRequesting ? 'Bağlantı gönderiliyor...' : 'Şifremi unuttum'}
                 </button>
                 <button className="animated-auth__btn animated-auth__btn--solid" type="submit" disabled={isLoading}>
-                  {isLoading ? 'Keycloak açılıyor...' : 'Keycloak ile Servis Girişi'}
+                  {isLoading ? 'Giriş hazırlanıyor...' : 'Servis Girişi'}
                 </button>
                 <p className="animated-auth__social-text">
                   Yetkili servis hesabınızla panelinize erişebilirsiniz.
@@ -737,7 +731,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                   type="button"
                   onClick={() => {
                     clearFeedback();
-                    setServiceView('register');
+                    navigate('/service/register');
                   }}
                 >
                   Servis sağlayıcısı başvurusu yapın
@@ -1011,7 +1005,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
                   type="button"
                   onClick={() => {
                     clearFeedback();
-                    setServiceView('login');
+                    navigate('/service/login');
                   }}
                 >
                   Zaten servis hesabınız var mı? Giriş yapın
@@ -1035,8 +1029,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
               type="button"
               onClick={() => {
                 clearFeedback();
-                setActiveRole('service');
-                setServiceView('login');
+                navigate('/service/login');
               }}
             >
               Servis Girişi
@@ -1053,8 +1046,7 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
               type="button"
               onClick={() => {
                 clearFeedback();
-                setActiveRole('customer');
-                setCustomerView('login');
+                navigate('/customer/login');
               }}
             >
               Fabrika/İşletme Girişi
@@ -1068,9 +1060,10 @@ export default function AnimatedAuthPage({ initialRole, initialView }: AnimatedA
 }
 
 function validatePassword(password: string): string | null {
-  if (password.length < 8) return 'Şifre en az 8 karakter olmalıdır.';
+  if (password.length < 10) return 'Şifre en az 10 karakter olmalıdır.';
   if (!/[A-Z]/.test(password)) return 'Şifre en az bir büyük harf içermelidir.';
   if (!/[a-z]/.test(password)) return 'Şifre en az bir küçük harf içermelidir.';
   if (!/\d/.test(password)) return 'Şifre en az bir rakam içermelidir.';
+  if (!/[^A-Za-z0-9]/.test(password)) return 'Şifre en az bir özel karakter içermelidir.';
   return null;
 }

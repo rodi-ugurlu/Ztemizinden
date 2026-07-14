@@ -19,7 +19,8 @@ import {
   Zap,
 } from 'lucide-react';
 import NetworkScene from './NetworkScene';
-import logoImg from '@/assets/logo.png';
+
+const logoImg = '/maintly-logo.webp';
 import {
   proofPoints,
   howItWorks,
@@ -73,7 +74,7 @@ function useLandingSnapshot() {
 
   useEffect(() => {
     let active = true;
-    api.get<LandingSnapshot>('/public/landing')
+    api.publicGet<LandingSnapshot>('/public/landing')
       .then((response) => {
         if (!active) return;
         setSnapshot(response);
@@ -150,7 +151,6 @@ function HeroSection({
       <div className="maintly-hero-noise" aria-hidden="true" />
       <NetworkScene
         providers={snapshot?.providers ?? []}
-        verifiedProviderCount={snapshot?.stats.verifiedProviderCount ?? 0}
         isLoading={isLoading}
       />
       {snapshot && snapshot.providers.length > 0 && (
@@ -207,7 +207,7 @@ function HeroSection({
             {/* Badge */}
             <div
               data-reveal
-              className="maintly-badge-glow mb-4 inline-flex max-w-full items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-red-700 sm:mb-5 sm:gap-2.5 sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.18em]"
+              className="revealed maintly-badge-glow mb-4 inline-flex max-w-full items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-red-700 sm:mb-5 sm:gap-2.5 sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.18em]"
             >
               <Sparkles className="h-3 w-3 shrink-0 text-red-500 sm:h-3.5 sm:w-3.5" />
               <span className="min-w-0 truncate">Türkiye'nin canlı bakım ağı</span>
@@ -217,21 +217,21 @@ function HeroSection({
             <h1
               data-reveal
               data-reveal-delay="1"
-              className="maintly-gradient-text text-balance text-4xl font-black leading-none tracking-tight pb-2 sm:text-5xl md:text-7xl lg:text-8xl xl:text-[6.5rem]"
+              className="revealed maintly-gradient-text text-balance text-4xl font-black leading-none tracking-tight pb-2 sm:text-5xl md:text-7xl lg:text-8xl xl:text-[6.5rem]"
             >
               Maintly
             </h1>
             <p
               data-reveal
               data-reveal-delay="2"
-              className="mt-3 max-w-2xl text-xl font-extrabold leading-tight text-gray-900 sm:mt-4 sm:text-2xl md:text-3xl lg:text-4xl"
+              className="revealed mt-3 max-w-2xl text-xl font-extrabold leading-tight text-gray-900 sm:mt-4 sm:text-2xl md:text-3xl lg:text-4xl"
             >
               Endüstriyel bakımın güvenilir ağı.
             </p>
             <p
               data-reveal
               data-reveal-delay="3"
-              className="mt-4 max-w-xl text-sm font-medium leading-6 text-gray-500 sm:mt-5 sm:text-base sm:leading-7 md:text-lg"
+              className="revealed mt-4 max-w-xl text-sm font-medium leading-6 text-gray-500 sm:mt-5 sm:text-base sm:leading-7 md:text-lg"
             >
               Fabrikalar, tesisler ve uzman servis ekipleri Maintly'de buluşur.
               Bakım ihtiyaçlarınız için doğru ekipleri keşfedin, servis
@@ -239,7 +239,7 @@ function HeroSection({
             </p>
 
             {/* CTAs */}
-            <div data-reveal data-reveal-delay="4" className="mt-6 flex flex-col gap-2.5 sm:mt-8 sm:flex-row sm:gap-3">
+            <div data-reveal data-reveal-delay="4" className="revealed mt-6 flex flex-col gap-2.5 sm:mt-8 sm:flex-row sm:gap-3">
               <Link
                 to="/customer/register"
                 className="group inline-flex min-h-[2.75rem] w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-5 py-3 text-xs font-black text-white shadow-lg shadow-red-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-red-600 hover:shadow-xl hover:shadow-red-500/30 sm:min-h-[3.25rem] sm:w-auto sm:gap-2.5 sm:px-6 sm:py-3.5 sm:text-sm"

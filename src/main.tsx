@@ -4,13 +4,12 @@ import './index.css'
 import App from './App.tsx'
 import { initializeAuth } from './store/useAuthStore.ts'
 
-async function bootstrap() {
-  await initializeAuth()
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  )
-}
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
 
-void bootstrap()
+window.requestAnimationFrame(() => {
+  window.setTimeout(() => void initializeAuth(), 0)
+})

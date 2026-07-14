@@ -17,7 +17,11 @@ export interface UploadResponse {
   providerDocumentId?: string;
 }
 
-async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+async function request<T>(
+  endpoint: string,
+  options: RequestOptions = {},
+  includeAccessToken = true
+): Promise<T> {
   let url = resolveUrl(endpoint);
   
   if (options.params) {
@@ -34,9 +38,11 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   // Ngrok uyarı sayfasını atlamak için gerekli header
   headers.set('ngrok-skip-browser-warning', 'true');
 
-  const token = await getFreshAccessToken();
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
+  if (includeAccessToken) {
+    const token = await getFreshAccessToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
   }
 
   const config: RequestInit = {
@@ -71,6 +77,8 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
 export const api = {
   get: <T>(endpoint: string, options?: RequestOptions) => request<T>(endpoint, { ...options, method: 'GET' }),
+  publicGet: <T>(endpoint: string, options?: RequestOptions) =>
+    request<T>(endpoint, { ...options, method: 'GET' }, false),
   post: <T>(endpoint: string, data?: unknown, options?: RequestOptions) => request<T>(endpoint, { ...options, method: 'POST', body: data ? JSON.stringify(data) : undefined }),
   put: <T>(endpoint: string, data?: unknown, options?: RequestOptions) => request<T>(endpoint, { ...options, method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
   delete: <T>(endpoint: string, options?: RequestOptions) => request<T>(endpoint, { ...options, method: 'DELETE' }),

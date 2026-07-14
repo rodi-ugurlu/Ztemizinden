@@ -2,7 +2,8 @@ import { Outlet, NavLink } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
 import { Building2, LogOut, TicketCheck, Users } from 'lucide-react';
-import logoImg from '@/assets/logo.png';
+
+const logoImg = '/maintly-logo.webp';
 
 /**
  * ServiceLayout Component

@@ -5,9 +5,19 @@ on:
     branches:
       - prod
 
+concurrency:
+  group: maintly-production
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VITE_API_URL: /api
+      VITE_KEYCLOAK_URL: https://maintly.net/auth
+      VITE_KEYCLOAK_REALM: ztemizinden
+      VITE_KEYCLOAK_CLIENT_ID: ztemizinden-web
 
     steps:
       - name: Checkout Code
@@ -26,55 +36,207 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Build Full-Stack JAR
+      - name: Build and Test Full-Stack JAR
         run: |
+          set -euo pipefail
           cd Ztemizinden-Backend
           chmod +x mvnw
           ./mvnw -Pfullstack clean package
 
-      - name: Copy JAR to Server
+      - name: Reject Localhost Identity Configuration
+        run: |
+          set -euo pipefail
+          if grep -R --binary-files=text -F "http://localhost:8081" Ztemizinden-Backend/target/classes/static; then
+            echo "Production frontend contains the local Keycloak URL."
+            exit 1
+          fi
+          grep -R --binary-files=text -F "https://maintly.net/auth" Ztemizinden-Backend/target/classes/static >/dev/null
+
+      - name: Assemble Release Bundle
+        run: |
+          set -euo pipefail
+          rm -rf release
+          mkdir -p release/keycloak/realm
+          mkdir -p release/keycloak/themes
+          install -m 0644 Ztemizinden-Backend/target/ztemizinden.jar release/ztemizinden.jar
+          install -m 0644 deploy/ztemizinden.service release/ztemizinden.service
+          install -m 0644 deploy/keycloak-compose.yml release/keycloak/docker-compose.yml
+          install -m 0644 deploy/keycloak-realm-production.json release/keycloak/realm/realm-production.json
+          cp -R deploy/keycloak-theme/maintly release/keycloak/themes/maintly
+          install -m 0644 deploy/nginx-keycloak-location.conf release/nginx-keycloak-location.conf
+          install -m 0644 deploy/nginx-ztemizinden.conf release/nginx-ztemizinden.conf
+
+      - name: Copy Release to Server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: "Ztemizinden-Backend/target/ztemizinden.jar"
-          target: "/tmp"
-          strip_components: 2
+          source: "release/*"
+          target: "/tmp/ztemizinden-release"
+          strip_components: 1
+          overwrite: true
 
-      - name: Deploy and Restart Service
+      - name: Deploy, Verify, and Roll Back on Failure
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          command_timeout: 10m
           script: |
-            echo "Starting deployment execution..."
-            
-            # Check if source file exists in /tmp
-            if [ ! -f /tmp/ztemizinden.jar ]; then
-              echo "Error: /tmp/ztemizinden.jar not found!"
+            set -Eeuo pipefail
+
+            RELEASE_DIR=/tmp/ztemizinden-release
+            APP_DIR=/opt/ztemizinden
+            IDENTITY_DIR=/opt/ztemizinden/keycloak
+            APP_ENV=/etc/ztemizinden/ztemizinden.env
+            IDENTITY_ENV=/etc/ztemizinden/keycloak.env
+            NGINX_SNIPPET=/etc/nginx/snippets/maintly-keycloak.conf
+            NGINX_ENABLED_SITE=/etc/nginx/sites-enabled/ztemizinden
+            JAR_PATH=/opt/ztemizinden/ztemizinden.jar
+            PREVIOUS_JAR=/opt/ztemizinden/ztemizinden.jar.previous
+
+            for command in curl docker grep install nginx systemctl; do
+              command -v "$command" >/dev/null || { echo "Missing required command: $command"; exit 1; }
+            done
+            docker compose version >/dev/null
+
+            test -s "$RELEASE_DIR/ztemizinden.jar"
+            test -s "$RELEASE_DIR/ztemizinden.service"
+            test -s "$RELEASE_DIR/keycloak/docker-compose.yml"
+            test -s "$RELEASE_DIR/keycloak/realm/realm-production.json"
+            test -s "$RELEASE_DIR/keycloak/themes/maintly/login/theme.properties"
+            test -s "$RELEASE_DIR/keycloak/themes/maintly/login/resources/css/maintly.css"
+            test -s "$RELEASE_DIR/keycloak/themes/maintly/login/resources/img/maintly-logo.webp"
+            test -s "$RELEASE_DIR/nginx-keycloak-location.conf"
+            test -s "$RELEASE_DIR/nginx-ztemizinden.conf"
+            test -s "$APP_ENV" || { echo "$APP_ENV is missing"; exit 1; }
+            test -s "$IDENTITY_ENV" || { echo "$IDENTITY_ENV is missing"; exit 1; }
+
+            for variable in \
+              DB_URL DB_USERNAME DB_PASSWORD \
+              KEYCLOAK_ISSUER_URI KEYCLOAK_JWK_SET_URI KEYCLOAK_ADMIN_BASE_URL \
+              KEYCLOAK_ADMIN_CLIENT_SECRET KEYCLOAK_PASSWORD_RESET_REDIRECT_URI; do
+              grep -Eq "^${variable}=.+" "$APP_ENV" || {
+                echo "$variable is missing from $APP_ENV"
+                exit 1
+              }
+            done
+            for variable in \
+              KEYCLOAK_DB_PASSWORD KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME \
+              KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD KEYCLOAK_ADMIN_CLIENT_SECRET \
+              KEYCLOAK_SMTP_HOST KEYCLOAK_SMTP_FROM KEYCLOAK_SMTP_USERNAME \
+              KEYCLOAK_SMTP_PASSWORD; do
+              grep -Eq "^${variable}=.+" "$IDENTITY_ENV" || {
+                echo "$variable is missing from $IDENTITY_ENV"
+                exit 1
+              }
+            done
+
+            grep -Fxq "KEYCLOAK_ISSUER_URI=https://maintly.net/auth/realms/ztemizinden" "$APP_ENV"
+            grep -Fxq "KEYCLOAK_JWK_SET_URI=https://maintly.net/auth/realms/ztemizinden/protocol/openid-connect/certs" "$APP_ENV"
+            grep -Fxq "KEYCLOAK_ADMIN_BASE_URL=https://maintly.net/auth" "$APP_ENV"
+
+            backend_secret="$(grep '^KEYCLOAK_ADMIN_CLIENT_SECRET=' "$APP_ENV" | tail -n 1 | cut -d= -f2-)"
+            identity_secret="$(grep '^KEYCLOAK_ADMIN_CLIENT_SECRET=' "$IDENTITY_ENV" | tail -n 1 | cut -d= -f2-)"
+            test "$backend_secret" = "$identity_secret" || {
+              echo "Backend and Keycloak admin client secrets do not match"
+              exit 1
+            }
+
+            install -d -m 0755 "$APP_DIR" "$IDENTITY_DIR/realm" "$IDENTITY_DIR/themes"
+            install -m 0644 "$RELEASE_DIR/keycloak/docker-compose.yml" "$IDENTITY_DIR/docker-compose.yml"
+            install -m 0644 "$RELEASE_DIR/keycloak/realm/realm-production.json" "$IDENTITY_DIR/realm/realm-production.json"
+            rm -rf "$IDENTITY_DIR/themes/maintly.next"
+            cp -R "$RELEASE_DIR/keycloak/themes/maintly" "$IDENTITY_DIR/themes/maintly.next"
+            rm -rf "$IDENTITY_DIR/themes/maintly"
+            mv "$IDENTITY_DIR/themes/maintly.next" "$IDENTITY_DIR/themes/maintly"
+
+            install -d -m 0755 /etc/nginx/snippets
+            install -m 0644 "$RELEASE_DIR/nginx-keycloak-location.conf" "$NGINX_SNIPPET"
+            test -e "$NGINX_ENABLED_SITE" || { echo "$NGINX_ENABLED_SITE is missing"; exit 1; }
+            NGINX_SITE_TARGET="$(readlink -f "$NGINX_ENABLED_SITE")"
+            install -d -m 0700 /var/backups/maintly
+            cp -p "$NGINX_SITE_TARGET" /var/backups/maintly/nginx-ztemizinden.before-deploy.conf
+            install -m 0644 "$RELEASE_DIR/nginx-ztemizinden.conf" "$NGINX_SITE_TARGET"
+            if ! nginx -t; then
+              install -m 0644 /var/backups/maintly/nginx-ztemizinden.before-deploy.conf "$NGINX_SITE_TARGET"
+              nginx -t
               exit 1
             fi
-            
-            # Ensure target directory exists
-            mkdir -p /opt/ztemizinden
-            
-            # Move the jar to deployment directory
-            mv /tmp/ztemizinden.jar /opt/ztemizinden/ztemizinden.jar
-            
-            # Fix ownership
-            chown ztemizinden:ztemizinden /opt/ztemizinden/ztemizinden.jar
-            
-            # Restart ztemizinden systemd service
-            echo "Restarting ztemizinden service..."
+            nginx -T 2>/dev/null | grep -Fq "proxy_pass http://127.0.0.1:8081;" || {
+              echo "The active maintly.net TLS server does not include $NGINX_SNIPPET"
+              exit 1
+            }
+            nginx -T 2>/dev/null | grep -Fq "listen 443 ssl http2;" || {
+              echo "HTTP/2 is not enabled for maintly.net"
+              exit 1
+            }
+            systemctl reload nginx
+
+            docker compose --env-file "$IDENTITY_ENV" -f "$IDENTITY_DIR/docker-compose.yml" config -q
+            docker compose --env-file "$IDENTITY_ENV" -f "$IDENTITY_DIR/docker-compose.yml" up -d
+
+            keycloak_ready=false
+            for attempt in $(seq 1 90); do
+              if curl -fsS http://127.0.0.1:9000/health/ready >/dev/null; then
+                keycloak_ready=true
+                break
+              fi
+              sleep 2
+            done
+            if [ "$keycloak_ready" != true ]; then
+              docker compose --env-file "$IDENTITY_ENV" -f "$IDENTITY_DIR/docker-compose.yml" ps
+              docker compose --env-file "$IDENTITY_ENV" -f "$IDENTITY_DIR/docker-compose.yml" logs --tail=160 keycloak
+              exit 1
+            fi
+
+            docker exec maintly-keycloak sh -c \
+              '/opt/keycloak/bin/kcadm.sh config credentials --server http://127.0.0.1:8080/auth --realm master --user "$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$KC_BOOTSTRAP_ADMIN_PASSWORD"'
+            docker exec maintly-keycloak /opt/keycloak/bin/kcadm.sh \
+              update realms/ztemizinden \
+              -s loginTheme=maintly \
+              -s displayName=Maintly \
+              -s internationalizationEnabled=true \
+              -s defaultLocale=tr \
+              -s 'supportedLocales=["tr","en"]'
+
+            if [ -s "$JAR_PATH" ]; then
+              cp -p "$JAR_PATH" "$PREVIOUS_JAR"
+            fi
+            install -m 0644 "$RELEASE_DIR/ztemizinden.jar" "$JAR_PATH.next"
+            chown ztemizinden:ztemizinden "$JAR_PATH.next"
+            mv -f "$JAR_PATH.next" "$JAR_PATH"
+            install -m 0644 "$RELEASE_DIR/ztemizinden.service" /etc/systemd/system/ztemizinden.service
+            systemctl daemon-reload
             systemctl restart ztemizinden
-            
-            # Wait for service startup verification
-            sleep 5
-            
-            # Check service status
-            systemctl status ztemizinden --no-pager
-            echo "Deployment completed successfully!"
+
+            backend_ready=false
+            for attempt in $(seq 1 60); do
+              if curl -fsS http://127.0.0.1:8080/api/public/landing >/dev/null; then
+                backend_ready=true
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "$backend_ready" != true ]; then
+              systemctl status ztemizinden --no-pager || true
+              journalctl -u ztemizinden -n 180 --no-pager || true
+              if [ -s "$PREVIOUS_JAR" ]; then
+                echo "Backend health check failed; restoring previous JAR"
+                install -m 0644 "$PREVIOUS_JAR" "$JAR_PATH"
+                chown ztemizinden:ztemizinden "$JAR_PATH"
+                systemctl restart ztemizinden
+              fi
+              exit 1
+            fi
+
+            systemctl is-active --quiet ztemizinden
+            curl -fsS https://maintly.net/api/public/landing >/dev/null
+            curl -fsS https://maintly.net/auth/realms/ztemizinden/.well-known/openid-configuration >/dev/null
+            rm -rf "$RELEASE_DIR"
+            echo "Maintly deployment completed and all health checks passed."

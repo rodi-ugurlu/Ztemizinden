@@ -2,7 +2,8 @@ import { Outlet, NavLink } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
 import { Activity, LogOut, BarChart3, Users } from 'lucide-react';
-import logoImg from '@/assets/logo.png';
+
+const logoImg = '/maintly-logo.webp';
 
 /**
  * AdminLayout Component

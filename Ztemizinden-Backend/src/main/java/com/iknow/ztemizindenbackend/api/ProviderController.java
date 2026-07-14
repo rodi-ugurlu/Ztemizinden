@@ -17,6 +17,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -243,7 +244,13 @@ public class ProviderController {
             @NotEmpty @Size(max = 6) Set<@Size(max = 50) String> specialties,
             @Size(max = 50) Set<@Size(max = 120) String> expertiseTags,
             @Size(max = 100) Set<@Size(max = 120) String> coverageDistricts,
-            @NotBlank @Size(min = 8, max = 128) String password
+            @NotBlank
+            @Size(min = 10, max = 128)
+            @Pattern(
+                    regexp = "^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[^A-Za-z0-9]).+$",
+                    message = "Password must include upper, lower, digit and special characters"
+            )
+            String password
     ) {
     }
 

@@ -16,10 +16,10 @@ export default function ResetPasswordPage() {
           <div className="password-reset__icon">
             <LockKeyhole size={24} />
           </div>
-          <h1>Şifre Yönetimi Keycloak'ta</h1>
+          <h1>Şifre Yönetimi</h1>
           <p>
-            Şifre yenileme bağlantıları artık Keycloak tarafından güvenli biçimde işleniyor.
-            E-postandaki bağlantıyı aç veya giriş ekranından yeni bağlantı iste.
+            Şifre yenileme bağlantıları güvenli giriş sistemimiz tarafından işlenir.
+            E-postandaki bağlantıyı aç veya giriş ekranından yeni bir bağlantı iste.
           </p>
 
           <div className="password-reset__success">

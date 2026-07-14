@@ -51,7 +51,18 @@ public class SecurityConfig {
 
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/", "/index.html", "/favicon.svg", "/icons.svg", "/assets/**").permitAll()
+                .requestMatchers(
+                        HttpMethod.GET,
+                        "/",
+                        "/index.html",
+                        "/favicon.ico",
+                        "/favicon.png",
+                        "/favicon.svg",
+                        "/maintly-logo.webp",
+                        "/silent-check-sso.html",
+                        "/icons.svg",
+                        "/assets/**"
+                ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/reset-password").permitAll()
                 .requestMatchers(HttpMethod.GET, "/customer/**", "/service/**", "/admin/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password").permitAll()

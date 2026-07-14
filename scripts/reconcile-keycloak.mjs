@@ -5,7 +5,9 @@ const adminRealm = process.env.KEYCLOAK_ADMIN_REALM || 'master';
 const adminUsername = process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
 const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || (isLocal(baseUrl) ? 'admin' : '');
 const importDemoUsers = process.env.KEYCLOAK_IMPORT_DEMO_USERS === 'true';
-const webBaseUrl = process.env.KEYCLOAK_WEB_URL?.trim().replace(/\/+$/, '');
+const webBaseUrl = (
+  process.env.KEYCLOAK_WEB_URL || (isLocal(baseUrl) ? 'http://localhost:5173' : '')
+).trim().replace(/\/+$/, '');
 
 if (!adminPassword) {
   throw new Error('KEYCLOAK_ADMIN_PASSWORD is required for a non-local Keycloak server.');

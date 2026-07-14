@@ -29,10 +29,13 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_WEB_URL: ${KEYCLOAK_WEB_URL:-http://localhost:5173}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-ztemizinden-local-admin-secret-change-me}
     ports:
       - "${KEYCLOAK_PORT:-8081}:8080"
     volumes:
       - ./docker/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ../deploy/keycloak-theme/maintly:/opt/keycloak/themes/maintly:ro
     depends_on:
       postgres:
         condition: service_healthy

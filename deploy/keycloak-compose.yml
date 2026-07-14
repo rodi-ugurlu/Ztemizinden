@@ -1,0 +1,67 @@
+services:
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: maintly-keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is required}
+    volumes:
+      - keycloak_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - identity
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2.4
+    container_name: maintly-keycloak
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is required}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME:?KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME is required}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD:?KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD is required}
+      KC_HOSTNAME: https://maintly.net/auth
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      # Keep observability on the conventional loopback-only /health path even
+      # though the public Keycloak context path is /auth.
+      KC_HTTP_MANAGEMENT_RELATIVE_PATH: /
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_SERVER_ASYNC_BOOTSTRAP: "false"
+      KEYCLOAK_WEB_URL: https://maintly.net
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?KEYCLOAK_ADMIN_CLIENT_SECRET is required}
+      KEYCLOAK_SMTP_HOST: ${KEYCLOAK_SMTP_HOST:?KEYCLOAK_SMTP_HOST is required}
+      KEYCLOAK_SMTP_PORT: ${KEYCLOAK_SMTP_PORT:-587}
+      KEYCLOAK_SMTP_FROM: ${KEYCLOAK_SMTP_FROM:?KEYCLOAK_SMTP_FROM is required}
+      KEYCLOAK_SMTP_USERNAME: ${KEYCLOAK_SMTP_USERNAME:?KEYCLOAK_SMTP_USERNAME is required}
+      KEYCLOAK_SMTP_PASSWORD: ${KEYCLOAK_SMTP_PASSWORD:?KEYCLOAK_SMTP_PASSWORD is required}
+      JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=65 -XX:InitialRAMPercentage=35
+    ports:
+      - "127.0.0.1:8081:8080"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - ./realm/realm-production.json:/opt/keycloak/data/import/realm-production.json:ro
+      - ./themes/maintly:/opt/keycloak/themes/maintly:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      - identity
+
+volumes:
+  keycloak_postgres_data:
+
+networks:
+  identity:
+    driver: bridge
