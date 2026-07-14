@@ -10,6 +10,12 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-window.requestAnimationFrame(() => {
-  window.setTimeout(() => void initializeAuth(), 0)
-})
+const isIdentityLoginEntry = /^\/(customer|service|admin)\/login\/?$/.test(
+  window.location.pathname
+)
+
+if (!isIdentityLoginEntry) {
+  window.requestAnimationFrame(() => {
+    window.setTimeout(() => void initializeAuth(), 0)
+  })
+}

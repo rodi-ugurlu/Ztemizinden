@@ -50,6 +50,7 @@ const emptySession = {
 } as const;
 
 let identityClient: Keycloak | null = null;
+const IDENTITY_INITIALIZATION_TIMEOUT_MS = 10_000;
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   ...emptySession,
@@ -61,13 +62,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loginWithIdentityProvider: async (role, email) => {
     set({ isLoading: true, error: null });
     try {
-      await initializeAuth();
+      const redirectUri = `${window.location.origin}/${role}/dashboard`;
+
+      // A direct visit to a login route must enter the authorization flow
+      // immediately. Running check-sso first can leave the visible login page
+      // waiting on a silent iframe while the identity service is restarting.
+      if (!initializationPromise) {
+        initializationPromise = initializeIdentityProvider({
+          onLoad: 'login-required',
+          redirectUri,
+        });
+        await withTimeout(initializationPromise, IDENTITY_INITIALIZATION_TIMEOUT_MS);
+      } else {
+        await withTimeout(initializeAuth(), IDENTITY_INITIALIZATION_TIMEOUT_MS);
+      }
       if (!useAuthStore.getState().identityAvailable || !identityClient) {
         throw new Error('Kimlik doğrulama servisine şu anda ulaşılamıyor.');
       }
+      if (identityClient.authenticated) {
+        applyKeycloakSession();
+        window.location.assign(redirectUri);
+        return;
+      }
       await identityClient.login({
         loginHint: email?.trim() || undefined,
-        redirectUri: `${window.location.origin}/${role}/dashboard`,
+        redirectUri,
       });
     } catch (error) {
       set({ isLoading: false, error: friendlyIdentityError(error) });
@@ -112,15 +131,24 @@ export async function initializeAuth(): Promise<void> {
   return initializationPromise;
 }
 
-async function initializeIdentityProvider(): Promise<void> {
+async function initializeIdentityProvider(
+  loginOptions?: {
+    onLoad: 'login-required';
+    redirectUri: string;
+  }
+): Promise<void> {
   try {
     const keycloak = await getIdentityClient();
     const authenticated = await keycloak.init({
-      onLoad: 'check-sso',
+      onLoad: loginOptions?.onLoad ?? 'check-sso',
       pkceMethod: 'S256',
       checkLoginIframe: false,
-      silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
-      silentCheckSsoFallback: false,
+      ...(loginOptions
+        ? { redirectUri: loginOptions.redirectUri }
+        : {
+            silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
+            silentCheckSsoFallback: false,
+          }),
       messageReceiveTimeout: 3000,
     });
 
@@ -298,4 +326,23 @@ async function getIdentityClient(): Promise<Keycloak> {
   const module = await import('@/lib/keycloak');
   identityClient = module.keycloak;
   return identityClient;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(
+      () => reject(new Error('Identity provider initialization timeout')),
+      timeoutMs
+    );
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
 }

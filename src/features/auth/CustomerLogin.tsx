@@ -1,5 +1,5 @@
-import AnimatedAuthPage from './animated/AnimatedAuthPage';
+import IdentityLoginRedirect from './IdentityLoginRedirect';
 
 export default function CustomerLogin() {
-  return <AnimatedAuthPage initialRole="customer" initialView="login" />;
+  return <IdentityLoginRedirect role="customer" />;
 }
