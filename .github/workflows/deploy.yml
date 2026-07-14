@@ -194,15 +194,14 @@ jobs:
               exit 1
             fi
 
-            docker exec maintly-keycloak sh -c \
-              '/opt/keycloak/bin/kcadm.sh config credentials --server http://127.0.0.1:8080/auth --realm master --user "$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$KC_BOOTSTRAP_ADMIN_PASSWORD"'
-            docker exec maintly-keycloak /opt/keycloak/bin/kcadm.sh \
-              update realms/ztemizinden \
-              -s loginTheme=maintly \
-              -s displayName=Maintly \
-              -s internationalizationEnabled=true \
-              -s defaultLocale=tr \
-              -s 'supportedLocales=["tr","en"]'
+            docker exec maintly-keycloak sh -c '
+              /opt/keycloak/bin/kcadm.sh config credentials --server http://127.0.0.1:8080/auth --realm master --user "$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$KC_BOOTSTRAP_ADMIN_PASSWORD"
+              /opt/keycloak/bin/kcadm.sh update realms/ztemizinden -s loginTheme=maintly -s displayName=Maintly -s internationalizationEnabled=true -s defaultLocale=tr -s '\''supportedLocales=["tr","en"]'\''
+              WEB_CLIENT_ID=$(/opt/keycloak/bin/kcadm.sh get clients -r ztemizinden --query clientId=ztemizinden-web --fields id | grep id | cut -d: -f2 | tr -d " \",")
+              if [ -n "$WEB_CLIENT_ID" ]; then
+                /opt/keycloak/bin/kcadm.sh update clients/$WEB_CLIENT_ID -r ztemizinden -s directAccessGrantsEnabled=true
+              fi
+            '
 
             realm_management_roles="$(
               python3 -c '
