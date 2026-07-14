@@ -1,11 +1,22 @@
+import { readFile } from 'node:fs/promises';
+
 const keycloakBaseUrl = (process.env.KEYCLOAK_ADMIN_BASE_URL || 'http://localhost:8081').replace(/\/+$/, '');
 const backendBaseUrl = (process.env.BACKEND_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
 const realm = process.env.KEYCLOAK_REALM || 'ztemizinden';
 const adminUsername = process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
 const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || (isLocal(keycloakBaseUrl) ? 'admin' : '');
 const demoPassword = process.env.KEYCLOAK_DEMO_PASSWORD || 'Demo123!';
+const realmPath = new URL('../Ztemizinden-Backend/docker/keycloak/realm-export.json', import.meta.url);
+const realmDefinition = JSON.parse(await readFile(realmPath, 'utf8'));
+const expectedProvisioningRoles =
+  realmDefinition.users?.find(
+    (user) => user.serviceAccountClientId === 'ztemizinden-backend-admin'
+  )?.clientRoles?.['realm-management'] || [];
 
 if (!adminPassword) throw new Error('KEYCLOAK_ADMIN_PASSWORD is required.');
+if (!expectedProvisioningRoles.length) {
+  throw new Error('The realm definition must declare realm-management roles for the backend service account.');
+}
 
 const adminToken = await passwordToken('master', 'admin-cli', adminUsername, adminPassword);
 const webClients = await adminRequest(
@@ -61,6 +72,34 @@ try {
     provisioningAccess.status === 200,
     `Provisioning service account returned ${provisioningAccess.status}`
   );
+  const provisioningRoleAccess = await fetch(
+    `${keycloakBaseUrl}/admin/realms/${encodeURIComponent(realm)}/roles/SERVICE`,
+    { headers: { authorization: `Bearer ${provisioningToken}` } }
+  );
+  assert(
+    provisioningRoleAccess.status === 200,
+    `Provisioning service account could not read realm roles (${provisioningRoleAccess.status})`
+  );
+  const backendAdminClients = await adminRequest(
+    `/admin/realms/${encodeURIComponent(realm)}/clients?clientId=ztemizinden-backend-admin`
+  );
+  const realmManagementClients = await adminRequest(
+    `/admin/realms/${encodeURIComponent(realm)}/clients?clientId=realm-management`
+  );
+  assert(backendAdminClients[0], 'ztemizinden-backend-admin client was not found.');
+  assert(realmManagementClients[0], 'realm-management client was not found.');
+  const serviceAccount = await adminRequest(
+    `/admin/realms/${encodeURIComponent(realm)}/clients/${encodeURIComponent(backendAdminClients[0].id)}/service-account-user`
+  );
+  const provisioningRoleMappings = await adminRequest(
+    `/admin/realms/${encodeURIComponent(realm)}/users/${encodeURIComponent(serviceAccount.id)}` +
+      `/role-mappings/clients/${encodeURIComponent(realmManagementClients[0].id)}`
+  );
+  const provisioningRoleNames = provisioningRoleMappings.map((role) => role.name).sort();
+  assert(
+    provisioningRoleNames.join(',') === [...expectedProvisioningRoles].sort().join(','),
+    `Provisioning service account roles differ from the allowlist: ${provisioningRoleNames.join(', ')}`
+  );
   const wrongAudience = await fetch(`${backendBaseUrl}/api/providers`, {
     headers: { authorization: `Bearer ${provisioningToken}` },
   });
@@ -72,6 +111,8 @@ try {
     checks,
     unauthenticatedStatus: withoutToken.status,
     provisioningAdminStatus: provisioningAccess.status,
+    provisioningRoleStatus: provisioningRoleAccess.status,
+    provisioningRoles: provisioningRoleNames,
     wrongAudienceStatus: wrongAudience.status,
   };
 } finally {

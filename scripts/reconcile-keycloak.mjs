@@ -17,6 +17,11 @@ if (!adminPassword) {
 const realmPath = new URL('../Ztemizinden-Backend/docker/keycloak/realm-export.json', import.meta.url);
 const realmDefinition = JSON.parse(await readFile(realmPath, 'utf8'));
 const realm = process.env.KEYCLOAK_REALM || realmDefinition.realm;
+const backendServiceAccountDefinition = realmDefinition.users?.find(
+  (user) => user.serviceAccountClientId === 'ztemizinden-backend-admin'
+);
+const desiredRealmManagementRoleNames =
+  backendServiceAccountDefinition?.clientRoles?.['realm-management'] || [];
 const realmBackendClientSecret = realmDefinition.clients.find(
   (client) => client.clientId === 'ztemizinden-backend-admin'
 )?.secret;
@@ -26,6 +31,9 @@ const backendClientSecret =
 
 if (!backendClientSecret || /^\$\{.+\}$/.test(backendClientSecret)) {
   throw new Error('KEYCLOAK_ADMIN_CLIENT_SECRET must be provided with a concrete value.');
+}
+if (!desiredRealmManagementRoleNames.length) {
+  throw new Error('The realm definition must declare realm-management roles for the backend service account.');
 }
 
 const tokenResponse = await fetch(
@@ -118,17 +126,24 @@ async function assignServiceAccountRoles() {
     `/admin/realms/${encodeURIComponent(realm)}/clients/${encodeURIComponent(backendClient.id)}/service-account-user`
   );
   const roles = [];
-  for (const roleName of ['manage-users', 'query-users', 'view-users']) {
+  for (const roleName of desiredRealmManagementRoleNames) {
     roles.push(
       await keycloak(
         `/admin/realms/${encodeURIComponent(realm)}/clients/${encodeURIComponent(realmManagementClient.id)}/roles/${encodeURIComponent(roleName)}`
       )
     );
   }
-  await keycloak(
-    `/admin/realms/${encodeURIComponent(realm)}/users/${encodeURIComponent(serviceAccount.id)}/role-mappings/clients/${encodeURIComponent(realmManagementClient.id)}`,
-    { method: 'POST', body: roles }
+  const mappingPath =
+    `/admin/realms/${encodeURIComponent(realm)}/users/${encodeURIComponent(serviceAccount.id)}` +
+    `/role-mappings/clients/${encodeURIComponent(realmManagementClient.id)}`;
+  const currentRoles = await keycloak(mappingPath);
+  const obsoleteRoles = currentRoles.filter(
+    (role) => !desiredRealmManagementRoleNames.includes(role.name)
   );
+  if (obsoleteRoles.length) {
+    await keycloak(mappingPath, { method: 'DELETE', body: obsoleteRoles });
+  }
+  await keycloak(mappingPath, { method: 'POST', body: roles });
 }
 
 async function upsertDemoUser(userDefinition) {

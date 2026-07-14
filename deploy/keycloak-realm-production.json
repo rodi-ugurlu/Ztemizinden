@@ -124,7 +124,7 @@
       "enabled": true,
       "serviceAccountClientId": "ztemizinden-backend-admin",
       "clientRoles": {
-        "realm-management": ["manage-users", "query-users", "view-users"]
+        "realm-management": ["manage-users", "query-users", "view-users", "view-realm"]
       }
     }
   ]

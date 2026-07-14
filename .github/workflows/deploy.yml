@@ -99,7 +99,7 @@ jobs:
             JAR_PATH=/opt/ztemizinden/ztemizinden.jar
             PREVIOUS_JAR=/opt/ztemizinden/ztemizinden.jar.previous
 
-            for command in curl docker grep install nginx systemctl; do
+            for command in curl docker grep install nginx python3 systemctl; do
               command -v "$command" >/dev/null || { echo "Missing required command: $command"; exit 1; }
             done
             docker compose version >/dev/null
@@ -203,6 +203,78 @@ jobs:
               -s internationalizationEnabled=true \
               -s defaultLocale=tr \
               -s 'supportedLocales=["tr","en"]'
+
+            realm_management_roles="$(
+              python3 -c '
+            import json
+            import sys
+
+            with open(sys.argv[1], encoding="utf-8") as realm_file:
+                realm = json.load(realm_file)
+            service_account = next(
+                (user for user in realm.get("users", [])
+                 if user.get("serviceAccountClientId") == "ztemizinden-backend-admin"),
+                None,
+            )
+            roles = (service_account or {}).get("clientRoles", {}).get("realm-management", [])
+            if not roles or any(not isinstance(role, str) or not role for role in roles):
+                raise SystemExit("Invalid backend service-account role allowlist")
+            print("\n".join(roles))
+            ' "$IDENTITY_DIR/realm/realm-production.json"
+            )"
+
+            current_realm_management_roles="$(
+              docker exec maintly-keycloak /opt/keycloak/bin/kcadm.sh \
+                get-roles \
+                -r ztemizinden \
+                --uusername service-account-ztemizinden-backend-admin \
+                --cclientid realm-management \
+                --fields name \
+                --format csv \
+                --noquotes
+            )"
+            for current_role in $current_realm_management_roles; do
+              role_is_allowed=false
+              for allowed_role in $realm_management_roles; do
+                if [ "$current_role" = "$allowed_role" ]; then
+                  role_is_allowed=true
+                  break
+                fi
+              done
+              if [ "$role_is_allowed" = false ]; then
+                docker exec maintly-keycloak /opt/keycloak/bin/kcadm.sh \
+                  remove-roles \
+                  -r ztemizinden \
+                  --uusername service-account-ztemizinden-backend-admin \
+                  --cclientid realm-management \
+                  --rolename "$current_role"
+              fi
+            done
+
+            for realm_management_role in $realm_management_roles; do
+              docker exec maintly-keycloak /opt/keycloak/bin/kcadm.sh \
+                add-roles \
+                -r ztemizinden \
+                --uusername service-account-ztemizinden-backend-admin \
+                --cclientid realm-management \
+                --rolename "$realm_management_role"
+            done
+
+            docker exec maintly-keycloak sh -ec '
+              provisioning_config=/tmp/kcadm-provisioning.config
+              rm -f "$provisioning_config"
+              trap "rm -f \"$provisioning_config\"" EXIT
+              /opt/keycloak/bin/kcadm.sh config credentials \
+                --config "$provisioning_config" \
+                --server http://127.0.0.1:8080/auth \
+                --realm ztemizinden \
+                --client ztemizinden-backend-admin \
+                --secret "$KEYCLOAK_ADMIN_CLIENT_SECRET" >/dev/null
+              /opt/keycloak/bin/kcadm.sh get roles/SERVICE \
+                --config "$provisioning_config" \
+                -r ztemizinden >/dev/null
+            '
+            echo "Keycloak provisioning service account permissions verified."
 
             if [ -s "$JAR_PATH" ]; then
               cp -p "$JAR_PATH" "$PREVIOUS_JAR"
