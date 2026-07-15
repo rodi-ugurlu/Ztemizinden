@@ -129,7 +129,7 @@ jobs:
               KEYCLOAK_DB_PASSWORD KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME \
               KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD KEYCLOAK_ADMIN_CLIENT_SECRET \
               KEYCLOAK_SMTP_HOST KEYCLOAK_SMTP_FROM KEYCLOAK_SMTP_USERNAME \
-              KEYCLOAK_SMTP_PASSWORD; do
+              KEYCLOAK_SMTP_PASSWORD MAINTLY_ADMIN_EMAIL MAINTLY_ADMIN_PASSWORD; do
               grep -Eq "^${variable}=.+" "$IDENTITY_ENV" || {
                 echo "$variable is missing from $IDENTITY_ENV"
                 exit 1
@@ -202,6 +202,220 @@ jobs:
                 /opt/keycloak/bin/kcadm.sh update clients/$WEB_CLIENT_ID -r ztemizinden -s directAccessGrantsEnabled=true
               fi
             '
+
+            python3 - "$IDENTITY_ENV" <<'PY'
+            import json
+            import sys
+            import urllib.error
+            import urllib.parse
+            import urllib.request
+
+            identity_env_path = sys.argv[1]
+
+            def read_env(path):
+                values = {}
+                with open(path, encoding="utf-8") as env_file:
+                    for raw_line in env_file:
+                        line = raw_line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        key, value = line.split("=", 1)
+                        value = value.strip()
+                        if (
+                            len(value) >= 2
+                            and value[0] == value[-1]
+                            and value[0] in {"'", '"'}
+                        ):
+                            value = value[1:-1]
+                        values[key.strip()] = value
+                return values
+
+            env = read_env(identity_env_path)
+            admin_email = env["MAINTLY_ADMIN_EMAIL"].strip().lower()
+            admin_password = env["MAINTLY_ADMIN_PASSWORD"]
+
+            if "@" not in admin_email:
+                raise SystemExit("MAINTLY_ADMIN_EMAIL must be a valid email address")
+            password_policy_errors = []
+            if len(admin_password) < 10:
+                password_policy_errors.append("at least 10 characters")
+            if not any(character.isupper() for character in admin_password):
+                password_policy_errors.append("one uppercase letter")
+            if not any(character.islower() for character in admin_password):
+                password_policy_errors.append("one lowercase letter")
+            if not any(character.isdigit() for character in admin_password):
+                password_policy_errors.append("one digit")
+            if not any(not character.isalnum() for character in admin_password):
+                password_policy_errors.append("one special character")
+            if password_policy_errors:
+                raise SystemExit(
+                    "MAINTLY_ADMIN_PASSWORD must contain "
+                    + ", ".join(password_policy_errors)
+                )
+
+            keycloak_base = "http://127.0.0.1:8081/auth"
+            token_url = f"{keycloak_base}/realms/master/protocol/openid-connect/token"
+            realm_admin_url = f"{keycloak_base}/admin/realms/ztemizinden"
+
+            def request(method, url, token=None, data=None, headers=None, expected=(200, 201, 204)):
+                body = None
+                request_headers = {"Accept": "application/json"}
+                if headers:
+                    request_headers.update(headers)
+                if token:
+                    request_headers["Authorization"] = f"Bearer {token}"
+                if data is not None:
+                    body = json.dumps(data).encode("utf-8")
+                    request_headers["Content-Type"] = "application/json"
+                req = urllib.request.Request(url, data=body, headers=request_headers, method=method)
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        payload = response.read().decode("utf-8")
+                        if response.status not in expected:
+                            raise RuntimeError(f"{method} {url} returned {response.status}: {payload}")
+                        return response.status, payload
+                except urllib.error.HTTPError as error:
+                    payload = error.read().decode("utf-8")
+                    raise RuntimeError(f"{method} {url} returned {error.code}: {payload}") from error
+
+            def form_request(url, fields, expected=(200,)):
+                body = urllib.parse.urlencode(fields).encode("utf-8")
+                req = urllib.request.Request(
+                    url,
+                    data=body,
+                    headers={
+                        "Accept": "application/json",
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        payload = response.read().decode("utf-8")
+                        if response.status not in expected:
+                            raise RuntimeError(f"POST {url} returned {response.status}: {payload}")
+                        return json.loads(payload) if payload else {}
+                except urllib.error.HTTPError as error:
+                    payload = error.read().decode("utf-8")
+                    raise RuntimeError(f"POST {url} returned {error.code}: {payload}") from error
+
+            admin_token = form_request(
+                token_url,
+                {
+                    "grant_type": "password",
+                    "client_id": "admin-cli",
+                    "username": env["KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME"],
+                    "password": env["KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD"],
+                },
+            )["access_token"]
+
+            search = urllib.parse.urlencode({"username": admin_email, "exact": "true"})
+            _, search_payload = request(
+                "GET",
+                f"{realm_admin_url}/users?{search}",
+                token=admin_token,
+            )
+            matches = json.loads(search_payload or "[]")
+            admin_user = matches[0] if matches else None
+
+            user_payload = {
+                "username": admin_email,
+                "email": admin_email,
+                "enabled": True,
+                "emailVerified": True,
+                "firstName": "Maintly",
+                "lastName": "Admin",
+            }
+
+            if admin_user:
+                user_id = admin_user["id"]
+                request(
+                    "PUT",
+                    f"{realm_admin_url}/users/{urllib.parse.quote(user_id)}",
+                    token=admin_token,
+                    data={**admin_user, **user_payload},
+                )
+            else:
+                request(
+                    "POST",
+                    f"{realm_admin_url}/users",
+                    token=admin_token,
+                    data={
+                        **user_payload,
+                        "credentials": [
+                            {
+                                "type": "password",
+                                "value": admin_password,
+                                "temporary": False,
+                            }
+                        ],
+                    },
+                )
+                _, search_payload = request(
+                    "GET",
+                    f"{realm_admin_url}/users?{search}",
+                    token=admin_token,
+                )
+                matches = json.loads(search_payload or "[]")
+                if not matches:
+                    raise SystemExit("Maintly admin user was not created")
+                user_id = matches[0]["id"]
+
+            request(
+                "PUT",
+                f"{realm_admin_url}/users/{urllib.parse.quote(user_id)}/reset-password",
+                token=admin_token,
+                data={
+                    "type": "password",
+                    "value": admin_password,
+                    "temporary": False,
+                },
+            )
+
+            _, role_payload = request("GET", f"{realm_admin_url}/roles/ADMIN", token=admin_token)
+            admin_role = json.loads(role_payload)
+            _, mappings_payload = request(
+                "GET",
+                f"{realm_admin_url}/users/{urllib.parse.quote(user_id)}/role-mappings/realm",
+                token=admin_token,
+            )
+            current_roles = json.loads(mappings_payload or "[]")
+            current_role_names = {role["name"] for role in current_roles}
+
+            if "ADMIN" not in current_role_names:
+                request(
+                    "POST",
+                    f"{realm_admin_url}/users/{urllib.parse.quote(user_id)}/role-mappings/realm",
+                    token=admin_token,
+                    data=[admin_role],
+                    expected=(204,),
+                )
+
+            removable_roles = [
+                role for role in current_roles
+                if role.get("name") in {"CUSTOMER", "SERVICE"}
+            ]
+            if removable_roles:
+                request(
+                    "DELETE",
+                    f"{realm_admin_url}/users/{urllib.parse.quote(user_id)}/role-mappings/realm",
+                    token=admin_token,
+                    data=removable_roles,
+                    expected=(204,),
+                )
+
+            form_request(
+                f"{keycloak_base}/realms/ztemizinden/protocol/openid-connect/token",
+                {
+                    "grant_type": "password",
+                    "client_id": "ztemizinden-web",
+                    "username": admin_email,
+                    "password": admin_password,
+                    "scope": "openid",
+                },
+            )
+            print(f"Maintly production admin user verified: {admin_email}")
+            PY
 
             realm_management_roles="$(
               python3 -c '
