@@ -48,6 +48,14 @@ interface MaintlyTokenClaims extends KeycloakTokenParsed {
   };
 }
 
+interface DirectTokenSession {
+  accessToken: string;
+  refreshToken: string;
+  idToken?: string;
+  tokenParsed: MaintlyTokenClaims;
+  refreshTokenParsed?: KeycloakTokenParsed;
+}
+
 const emptySession = {
   user: null,
   role: null,
@@ -56,6 +64,8 @@ const emptySession = {
 
 let identityClient: Keycloak | null = null;
 const IDENTITY_INITIALIZATION_TIMEOUT_MS = 10_000;
+const DIRECT_TOKEN_SESSION_KEY = 'maintly.directTokenSession.v1';
+let directTokenSession: DirectTokenSession | null = readStoredDirectTokenSession();
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   ...emptySession,
@@ -103,46 +113,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const tokenResponse = await directGrant(email, password);
-      const keycloak = await getIdentityClient();
-      identityClient = keycloak;
-
-      const authenticated = await keycloak.init({
-        onLoad: 'check-sso',
-        pkceMethod: 'S256',
-        checkLoginIframe: false,
-        token: tokenResponse.access_token,
-        refreshToken: tokenResponse.refresh_token,
-        idToken: tokenResponse.id_token,
-        silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
-        silentCheckSsoFallback: false,
-        messageReceiveTimeout: 3000,
-      });
-
-      if (authenticated) {
-        keycloak.onAuthSuccess = applyKeycloakSession;
-        keycloak.onAuthRefreshSuccess = applyKeycloakSession;
-        keycloak.onAuthLogout = clearLocalSession;
-        keycloak.onTokenExpired = () => {
-          void keycloak
-            .updateToken(30)
-            .then(applyKeycloakSession)
-            .catch(() => useAuthStore.getState().logout());
-        };
-        useAuthStore.setState({
-          authInitialized: true,
-          identityAvailable: true,
-          isLoading: false,
-        });
-        applyKeycloakSession();
-        if (useAuthStore.getState().role !== role) {
-          identityClient = null;
-          clearLocalSession();
-          throw new Error('role_mismatch');
-        }
-        window.location.assign(`/${role}/dashboard`);
-      } else {
-        throw new Error('Kimlik doğrulama başarısız.');
+      const session = createDirectTokenSession(tokenResponse);
+      setDirectTokenSession(session);
+      applyClaimsSession(session.tokenParsed);
+      if (useAuthStore.getState().role !== role) {
+        clearLocalSession();
+        throw new Error('role_mismatch');
       }
+      window.location.assign(`/${role}/dashboard`);
     } catch (error) {
       set({ isLoading: false, error: friendlyCredentialError(error, role) });
       throw error;
@@ -151,7 +129,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     const role = get().role ?? 'customer';
+    const sessionToEnd = directTokenSession;
     set({ ...emptySession, isLoading: false, error: null });
+    clearDirectTokenSession();
+    if (sessionToEnd) {
+      await revokeDirectTokenSession(sessionToEnd).catch(() => undefined);
+      window.location.assign(`/${role}/login`);
+      return;
+    }
     if (!identityClient?.authenticated) {
       window.location.assign(`/${role}/login`);
       return;
@@ -169,12 +154,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setError: (error) => set({ error }),
   hasRole: (role) => get().role === role,
   isSessionValid: () =>
-    Boolean(
-      get().isAuthenticated &&
-        identityClient?.authenticated &&
-        identityClient.token &&
-        !identityClient.isTokenExpired(0)
-    ),
+    Boolean(get().isAuthenticated && (isDirectTokenSessionUsable() || hasValidKeycloakSession())),
 }));
 
 let initializationPromise: Promise<void> | null = null;
@@ -193,6 +173,10 @@ async function initializeIdentityProvider(
   }
 ): Promise<void> {
   try {
+    if (!loginOptions && (await restoreDirectTokenSession())) {
+      return;
+    }
+
     const keycloak = await getIdentityClient();
     const authenticated = await withTimeout(
       keycloak.init({
@@ -245,6 +229,25 @@ async function initializeIdentityProvider(
 }
 
 export async function getFreshAccessToken(): Promise<string | null> {
+  if (directTokenSession) {
+    if (isAccessTokenUsable(directTokenSession, 30)) {
+      return directTokenSession.accessToken;
+    }
+    if (isDirectTokenSessionUsable()) {
+      try {
+        const refreshedSession = await refreshDirectTokenSession(directTokenSession);
+        setDirectTokenSession(refreshedSession);
+        applyClaimsSession(refreshedSession.tokenParsed);
+        return refreshedSession.accessToken;
+      } catch {
+        clearLocalSession();
+        return null;
+      }
+    }
+    clearLocalSession();
+    return null;
+  }
+
   const keycloak = identityClient;
   if (!keycloak) return null;
   if (!keycloak.authenticated || !keycloak.token) return null;
@@ -258,6 +261,10 @@ export async function getFreshAccessToken(): Promise<string | null> {
 }
 
 export function getStoredAccessToken(): string | null {
+  if (directTokenSession) {
+    return isAccessTokenUsable(directTokenSession, 0) ? directTokenSession.accessToken : null;
+  }
+
   const keycloak = identityClient;
   if (!keycloak) return null;
   if (!keycloak.authenticated || !keycloak.token || keycloak.isTokenExpired(0)) return null;
@@ -308,8 +315,12 @@ function applyKeycloakSession() {
     return;
   }
   const claims = keycloak.tokenParsed as MaintlyTokenClaims | undefined;
+  applyClaimsSession(claims, Boolean(keycloak.authenticated));
+}
+
+function applyClaimsSession(claims?: MaintlyTokenClaims, authenticated = true) {
   const role = resolveRoleFromClaims(claims);
-  if (!claims || !role || !keycloak.authenticated) {
+  if (!claims || !role || !authenticated) {
     clearLocalSession();
     return;
   }
@@ -333,6 +344,7 @@ function applyKeycloakSession() {
 }
 
 function clearLocalSession() {
+  clearDirectTokenSession();
   useAuthStore.setState({
     ...emptySession,
     authInitialized: true,
@@ -410,7 +422,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 interface DirectGrantResponse {
   access_token: string;
   refresh_token: string;
-  id_token: string;
+  id_token?: string;
   token_type: string;
   expires_in: number;
 }
@@ -457,6 +469,196 @@ async function directGrant(email: string, password: string): Promise<DirectGrant
   }
 
   return response.json() as Promise<DirectGrantResponse>;
+}
+
+function createDirectTokenSession(tokenResponse: DirectGrantResponse): DirectTokenSession {
+  const tokenParsed = decodeJwt<MaintlyTokenClaims>(tokenResponse.access_token);
+  if (!tokenParsed) throw new Error('invalid_token');
+
+  return {
+    accessToken: tokenResponse.access_token,
+    refreshToken: tokenResponse.refresh_token,
+    idToken: tokenResponse.id_token,
+    tokenParsed,
+    refreshTokenParsed: decodeJwt<KeycloakTokenParsed>(tokenResponse.refresh_token) ?? undefined,
+  };
+}
+
+function setDirectTokenSession(session: DirectTokenSession) {
+  directTokenSession = session;
+  identityClient = null;
+  initializationPromise = null;
+  writeStoredDirectTokenSession(session);
+}
+
+function clearDirectTokenSession() {
+  directTokenSession = null;
+  removeStoredDirectTokenSession();
+}
+
+async function restoreDirectTokenSession(): Promise<boolean> {
+  if (!directTokenSession) {
+    directTokenSession = readStoredDirectTokenSession();
+  }
+  if (!directTokenSession) return false;
+
+  if (isAccessTokenUsable(directTokenSession, 0)) {
+    if (!resolveRoleFromClaims(directTokenSession.tokenParsed)) {
+      clearDirectTokenSession();
+      return false;
+    }
+    applyClaimsSession(directTokenSession.tokenParsed);
+    return true;
+  }
+
+  if (!isDirectTokenSessionUsable()) {
+    clearDirectTokenSession();
+    return false;
+  }
+
+  try {
+    const refreshedSession = await refreshDirectTokenSession(directTokenSession);
+    if (!resolveRoleFromClaims(refreshedSession.tokenParsed)) {
+      clearDirectTokenSession();
+      return false;
+    }
+    setDirectTokenSession(refreshedSession);
+    applyClaimsSession(refreshedSession.tokenParsed);
+    return true;
+  } catch {
+    clearDirectTokenSession();
+    return false;
+  }
+}
+
+async function refreshDirectTokenSession(session: DirectTokenSession): Promise<DirectTokenSession> {
+  const keycloakUrl = (import.meta.env.VITE_KEYCLOAK_URL?.trim() || 'http://localhost:8081').replace(/\/+$/, '');
+  const realm = import.meta.env.VITE_KEYCLOAK_REALM?.trim() || 'ztemizinden';
+  const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID?.trim() || 'ztemizinden-web';
+
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: clientId,
+    refresh_token: session.refreshToken,
+  });
+
+  const response = await fetch(`${keycloakUrl}/realms/${realm}/protocol/openid-connect/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  }).catch(() => {
+    throw new Error('network');
+  });
+
+  if (!response.ok) throw new Error('invalid_session');
+  return createDirectTokenSession((await response.json()) as DirectGrantResponse);
+}
+
+async function revokeDirectTokenSession(session: DirectTokenSession): Promise<void> {
+  const keycloakUrl = (import.meta.env.VITE_KEYCLOAK_URL?.trim() || 'http://localhost:8081').replace(/\/+$/, '');
+  const realm = import.meta.env.VITE_KEYCLOAK_REALM?.trim() || 'ztemizinden';
+  const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID?.trim() || 'ztemizinden-web';
+
+  const body = new URLSearchParams({
+    client_id: clientId,
+    refresh_token: session.refreshToken,
+  });
+
+  await fetch(`${keycloakUrl}/realms/${realm}/protocol/openid-connect/logout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+}
+
+function hasValidKeycloakSession() {
+  return Boolean(
+    identityClient?.authenticated &&
+      identityClient.token &&
+      !identityClient.isTokenExpired(0)
+  );
+}
+
+function isDirectTokenSessionUsable() {
+  if (!directTokenSession) return false;
+  const expiryClaims = directTokenSession.refreshTokenParsed ?? directTokenSession.tokenParsed;
+  return !isJwtExpired(expiryClaims, 0);
+}
+
+function isAccessTokenUsable(session: DirectTokenSession, minValiditySeconds: number) {
+  return !isJwtExpired(session.tokenParsed, minValiditySeconds);
+}
+
+function isJwtExpired(claims: KeycloakTokenParsed | undefined, minValiditySeconds: number) {
+  if (typeof claims?.exp !== 'number') return true;
+  return claims.exp - Math.ceil(Date.now() / 1000) <= minValiditySeconds;
+}
+
+function readStoredDirectTokenSession(): DirectTokenSession | null {
+  try {
+    const rawValue = window.sessionStorage.getItem(DIRECT_TOKEN_SESSION_KEY);
+    if (!rawValue) return null;
+    const stored = JSON.parse(rawValue) as {
+      accessToken?: string;
+      refreshToken?: string;
+      idToken?: string;
+    };
+    if (!stored.accessToken || !stored.refreshToken) return null;
+    return createDirectTokenSession({
+      access_token: stored.accessToken,
+      refresh_token: stored.refreshToken,
+      id_token: stored.idToken,
+      token_type: 'Bearer',
+      expires_in: 0,
+    });
+  } catch {
+    removeStoredDirectTokenSession();
+    return null;
+  }
+}
+
+function writeStoredDirectTokenSession(session: DirectTokenSession) {
+  try {
+    window.sessionStorage.setItem(
+      DIRECT_TOKEN_SESSION_KEY,
+      JSON.stringify({
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        idToken: session.idToken,
+      })
+    );
+  } catch {
+    // In-memory auth still works if storage is unavailable.
+  }
+}
+
+function removeStoredDirectTokenSession() {
+  try {
+    window.sessionStorage.removeItem(DIRECT_TOKEN_SESSION_KEY);
+  } catch {
+    // Storage may be unavailable in restricted browser modes.
+  }
+}
+
+function decodeJwt<T>(token: string): T | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const paddedPayload = normalizedPayload.padEnd(
+      normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+      '='
+    );
+    const binary = window.atob(paddedPayload);
+    const json = decodeURIComponent(
+      Array.from(binary)
+        .map((char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`)
+        .join('')
+    );
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
 }
 
 function friendlyCredentialError(error: unknown, requestedRole?: Exclude<UserRole, null>) {
