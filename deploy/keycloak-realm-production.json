@@ -5,7 +5,10 @@
   "enabled": true,
   "internationalizationEnabled": true,
   "defaultLocale": "tr",
-  "supportedLocales": ["tr", "en"],
+  "supportedLocales": [
+    "tr",
+    "en"
+  ],
   "registrationAllowed": false,
   "resetPasswordAllowed": true,
   "loginWithEmailAllowed": true,
@@ -32,9 +35,18 @@
   },
   "roles": {
     "realm": [
-      { "name": "CUSTOMER", "description": "Customer portal access" },
-      { "name": "SERVICE", "description": "Service provider portal access" },
-      { "name": "ADMIN", "description": "Operations center access" }
+      {
+        "name": "CUSTOMER",
+        "description": "Customer portal access"
+      },
+      {
+        "name": "SERVICE",
+        "description": "Service provider portal access"
+      },
+      {
+        "name": "ADMIN",
+        "description": "Operations center access"
+      }
     ]
   },
   "clients": [
@@ -55,8 +67,12 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["${KEYCLOAK_WEB_URL}/*"],
-      "webOrigins": ["${KEYCLOAK_WEB_URL}"],
+      "redirectUris": [
+        "${KEYCLOAK_WEB_URL}/*"
+      ],
+      "webOrigins": [
+        "${KEYCLOAK_WEB_URL}"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "${KEYCLOAK_WEB_URL}/*"
@@ -124,7 +140,12 @@
       "enabled": true,
       "serviceAccountClientId": "ztemizinden-backend-admin",
       "clientRoles": {
-        "realm-management": ["manage-users", "query-users", "view-users", "view-realm"]
+        "realm-management": [
+          "manage-users",
+          "query-users",
+          "view-users",
+          "view-realm"
+        ]
       }
     }
   ]
