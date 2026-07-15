@@ -86,8 +86,30 @@ public class PublicEndpointRateLimitFilter extends OncePerRequestFilter {
     }
 
     private String clientAddress(HttpServletRequest request) {
+        String forwardedFor = firstForwardedAddress(request.getHeader("X-Forwarded-For"));
+        if (isUsableClientAddress(forwardedFor)) {
+            return forwardedFor;
+        }
+
+        String realIp = request.getHeader("X-Real-IP");
+        if (isUsableClientAddress(realIp)) {
+            return realIp.trim();
+        }
+
         String remoteAddress = request.getRemoteAddr();
-        return remoteAddress == null || remoteAddress.isBlank() ? "unknown" : remoteAddress;
+        return isUsableClientAddress(remoteAddress) ? remoteAddress.trim() : "unknown";
+    }
+
+    private String firstForwardedAddress(String forwardedFor) {
+        if (forwardedFor == null || forwardedFor.isBlank()) {
+            return null;
+        }
+        String[] addresses = forwardedFor.split(",");
+        return addresses.length == 0 ? null : addresses[0].trim();
+    }
+
+    private boolean isUsableClientAddress(String address) {
+        return address != null && !address.isBlank() && !"unknown".equalsIgnoreCase(address.trim());
     }
 
     private record Limit(int maxRequests, Duration window) {

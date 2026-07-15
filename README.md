@@ -48,7 +48,7 @@ Local Keycloak kullanicilari:
 
 - API security varsayilan olarak acik: `APP_SECURITY_ENABLED=true`.
 - Tek kimlik ve parola kaynagi Keycloak'tir; backend token uretmez veya parola saklamaz.
-- Frontend Authorization Code + PKCE kullanir ve tokenlari local/session storage'a yazmaz.
+- Frontend custom login formlari Keycloak Direct Access Grant ile token alir ve tokenlari local/session storage'a yazmaz.
 - Backend RS256/JWK token imzasini, issuer'i ve `ztemizinden-api` audience'ini dogrular.
 - Kayit endpoint'leri domain kaydini olusturur ve Keycloak Admin API ile kimligi provision eder.
 - Demo ticket/asset/provider sunum verisi V7 migration ile temizlenir; ekranlar kullanicinin ekledigi gercek backend verisiyle baslar.

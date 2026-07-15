@@ -7,7 +7,7 @@ This document provides a comprehensive list of REST API endpoints and WebSocket 
 ## 1. Authentication
 
 ### Log In
-There is no backend login/token endpoint. The browser redirects to Keycloak's OpenID Connect authorization endpoint and uses Authorization Code + PKCE S256. API requests carry the resulting access token as `Authorization: Bearer ...`.
+There is no backend login/token endpoint. The frontend custom login forms request tokens directly from Keycloak's OpenID Connect token endpoint using the `ztemizinden-web` client. API requests carry the resulting access token as `Authorization: Bearer ...`.
 
 ### Request Password Reset
 * **Path:** `POST /api/auth/forgot-password`

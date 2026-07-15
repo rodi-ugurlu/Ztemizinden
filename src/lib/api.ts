@@ -132,7 +132,10 @@ export function resolvePublicFileUrl(path?: string | null) {
 function errorMessage(status: number, rawBody: string) {
   try {
     const parsed = JSON.parse(rawBody) as { detail?: string; title?: string; reason?: string };
-    const message = parsed.detail || parsed.reason || parsed.title || `API Error: ${status}`;
+    const message =
+      parsed.detail === 'Request validation failed'
+        ? parsed.reason || parsed.detail
+        : parsed.detail || parsed.reason || parsed.title || `API Error: ${status}`;
     return friendlyErrorMessage(message, status);
   } catch {
     return friendlyErrorMessage(rawBody || `API Error: ${status}`, status);
@@ -150,6 +153,10 @@ function friendlyErrorMessage(message: string, status: number) {
       'Servis sağlayıcı onaylanmadan önce tüm belgeler doğrulanmalıdır.',
     'Provider email is already registered':
       'Bu e-posta ile kayıtlı bir servis sağlayıcı zaten var.',
+    'Customer email is already registered':
+      'Bu e-posta ile kayıtlı bir müşteri hesabı zaten var.',
+    'Identity email is already registered':
+      'Bu e-posta kimlik sisteminde zaten kayıtlı.',
     'Only verified providers can request landing visibility':
       'Ana sayfa vitrini için servis hesabınızın operasyon onayı tamamlanmalıdır.',
     'A managed profile logo is required for landing visibility':

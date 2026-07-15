@@ -43,7 +43,7 @@
       "protocol": "openid-connect",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
+      "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
       "redirectUris": [
         "${KEYCLOAK_WEB_URL}/*"

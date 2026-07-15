@@ -231,7 +231,7 @@ public class KeycloakIdentityService {
         payload.put("username", email);
         payload.put("email", email);
         payload.put("enabled", enabled);
-        payload.put("emailVerified", false);
+        payload.put("emailVerified", true);
         payload.put("firstName", firstName(displayName));
         payload.put("lastName", lastName(displayName));
         payload.put("attributes", attributes);

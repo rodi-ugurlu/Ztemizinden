@@ -58,6 +58,36 @@ class PublicEndpointRateLimitFilterTest {
         assertThat(acceptedRequests).hasValue(11);
     }
 
+    @Test
+    void usesForwardedClientAddressBehindReverseProxy() throws Exception {
+        PublicEndpointRateLimitFilter filter = new PublicEndpointRateLimitFilter(
+                Clock.fixed(Instant.parse("2026-07-12T10:00:00Z"), ZoneOffset.UTC)
+        );
+        AtomicInteger acceptedRequests = new AtomicInteger();
+
+        for (int requestNumber = 0; requestNumber < 10; requestNumber++) {
+            MockHttpServletRequest request = request("/api/providers", "127.0.0.1");
+            request.addHeader("X-Forwarded-For", "203.0.113.20, 127.0.0.1");
+            filter.doFilter(
+                    request,
+                    new MockHttpServletResponse(),
+                    (ignoredRequest, ignoredResponse) -> acceptedRequests.incrementAndGet()
+            );
+        }
+
+        MockHttpServletRequest otherForwardedClient = request("/api/providers", "127.0.0.1");
+        otherForwardedClient.addHeader("X-Forwarded-For", "203.0.113.21, 127.0.0.1");
+        MockHttpServletResponse otherForwardedClientResponse = new MockHttpServletResponse();
+        filter.doFilter(
+                otherForwardedClient,
+                otherForwardedClientResponse,
+                (ignoredRequest, ignoredResponse) -> acceptedRequests.incrementAndGet()
+        );
+
+        assertThat(otherForwardedClientResponse.getStatus()).isEqualTo(200);
+        assertThat(acceptedRequests).hasValue(11);
+    }
+
     private MockHttpServletRequest request(String path, String remoteAddress) {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
         request.setRemoteAddr(remoteAddress);

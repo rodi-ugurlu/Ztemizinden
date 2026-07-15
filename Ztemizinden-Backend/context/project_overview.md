@@ -23,7 +23,7 @@ The Ztemizinden backend is built using modern enterprise Java technologies:
 * **Database:** PostgreSQL (production & local)
 * **In-Memory/Testing Database:** H2 Database (configured for automated JUnit testing)
 * **Database Migrations:** Flyway (schema configuration management)
-* **Security & Token Handling:** Keycloak Authorization Code + PKCE and Spring OAuth2 Resource Server (RS256/JWK)
+* **Security & Token Handling:** Keycloak custom login direct grant + Spring OAuth2 Resource Server (RS256/JWK)
 * **Build System:** Maven (using `mvnw` Maven Wrapper)
 * **Containerization:** Docker Compose for PostgreSQL and Keycloak
 

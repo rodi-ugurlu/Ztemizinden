@@ -46,7 +46,7 @@ graph TD
 
 ## 2. Authentication & Authorization Model
 
-Ztemizinden uses **Keycloak as its only identity, password and token authority**. The browser uses Authorization Code + PKCE; the backend is a resource server and provisioning client.
+Ztemizinden uses **Keycloak as its only identity, password and token authority**. The custom browser login forms exchange credentials directly with Keycloak's token endpoint; the backend is a resource server and provisioning client.
 
 ### Route Security Configuration
 Defined in `SecurityConfig.java`:
@@ -75,7 +75,7 @@ Role mapping operates dynamically:
 ### Authentication Source of Truth
 Keycloak stores credentials, sessions and roles. `SecurityConfig` downloads signing keys from the configured JWK endpoint and requires the exact issuer plus the `ztemizinden-api` audience. `KeycloakIdentityService` uses a least-privilege service account to create users, assign realm roles, enable/disable provider identities and trigger password actions. Domain rows store only the immutable Keycloak `sub` in `identity_subject`; no password or refresh token is persisted by this application.
 
-Frontend tokens remain inside the Keycloak JavaScript adapter's memory. API calls call `updateToken(30)` before sending the bearer token; logout terminates the Keycloak SSO session. WebSocket CONNECT uses the current in-memory bearer token and the backend performs the same JWT validation.
+Frontend tokens remain inside the Keycloak JavaScript adapter's memory. API calls call `updateToken(30)` before sending the bearer token; logout clears the Keycloak-backed session. WebSocket CONNECT uses the current in-memory bearer token and the backend performs the same JWT validation.
 
 ---
 

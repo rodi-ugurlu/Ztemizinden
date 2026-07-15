@@ -134,12 +134,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false,
         });
         applyKeycloakSession();
+        if (useAuthStore.getState().role !== role) {
+          identityClient = null;
+          clearLocalSession();
+          throw new Error('role_mismatch');
+        }
         window.location.assign(`/${role}/dashboard`);
       } else {
         throw new Error('Kimlik doğrulama başarısız.');
       }
     } catch (error) {
-      set({ isLoading: false, error: friendlyCredentialError(error) });
+      set({ isLoading: false, error: friendlyCredentialError(error, role) });
       throw error;
     }
   },
@@ -433,6 +438,18 @@ async function directGrant(email: string, password: string): Promise<DirectGrant
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({})) as { error_description?: string; error?: string };
+    const description = (payload.error_description || payload.error || '').toLowerCase();
+    if (description.includes('disabled')) {
+      throw new Error('account_disabled');
+    }
+    if (
+      description.includes('not fully set up') ||
+      description.includes('required action') ||
+      description.includes('verify_email') ||
+      description.includes('verify email')
+    ) {
+      throw new Error('account_setup_required');
+    }
     if (response.status === 401 || payload.error === 'invalid_grant') {
       throw new Error('invalid_credentials');
     }
@@ -442,10 +459,22 @@ async function directGrant(email: string, password: string): Promise<DirectGrant
   return response.json() as Promise<DirectGrantResponse>;
 }
 
-function friendlyCredentialError(error: unknown) {
+function friendlyCredentialError(error: unknown, requestedRole?: Exclude<UserRole, null>) {
   const message = error instanceof Error ? error.message.toLowerCase() : '';
   if (message.includes('invalid_credentials') || message.includes('invalid_grant')) {
     return 'E-posta adresi veya şifre hatalı. Lütfen tekrar deneyin.';
+  }
+  if (message.includes('account_disabled')) {
+    if (requestedRole === 'service') {
+      return 'Servis hesabınız operasyon onayı bekliyor. Onay tamamlandığında giriş yapabilirsiniz.';
+    }
+    return 'Hesabınız devre dışı bırakılmış. Yönetici ile iletişime geçin.';
+  }
+  if (message.includes('account_setup_required')) {
+    return 'Hesap kurulumu tamamlanmadığı için giriş yapılamadı. E-posta doğrulama veya yönetici onayı gerekebilir.';
+  }
+  if (message.includes('role_mismatch')) {
+    return 'Bu kullanıcı bilgileri bu portala ait değil. Lütfen doğru giriş ekranını kullanın.';
   }
   if (message.includes('network') || message.includes('failed to fetch')) {
     return 'Giriş servisine şu anda ulaşılamıyor. Lütfen kısa bir süre sonra tekrar deneyin.';
